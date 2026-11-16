@@ -7,7 +7,7 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from sqlmodel import Session, delete, select
 
-from app.agents.orchestrator import run_turn
+from app.agents.orchestrator import ACTIVE_SESSIONS, run_turn
 from app.db import get_session
 from app.models import ChatSession, Message, Run
 
@@ -44,7 +44,7 @@ def _visible_messages(db: Session, session_id: int) -> list[dict[str, Any]]:
 @router.get("")
 def list_sessions(db: Session = Depends(get_session)) -> list[dict[str, Any]]:
     rows = db.exec(select(ChatSession).order_by(ChatSession.updated_at.desc())).all()
-    return [r.model_dump(mode="json") for r in rows]
+    return [{**r.model_dump(mode="json"), "running": r.id in ACTIVE_SESSIONS} for r in rows]
 
 
 @router.post("")
@@ -61,7 +61,8 @@ def get_chat(session_id: int, db: Session = Depends(get_session)) -> dict[str, A
     chat = db.get(ChatSession, session_id)
     if chat is None:
         raise HTTPException(404)
-    return {**chat.model_dump(mode="json"), "messages": _visible_messages(db, session_id)}
+    return {**chat.model_dump(mode="json"), "running": session_id in ACTIVE_SESSIONS,
+            "messages": _visible_messages(db, session_id)}
 
 
 @router.patch("/{session_id}")
@@ -81,6 +82,8 @@ def rename(session_id: int, body: NewSession, db: Session = Depends(get_session)
 
 @router.delete("/{session_id}")
 def delete_chat(session_id: int, db: Session = Depends(get_session)) -> dict[str, bool]:
+    if session_id in ACTIVE_SESSIONS:
+        raise HTTPException(409, "Wait for this session to finish before deleting it.")
     db.exec(delete(Message).where(Message.session_id == session_id))
     db.exec(delete(Run).where(Run.session_id == session_id))
     chat = db.get(ChatSession, session_id)
@@ -101,6 +104,8 @@ def runs(session_id: int, db: Session = Depends(get_session)) -> list[dict[str, 
 async def send(session_id: int, body: SendMessage, db: Session = Depends(get_session)) -> StreamingResponse:
     if db.get(ChatSession, session_id) is None:
         raise HTTPException(404)
+    if session_id in ACTIVE_SESSIONS:
+        raise HTTPException(409, "This session is still working on the previous question.")
 
     async def events():
         try:

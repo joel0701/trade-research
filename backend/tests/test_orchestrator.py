@@ -91,6 +91,7 @@ def test_full_turn(monkeypatch):
 
         chat = c.get(f"/api/sessions/{sid}").json()
         assert chat["title"] == "How does NVDA look?"
+        assert chat["running"] is False  # cleared when the turn finished
         # The interim "Checking the chart." note is hidden; only the final answer shows.
         assert [m["text"] for m in chat["messages"]] == ["How does NVDA look?", "NVDA is in an uptrend."]
 
@@ -121,3 +122,35 @@ def test_repair_history_drops_unanswered_tool_use():
     h = [{"role": "user", "content": [{"type": "text", "text": "q"}]},
          {"role": "assistant", "content": [{"type": "tool_use", "id": "x", "name": "t", "input": {}}]}]
     assert repair_history(h) == h[:1]
+
+
+def test_busy_session_rejects_second_question_and_delete():
+    from app.agents.orchestrator import ACTIVE_SESSIONS
+
+    with TestClient(app) as c:
+        sid = c.post("/api/sessions", json={}).json()["id"]
+        ACTIVE_SESSIONS.add(sid)  # simulate a turn in progress
+        try:
+            assert c.get(f"/api/sessions/{sid}").json()["running"] is True
+            assert any(s["id"] == sid and s["running"] for s in c.get("/api/sessions").json())
+            assert c.post(f"/api/sessions/{sid}/messages", json={"text": "again"}).status_code == 409
+            assert c.delete(f"/api/sessions/{sid}").status_code == 409
+        finally:
+            ACTIVE_SESSIONS.discard(sid)
+        assert c.get(f"/api/sessions/{sid}").json()["running"] is False
+
+
+def test_interrupted_runs_marked_on_startup():
+    from app.agents.orchestrator import mark_interrupted_runs
+    from app.models import ChatSession
+
+    with Session(engine) as db:
+        chat = ChatSession()
+        db.add(chat)
+        db.commit()
+        db.refresh(chat)
+        db.add(Run(session_id=chat.id, role_slug="lead"))  # left 'running' by a crash
+        db.commit()
+    assert mark_interrupted_runs() >= 1
+    with Session(engine) as db:
+        assert not db.exec(select(Run).where(Run.status == "running")).all()

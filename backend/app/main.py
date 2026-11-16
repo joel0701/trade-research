@@ -6,6 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from sqlmodel import Session
 
 from app.api import launch, sessions
+from app.agents.orchestrator import mark_interrupted_runs
 from app.api.crud import crud_router
 from app.config import CORS_ORIGINS
 from app.db import engine, init_db
@@ -21,6 +22,7 @@ async def lifespan(_: FastAPI):
     init_db()
     with Session(engine) as db:
         seed(db)
+    mark_interrupted_runs()
     yield
 
 

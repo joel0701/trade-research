@@ -2,7 +2,7 @@
 import { useEffect, useRef, useState } from "react";
 import { api } from "./api";
 
-export type SessionRow = { id: number; title: string; origin: string; updated_at: string };
+export type SessionRow = { id: number; title: string; origin: string; updated_at: string; running?: boolean };
 
 type Menu = { x: number; y: number; session: SessionRow };
 
@@ -92,7 +92,7 @@ export default function SessionList({ sessions, activeId, onOpen, onChanged, onD
                    }} />
           ) : (
             <>
-              <span title={s.title}>{s.title}</span>
+              <span title={s.title}>{s.running && <span className="spinner small" title="Working…" />}{s.title}</span>
               <button className="link more" title="More actions" aria-label="More actions"
                       onClick={(e) => openMenu(e, s)}>⋯</button>
             </>

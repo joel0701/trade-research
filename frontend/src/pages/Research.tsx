@@ -44,10 +44,14 @@ export default function Research() {
   const [messages, setMessages] = useState<ChatMsg[]>([]);
   const [runs, setRuns] = useState<Run[]>([]);
   const [draft, setDraft] = useState("");
+  // True while the session on screen has a turn in progress, whether this page started it
+  // or it was started earlier (e.g. before you switched to another screen).
   const [busy, setBusy] = useState(false);
-  const [working, setWorking] = useState<string[]>([]); // specialists currently consulted
-  const [elapsed, setElapsed] = useState(0);
+  const [liveText, setLiveText] = useState(false); // the answer is streaming in right now
+  const [now, setNow] = useState(Date.now());
   const [error, setError] = useState("");
+  const viewing = useRef<number | null>(sessionId);
+  viewing.current = sessionId;
   const [focusRunId, setFocusRunId] = useState<number | null>(null);
   const scroller = useRef<HTMLDivElement>(null);
   const answerRef = useRef<HTMLDivElement>(null);
@@ -70,14 +74,38 @@ export default function Research() {
   const loadRuns = (sid: number) => api.get<Run[]>(`/sessions/${sid}/runs`).then(setRuns).catch(() => {});
   useEffect(() => { loadSessions(); }, []);
 
-  // Poll the trace while a turn runs; tick the elapsed-time clock.
+  // While a turn runs: refresh the trace, tick the clock, and notice when it finishes.
+  // This works whether or not this page is the one streaming the answer.
   useEffect(() => {
     if (!busy || sessionId == null) return;
-    const start = Date.now();
-    setElapsed(0);
-    const t = setInterval(() => { setElapsed((Date.now() - start) / 1000); loadRuns(sessionId); }, 1000);
+    const sid = sessionId;
+    let checks = 0;
+    const t = setInterval(async () => {
+      setNow(Date.now());
+      loadRuns(sid);
+      if (++checks % 2) return; // check the session itself every 2s
+      try {
+        const s = await api.get(`/sessions/${sid}`);
+        if (!s.running && viewing.current === sid) {
+          setMessages(s.messages);
+          setBusy(false);
+          setLiveText(false);
+          loadRuns(sid);
+          loadSessions();
+          showLatestAnswer();
+        }
+      } catch { /* keep polling */ }
+    }, 1000);
     return () => clearInterval(t);
   }, [busy, sessionId]);
+
+  // Keep the sidebar's "working" indicators current while any session is running.
+  const anyRunning = sessions.some((s) => s.running);
+  useEffect(() => {
+    if (!anyRunning) return;
+    const t = setInterval(loadSessions, 3000);
+    return () => clearInterval(t);
+  }, [anyRunning]);
 
   /** Scroll so the top of the latest answer is visible (not the bottom of it). */
   function showLatestAnswer() {
@@ -88,11 +116,14 @@ export default function Research() {
   }
 
   useEffect(() => {
-    setError(""); setFocusRunId(null); setRuns([]);
+    setError(""); setFocusRunId(null); setRuns([]); setBusy(false); setLiveText(false);
     if (sessionId == null) { setMessages([]); return; }
+    try { localStorage.setItem("lastSession", String(sessionId)); } catch { /* storage unavailable */ }
     loadRuns(sessionId);
     api.get(`/sessions/${sessionId}`).then((s) => {
+      if (viewing.current !== sessionId) return;
       setMessages(s.messages);
+      setBusy(!!s.running); // a turn started earlier is still going: show its status
       showLatestAnswer();
       // Skills and screeners open a new session with a prompt to send right away.
       const auto = (location.state as any)?.autoSend as string | undefined;
@@ -106,21 +137,24 @@ export default function Research() {
 
   async function send(text: string, sid: number | null = sessionId) {
     if (!text.trim() || busy) return;
-    setBusy(true); setError(""); setDraft(""); setWorking([]); setFocusRunId(null);
+    setError(""); setDraft(""); setFocusRunId(null);
     try {
       if (sid == null) {
         const s = await api.post("/sessions", {});
-        sid = s.id as number;
-        navigate(`/research/${sid}`, { state: { autoSend: text } });
-        setBusy(false);
+        navigate(`/research/${s.id}`, { state: { autoSend: text } });
         return; // the effect for the new session sends it
       }
+      const target = sid;
+      setBusy(true); setNow(Date.now());
       setMessages((m) => [...m, { role: "user", text }]);
       requestAnimationFrame(() => scroller.current?.scrollTo({ top: scroller.current.scrollHeight, behavior: "smooth" }));
 
       let startNewAnswer = true; // the Lead's text before a tool call is an interim note: replace it
       let scrolledToAnswer = false;
-      await sendMessage(sid, text, (e: StreamEvent) => {
+      let detached = false; // the user opened another session: stop drawing this stream
+      await sendMessage(target, text, (e: StreamEvent) => {
+        if (viewing.current !== target) detached = true;
+        if (detached) return;
         if ((e.type === "text" || e.type === "thinking") && e.source === "lead") {
           setMessages((m) => {
             const copy = [...m];
@@ -134,32 +168,36 @@ export default function Research() {
             copy[copy.length - 1] = last;
             return copy;
           });
-          if (e.type === "text" && !scrolledToAnswer) { scrolledToAnswer = true; showLatestAnswer(); }
+          if (e.type === "text") {
+            setLiveText(true);
+            if (!scrolledToAnswer) { scrolledToAnswer = true; showLatestAnswer(); }
+          }
         } else if (e.type === "tool_call" && e.source === "lead") {
           startNewAnswer = true;
           scrolledToAnswer = false;
-        } else if (e.type === "specialist_start") {
-          setWorking((w) => [...w, e.name]);
-        } else if (e.type === "specialist_end") {
-          setWorking((w) => { const i = w.indexOf(e.name); return i < 0 ? w : [...w.slice(0, i), ...w.slice(i + 1)]; });
+          setLiveText(false);
         } else if (e.type === "error") {
           setError(e.message);
         }
       });
-      // Reload from the server so the view matches exactly what was saved.
-      const s = await api.get(`/sessions/${sid}`);
-      setMessages(s.messages);
-      await loadRuns(sid);
       loadSessions();
+      if (viewing.current === target) {
+        // Reload from the server so the view matches exactly what was saved.
+        const s = await api.get(`/sessions/${target}`);
+        if (viewing.current === target) {
+          setMessages(s.messages);
+          setBusy(!!s.running);
+          setLiveText(false);
+          await loadRuns(target);
+        }
+      }
     } catch (err: any) {
-      setError(String(err.message ?? err));
-    } finally {
-      setBusy(false);
-      setWorking([]);
+      if (viewing.current === sid) { setError(String(err.message ?? err)); setBusy(false); setLiveText(false); }
     }
   }
 
   function onDeleted(sid: number) {
+    try { if (localStorage.getItem("lastSession") === String(sid)) localStorage.removeItem("lastSession"); } catch { /* ignore */ }
     if (sid === sessionId) navigate("/research");
     loadSessions();
   }
@@ -170,7 +208,13 @@ export default function Research() {
   }
 
   const lastAssistant = messages.map((m) => m.role).lastIndexOf("assistant");
-  const live = busy && messages[messages.length - 1]?.role === "assistant";
+  // Status comes from the trace, so it is right even after leaving and coming back.
+  const leadRun = [...runs].reverse().find((r) => r.parent_run_id == null && r.status === "running");
+  const working = leadRun
+    ? [...new Set(runs.filter((r) => r.parent_run_id === leadRun.id && r.status === "running")
+        .map((r) => roleNames[r.role_slug] ?? r.role_slug))]
+    : [];
+  const elapsed = leadRun ? Math.max(0, (now - parseTime(leadRun.started_at)) / 1000) : 0;
 
   return (
     <div className="research">
@@ -203,7 +247,7 @@ export default function Research() {
           {busy && (
             <div className="status-line">
               <span className="spinner" />
-              {live ? "Writing the answer" : working.length ? `Consulting ${working.join(", ")}` : "Lead Analyst is working"}
+              {liveText ? "Writing the answer" : working.length ? `Consulting ${working.join(", ")}` : "Lead Analyst is working"}
               <span className="muted"> · {clock(elapsed)}</span>
             </div>
           )}

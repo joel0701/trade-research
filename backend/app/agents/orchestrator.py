@@ -19,6 +19,24 @@ from app.tools.registry import Toolbox, safe_name
 
 log = logging.getLogger(__name__)
 _running: set[asyncio.Task] = set()
+# Sessions with a turn in progress. In-memory, so it assumes one backend process
+# (true locally; revisit before running several instances on AWS).
+ACTIVE_SESSIONS: set[int] = set()
+
+
+class TurnInProgress(Exception):
+    pass
+
+
+def mark_interrupted_runs() -> int:
+    """On startup, any run still 'running' was cut off by a restart; record that."""
+    with Session(engine) as db:
+        stale = db.exec(select(Run).where(Run.status == "running")).all()
+        for r in stale:
+            r.status, r.error, r.finished_at = "error", "Interrupted: the backend restarted during this run.", now()
+            db.add(r)
+        db.commit()
+        return len(stale)
 
 SPECIALIST_SUFFIX = """
 
@@ -104,7 +122,24 @@ async def consult(specialist: Role, question: str, session_id: int, tools: dict[
 
 
 async def run_turn(session_id: int, user_text: str) -> AsyncIterator[dict[str, Any]]:
-    """Persist the user message, run the Lead, and stream events to the caller."""
+    """Persist the user message, run the Lead, and stream events to the caller.
+
+    The turn runs as a background task: if the caller disconnects (the user leaves the
+    page), it still finishes and is saved. ACTIVE_SESSIONS tells the UI it is running.
+    """
+    if session_id in ACTIVE_SESSIONS:
+        raise TurnInProgress(f"Session {session_id} is already working on a question.")
+    ACTIVE_SESSIONS.add(session_id)
+    try:
+        prepared = _prepare_turn(session_id, user_text)
+    except Exception:
+        ACTIVE_SESSIONS.discard(session_id)
+        raise
+    async for event in _run_prepared(session_id, user_text, *prepared):
+        yield event
+
+
+def _prepare_turn(session_id: int, user_text: str):
     # expire_on_commit=False: roles/tools are used after this block closes.
     with Session(engine, expire_on_commit=False) as db:
         chat = db.get(ChatSession, session_id)
@@ -127,6 +162,11 @@ async def run_turn(session_id: int, user_text: str) -> AsyncIterator[dict[str, A
         db.commit()
 
     messages = repair_history(history) + [{"role": "user", "content": user_content}]
+    return tools, lead, specialists, messages
+
+
+async def _run_prepared(session_id: int, user_text: str, tools: dict[int, Tool], lead: Role,
+                        specialists: list[Role], messages: list[dict[str, Any]]) -> AsyncIterator[dict[str, Any]]:
     queue: asyncio.Queue[dict[str, Any] | None] = asyncio.Queue()
 
     async def emit(event: dict[str, Any]) -> None:
@@ -181,6 +221,7 @@ async def run_turn(session_id: int, user_text: str) -> AsyncIterator[dict[str, A
             _finish_run(run_id, result, error=str(e))
             await emit({"type": "error", "message": f"{type(e).__name__}: {e}"})
         finally:
+            ACTIVE_SESSIONS.discard(session_id)
             await queue.put(None)
 
     # Keep a reference so the turn finishes (and is saved) even if the client disconnects.
