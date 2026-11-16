@@ -1,14 +1,14 @@
 :root {
   /* Dark is the default theme. */
   --bg: #0e0e0e; --panel: #181818; --raised: #242424; --hover: #2e2e2e; --text: #ececec; --muted: #9a9a9a;
-  --border: #2c2c2c; --accent: #7aa7ff; --accent-soft: #1e2a40; --error: #ff7b72; --user: #262626; --on-accent: #0b1220;
+  --border: #2c2c2c; --accent: #7aa7ff; --accent-soft: #1e2a40; --error: #ff7b72; --user: #30343b; --user-border: #3f444d; --on-accent: #0b1220;
   --ok-bg: #1c3324; --ok-fg: #7fd49a; --err-bg: #3a2220; --input: #1f1f1f;
   color-scheme: dark;
   font-family: system-ui, -apple-system, "Segoe UI", sans-serif; font-size: 15px; color: var(--text);
 }
 :root[data-theme="light"] {
   --bg: #f4f4f2; --panel: #ffffff; --raised: #ffffff; --hover: #efefec; --text: #1d1d1b; --muted: #6b6b66;
-  --border: #e0dfda; --accent: #2f6fdb; --accent-soft: #e8f0fd; --error: #c0392b; --user: #eef3ea; --on-accent: #ffffff;
+  --border: #e0dfda; --accent: #2f6fdb; --accent-soft: #e8f0fd; --error: #c0392b; --user: #e7edf6; --user-border: #d3dbe7; --on-accent: #ffffff;
   --ok-bg: #e3f4e8; --ok-fg: #1e7b3c; --err-bg: #fbe7e5; --input: #ffffff;
   color-scheme: light;
 }
@@ -39,7 +39,7 @@ label { display: block; font-size: 13px; color: var(--muted); margin: 10px 0 4px
 .chat { flex: 1; display: flex; flex-direction: column; min-width: 0; position: relative; }
 .messages { flex: 1; overflow: auto; padding: 16px 24px; }
 .msg { max-width: 900px; margin: 0 auto 16px; padding: 10px 14px; border-radius: 10px; }
-.msg.user { background: var(--user); }
+.msg.user { background: var(--user); border: 1px solid var(--user-border); }
 .msg.assistant { background: transparent; padding-left: 4px; padding-right: 4px; line-height: 1.6; }
 .msg table { border-collapse: collapse; font-size: 13px; display: block; overflow-x: auto; }
 .msg th, .msg td { border: 1px solid var(--border); padding: 4px 8px; }
