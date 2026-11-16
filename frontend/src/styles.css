@@ -88,3 +88,13 @@ button.link { border: none; background: none; color: var(--muted); padding: 2px 
 .status.error { background: #fbe7e5; color: var(--error); }
 @media (prefers-color-scheme: dark) { .status.ok { background: #1c3324; color: #7fd49a; } .status.error { background: #3a2220; } }
 @media (max-width: 1100px) { .trace { position: fixed; right: 0; top: 49px; bottom: 0; z-index: 5; box-shadow: -4px 0 16px rgba(0,0,0,.15); max-width: 100vw; } }
+
+/* session list: context menu and inline rename */
+.sidebar .item { align-items: center; }
+.sidebar .item .more { visibility: hidden; padding: 0 4px; line-height: 1; }
+.sidebar .item:hover .more, .sidebar .item.active .more { visibility: visible; }
+.sidebar .item input.rename { padding: 2px 6px; font-size: 14px; }
+.context-menu { position: fixed; z-index: 20; min-width: 150px; background: var(--panel); border: 1px solid var(--border); border-radius: 8px; box-shadow: 0 6px 24px rgba(0,0,0,.18); padding: 4px; display: flex; flex-direction: column; }
+.context-menu button { border: none; background: none; text-align: left; padding: 7px 10px; border-radius: 5px; }
+.context-menu button:hover { background: var(--accent-soft); }
+.context-menu button.danger { color: var(--error); }

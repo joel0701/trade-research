@@ -65,9 +65,13 @@ def rename(session_id: int, body: NewSession, db: Session = Depends(get_session)
     chat = db.get(ChatSession, session_id)
     if chat is None:
         raise HTTPException(404)
-    chat.title = body.title
+    title = body.title.strip()
+    if not title:
+        raise HTTPException(422, "Title cannot be empty")
+    chat.title = title[:200]
     db.add(chat)
     db.commit()
+    db.refresh(chat)
     return chat.model_dump(mode="json")
 
 

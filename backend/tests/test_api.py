@@ -30,3 +30,20 @@ def test_skill_run_creates_session():
         assert chat["origin"] == f"skill:{skill['id']}"
         missing = c.post(f"/api/skills/{skill['id']}/run", json={"params": {}})
         assert missing.status_code == 422
+
+
+def test_rename_and_delete_session():
+    with TestClient(app) as c:
+        sid = c.post("/api/sessions", json={}).json()["id"]
+        assert c.patch(f"/api/sessions/{sid}", json={"title": "NVDA earnings"}).json()["title"] == "NVDA earnings"
+        assert any(s["id"] == sid and s["title"] == "NVDA earnings" for s in c.get("/api/sessions").json())
+        assert c.delete(f"/api/sessions/{sid}").json() == {"ok": True}
+        assert c.get(f"/api/sessions/{sid}").status_code == 404
+        assert all(s["id"] != sid for s in c.get("/api/sessions").json())
+        assert c.patch(f"/api/sessions/{sid}", json={"title": "  "}).status_code == 404  # already deleted
+
+
+def test_rename_rejects_blank_title():
+    with TestClient(app) as c:
+        sid = c.post("/api/sessions", json={}).json()["id"]
+        assert c.patch(f"/api/sessions/{sid}", json={"title": "   "}).status_code == 422

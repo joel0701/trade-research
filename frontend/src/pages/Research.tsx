@@ -4,9 +4,9 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { api, sendMessage, StreamEvent } from "../api";
 import Trace from "../Trace";
+import SessionList, { SessionRow } from "../SessionList";
 
 type ChatMsg = { id?: number; role: "user" | "assistant"; text: string; thinking?: string };
-type SessionRow = { id: number; title: string; origin: string; updated_at: string };
 
 function Markdown({ text }: { text: string }) {
   return <ReactMarkdown remarkPlugins={[remarkGfm]}>{text}</ReactMarkdown>;
@@ -100,9 +100,7 @@ export default function Research() {
     }
   }
 
-  async function remove(sid: number) {
-    if (!confirm("Delete this session?")) return;
-    await api.del(`/sessions/${sid}`);
+  function onDeleted(sid: number) {
     if (sid === sessionId) navigate("/research");
     loadSessions();
   }
@@ -113,12 +111,9 @@ export default function Research() {
         <button className="primary" style={{ width: "100%", marginBottom: 8 }} onClick={() => navigate("/research")}>
           + New research
         </button>
-        {sessions.map((s) => (
-          <div key={s.id} className={`item ${s.id === sessionId ? "active" : ""}`} onClick={() => navigate(`/research/${s.id}`)}>
-            <span title={s.title}>{s.title}</span>
-            <span className="muted" onClick={(ev) => { ev.stopPropagation(); remove(s.id); }}>✕</span>
-          </div>
-        ))}
+        <SessionList sessions={sessions} activeId={sessionId}
+                     onOpen={(sid) => navigate(`/research/${sid}`)}
+                     onChanged={loadSessions} onDeleted={onDeleted} onError={setError} />
       </aside>
       <section className="chat">
         <div className="chat-head">
