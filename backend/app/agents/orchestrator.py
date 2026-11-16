@@ -40,9 +40,9 @@ def _model_for(role: Role, tools: dict[int, Tool]) -> ModelConfig:
     return ModelConfig.from_tool_config(t.config) if t else ModelConfig()
 
 
-def _start_run(session_id: int, role: Role, text: str, parent: int | None) -> int:
+def _start_run(session_id: int, role: Role, text: str, parent: int | None, model: str | None = None) -> int:
     with Session(engine) as db:
-        run = Run(session_id=session_id, role_slug=role.slug, input=text, parent_run_id=parent)
+        run = Run(session_id=session_id, role_slug=role.slug, input=text, parent_run_id=parent, model=model)
         db.add(run)
         db.commit()
         return run.id
@@ -78,13 +78,14 @@ def repair_history(msgs: list[dict[str, Any]]) -> list[dict[str, Any]]:
 
 async def consult(specialist: Role, question: str, session_id: int, tools: dict[int, Tool],
                   emit: Emit, parent_run: int) -> str:
-    run_id = _start_run(session_id, specialist, question, parent_run)
+    model = _model_for(specialist, tools)
+    run_id = _start_run(session_id, specialist, question, parent_run, model.model_id)
     await emit({"type": "specialist_start", "role": specialist.slug, "name": specialist.name, "question": question})
     result = None
     try:
         async with Toolbox([tools[i] for i in specialist.tool_ids if i in tools]) as toolbox:
             result = await run_agent(
-                model=_model_for(specialist, tools),
+                model=model,
                 system=specialist.system_prompt + SPECIALIST_SUFFIX,
                 messages=[{"role": "user", "content": question}],
                 toolbox=toolbox, emit=emit, stream_text=False,
@@ -140,7 +141,7 @@ async def run_turn(session_id: int, user_text: str) -> AsyncIterator[dict[str, A
             db.commit()
 
     async def work() -> None:
-        run_id = _start_run(session_id, lead, user_text, None)
+        run_id = _start_run(session_id, lead, user_text, None, lead_model.model_id)
         result = None
         try:
             async with Toolbox([tools[i] for i in lead.tool_ids if i in tools]) as toolbox:

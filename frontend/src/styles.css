@@ -62,3 +62,29 @@ details { font-size: 13px; color: var(--muted); margin-bottom: 8px; }
 .actions { display: flex; gap: 8px; margin-top: 16px; }
 .badge { font-size: 11px; padding: 1px 6px; border-radius: 4px; background: var(--accent-soft); color: var(--accent); margin-left: 6px; }
 .off { opacity: .55; }
+
+/* trace */
+.chat-head { display: flex; justify-content: space-between; align-items: center; padding: 6px 24px; border-bottom: 1px solid var(--border); background: var(--panel); min-height: 40px; }
+.chat-head .title { font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+button.link { border: none; background: none; color: var(--muted); padding: 2px 6px; }
+.trace { width: 420px; flex-shrink: 0; border-left: 1px solid var(--border); background: var(--panel); overflow: auto; padding: 0 12px 12px; font-size: 13px; }
+.trace-head { position: sticky; top: 0; background: var(--panel); display: flex; gap: 8px; align-items: center; padding: 10px 0; border-bottom: 1px solid var(--border); margin-bottom: 8px; }
+.trace-head .muted { flex: 1; }
+.trace details { color: var(--text); margin: 0; }
+.trace summary { cursor: pointer; display: flex; flex-wrap: wrap; justify-content: space-between; gap: 4px; padding: 6px 0; list-style-position: inside; }
+.trace-turn { border-bottom: 1px solid var(--border); padding-bottom: 6px; }
+.trace-child { margin-left: 12px; padding-left: 8px; border-left: 2px solid var(--border); }
+.trace-label { color: var(--muted); font-size: 12px; margin-top: 4px; }
+.trace-text { white-space: pre-wrap; margin-bottom: 6px; max-height: 120px; overflow: auto; }
+.trace-tools details { margin-left: 4px; }
+.trace-tools summary { display: block; padding: 3px 0; }
+.trace pre { font-size: 12px; background: var(--bg); padding: 6px; border-radius: 4px; overflow-x: auto; max-height: 200px; white-space: pre-wrap; word-break: break-word; margin: 4px 0; }
+.trace pre.preview { color: var(--muted); }
+.tool-error summary { color: var(--error); }
+.trace-output { max-height: 300px; overflow: auto; border: 1px solid var(--border); border-radius: 4px; padding: 0 8px; }
+.status { font-size: 11px; padding: 1px 6px; border-radius: 4px; margin-left: 4px; }
+.status.ok { background: #e3f4e8; color: #1e7b3c; }
+.status.running { background: var(--accent-soft); color: var(--accent); }
+.status.error { background: #fbe7e5; color: var(--error); }
+@media (prefers-color-scheme: dark) { .status.ok { background: #1c3324; color: #7fd49a; } .status.error { background: #3a2220; } }
+@media (max-width: 1100px) { .trace { position: fixed; right: 0; top: 49px; bottom: 0; z-index: 5; box-shadow: -4px 0 16px rgba(0,0,0,.15); max-width: 100vw; } }

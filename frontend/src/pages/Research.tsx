@@ -3,6 +3,7 @@ import { useLocation, useNavigate, useParams } from "react-router-dom";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { api, sendMessage, StreamEvent } from "../api";
+import Trace from "../Trace";
 
 type ChatMsg = { id?: number; role: "user" | "assistant"; text: string; thinking?: string };
 type SessionRow = { id: number; title: string; origin: string; updated_at: string };
@@ -24,6 +25,17 @@ export default function Research() {
   const [error, setError] = useState("");
   const bottom = useRef<HTMLDivElement>(null);
   const autoSent = useRef<number | null>(null);
+  const [showTrace, setShowTrace] = useState(() => {
+    try { return localStorage.getItem("showTrace") === "1"; } catch { return false; }
+  });
+  const [roleNames, setRoleNames] = useState<Record<string, string>>({});
+  useEffect(() => {
+    api.get("/roles").then((rs) => setRoleNames(Object.fromEntries(rs.map((r: any) => [r.slug, r.name]))));
+  }, []);
+  function toggleTrace(v: boolean) {
+    setShowTrace(v);
+    try { localStorage.setItem("showTrace", v ? "1" : "0"); } catch { /* storage unavailable */ }
+  }
 
   const loadSessions = () => api.get<SessionRow[]>("/sessions").then(setSessions);
   useEffect(() => { loadSessions(); }, []);
@@ -108,6 +120,10 @@ export default function Research() {
         ))}
       </aside>
       <section className="chat">
+        <div className="chat-head">
+          <span className="title">{sessions.find((s) => s.id === sessionId)?.title ?? "New research"}</span>
+          <button onClick={() => toggleTrace(!showTrace)}>{showTrace ? "Hide trace" : "Show trace"}</button>
+        </div>
         <div className="messages">
           {messages.length === 0 && !busy && (
             <div className="msg muted">Ask about the market, a sector or a stock. The Lead Analyst will consult the team as needed.</div>
@@ -134,6 +150,7 @@ export default function Research() {
           <button className="primary" disabled={busy || !draft.trim()} onClick={() => send(draft)}>Send</button>
         </div>
       </section>
+      {showTrace && <Trace sessionId={sessionId} live={busy} roleNames={roleNames} onClose={() => toggleTrace(false)} />}
     </div>
   );
 }

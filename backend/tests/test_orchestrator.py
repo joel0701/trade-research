@@ -97,6 +97,10 @@ def test_full_turn(monkeypatch):
         runs = c.get(f"/api/sessions/{sid}/runs").json()
         spec = next(r for r in runs if r["role_slug"] == "technical_analyst")
         assert spec["status"] == "ok" and spec["tool_calls"][0]["name"] == "technical_snapshot"
+        lead_run = next(r for r in runs if r["role_slug"] == "lead")
+        assert spec["parent_run_id"] == lead_run["id"]
+        assert lead_run["model"] == "claude-opus-5-5" and spec["model"] == "claude-sonnet-5-5"
+        assert lead_run["usage"]["input_tokens"] > 0 and spec["finished_at"]
 
     # Lead used Opus with thinking + fallbacks; the specialist used Sonnet.
     lead_call = next(k for k in fake.calls if "Your team" in k["system"])
