@@ -42,6 +42,9 @@ CONNECTIONS = [
     dict(slug="ibkr", name="Interactive Brokers", kind="mcp", secret_env="IBKR_MCP_TOKEN",
          description="IBKR's MCP server: real-time quotes, option chains, account data and screeners.",
          config={"transport": "http", "url": "https://REPLACE-WITH-IBKR-MCP-URL/mcp"}),
+    dict(slug="finra", name="FINRA (free)", kind="http",
+         description="FINRA's free off-exchange data: daily short sale volume (dark pool short ratio) and weekly "
+                     "dark pool (ATS) volume by venue. No key needed."),
     dict(slug="massive", name="Massive.com", kind="http", secret_env="MASSIVE_API_KEY",
          description="Massive.com (formerly Polygon.io) REST API: quotes, bars, option chains with Greeks, news "
                      "and trades (off-exchange / dark pool prints). Data access depends on your Massive plan. "
@@ -78,6 +81,10 @@ DATA_SOURCES = [
      {"allowed_tools": ["get_earnings_insight", "search_earnings_insights", "get_company_themes",
                         "get_theme_details", "search_investment_topics"]},
      "Earnings insights and investment themes from Interactive Brokers.", ["finance_analyst"]),
+    ("finra_short_volume", "FINRA daily short volume", "python", "finra", ["dark_pool"],
+     {"function": "finra_short_volume"}, "", ["technical_analyst"]),
+    ("finra_ats_weekly", "FINRA weekly dark pool (ATS) volume", "python", "finra", ["dark_pool"],
+     {"function": "finra_ats_weekly"}, "", ["technical_analyst"]),
     ("massive_quote", "Massive quote snapshot", "python", "massive", ["realtime_quotes"],
      {"function": "massive_quote"}, "", ["technical_analyst", "strategy_optimizer"]),
     ("massive_bars", "Massive price bars", "python", "massive", ["price_history"],
@@ -146,6 +153,12 @@ def ensure_data_sources(db: Session) -> None:
                 role.tool_ids = [*role.tool_ids, tool.id]
                 db.add(role)
 
+    # Tell the Lead that the Technical Analyst now covers dark pool flow (only if you haven't edited it).
+    tech = roles.get("technical_analyst")
+    if tech is not None and tech.description == OLD_TECHNICAL_DESC:
+        tech.description = TECHNICAL_DESC
+        db.add(tech)
+
     for slug, (conn_slug, caps) in EXISTING_TAGS.items():
         tool = tools.get(slug)
         if tool is None:
@@ -156,6 +169,10 @@ def ensure_data_sources(db: Session) -> None:
             tool.connection_id = conns[conn_slug].id
         db.add(tool)
     db.commit()
+
+OLD_TECHNICAL_DESC = "Price action: trend, support/resistance, momentum, volume, volatility and chart setups."
+TECHNICAL_DESC = ("Price action: trend, support/resistance, momentum, volume, volatility and chart setups; "
+                  "also dark pool / off-exchange flow (short volume ratio, ATS volume, block prints).")
 
 # (slug, name, model, tools, description, prompt)
 ROLES = [
@@ -173,7 +190,7 @@ ROLES = [
      "You analyse company fundamentals: revenue and earnings trends, margins, cash flow, balance sheet strength, "
      "valuation versus history and peers, and analyst expectations."),
     ("technical_analyst", "Technical Analyst", "sonnet", ["price_history", "technical_snapshot"],
-     "Price action: trend, support/resistance, momentum, volume, volatility and chart setups.",
+     TECHNICAL_DESC,
      "You analyse price action and indicators: trend, key support and resistance levels, momentum (RSI, MACD), "
      "volume, volatility (ATR) and setups. Always state the timeframe and the levels that would invalidate the view."),
     ("news_analyst", "News Analyst", "sonnet", ["web_search", "ddg_search"],

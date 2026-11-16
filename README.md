@@ -106,6 +106,10 @@ Built in: Yahoo Finance (free, delayed), DuckDuckGo, Claude web search/fetch, an
 (free): recent filings, reading a filing's text, and Form 4 insider trades. EDGAR needs
 `SEC_USER_AGENT` in `.env` with an app name and contact email (an SEC requirement).
 
+**FINRA** (free, no key): daily off-exchange short volume (the "dark pool short ratio", posted by
+6 pm ET) and weekly dark pool (ATS) volume by venue with ATS share of off-exchange volume (published
+2-4 weeks after each week).
+
 **Massive.com** (formerly Polygon.io; `MASSIVE_API_KEY`): quote snapshot, price bars, option chain
 with IV and Greeks, news with sentiment, and off-exchange prints (trades reported to FINRA TRFs,
 i.e. dark pool and internalized volume). What each returns depends on your Massive plan.

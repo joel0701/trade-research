@@ -113,9 +113,19 @@ async def ddg_search(query: str, max_results: int = 8, news: bool = False) -> st
     return await asyncio.to_thread(run)
 
 
-from app.tools import massive, sec_edgar  # noqa: E402
+from app.tools import finra, massive, sec_edgar  # noqa: E402
 
 PYTHON_TOOLS: dict[str, PythonTool] = {
+    "finra_short_volume": PythonTool(
+        "FINRA daily off-exchange short volume for a stock (the 'dark pool short ratio'): off-exchange volume, "
+        "short volume and short % per day for recent trading days, with the recent trend. Free, updated daily.",
+        _ticker_schema({"days": {"type": "integer", "description": "Trading days to cover (default 20, max 60)"}}),
+        finra.finra_short_volume),
+    "finra_ats_weekly": PythonTool(
+        "FINRA weekly dark pool (ATS) data for a stock: shares, trades, dollar value and average trade size per "
+        "week, the top dark pool venues, and dark pools' share of off-exchange volume. Published 2-4 weeks late.",
+        _ticker_schema({"weeks": {"type": "integer", "description": "Weeks to cover (default 12, max 52)"}}),
+        finra.finra_ats_weekly),
     "massive_quote": PythonTool(
         "Latest price, bid/ask, today's OHLCV and change from Massive.com (real-time or delayed per plan).",
         _ticker_schema(), massive.massive_quote),
