@@ -4,7 +4,7 @@ Edit them in the UI afterwards; this only runs when the tables are empty.
 """
 from sqlmodel import Session, select
 
-from app.models import Role, Screener, Skill, Tool
+from app.models import Connection, Role, Screener, Skill, Tool
 
 IBKR_BLOCKED = [  # anything that can place orders or change account state stays off by default
     "create_order_instruction", "delete_order_instruction", "create_alert", "update_alert",
@@ -25,15 +25,123 @@ TOOLS = [
          config={"function": "technical_snapshot"}),
     Tool(slug="fundamentals", name="Fundamentals (Yahoo)", kind="python", config={"function": "fundamentals"}),
     Tool(slug="options_chain", name="Options chain (Yahoo)", kind="python", config={"function": "options_chain"}),
-    Tool(slug="ibkr", name="Interactive Brokers (MCP)", kind="mcp_server", enabled=False,
-         description="IBKR market data, options, screeners and account data via MCP. Set the URL and token, then enable.",
-         secret_env="IBKR_MCP_TOKEN",
-         config={"transport": "http", "url": "https://REPLACE-WITH-IBKR-MCP-URL/mcp", "blocked_tools": IBKR_BLOCKED}),
-    Tool(slug="bigdata", name="Bigdata.com (MCP)", kind="mcp_server", enabled=False,
-         description="News, filings, transcripts and company tearsheets via the Bigdata.com MCP server.",
-         secret_env="BIGDATA_API_KEY",
+]
+
+# ── Connections and data sources ──────────────────────────────────────────────
+# One connection can serve several sources (IBKR: quotes, options, account, screeners).
+# IBKR tool names below are those of IBKR's MCP server; edit allowed_tools if yours differ.
+CONNECTIONS = [
+    dict(slug="yahoo", name="Yahoo Finance", kind="none",
+         description="Free, delayed market data and fundamentals via yfinance. No setup needed."),
+    dict(slug="sec_edgar", name="SEC EDGAR", kind="http", secret_env="SEC_USER_AGENT",
+         description="Free SEC filings and insider (Form 4) data. The SEC requires SEC_USER_AGENT in .env "
+                     "with your app name and contact email."),
+    dict(slug="anthropic_tools", name="Anthropic server tools", kind="none",
+         description="Web search and fetch run by Anthropic; work with Claude models only."),
+    dict(slug="duckduckgo", name="DuckDuckGo", kind="none", description="Free web and news search."),
+    dict(slug="ibkr", name="Interactive Brokers", kind="mcp", secret_env="IBKR_MCP_TOKEN",
+         description="IBKR's MCP server: real-time quotes, option chains, account data and screeners.",
+         config={"transport": "http", "url": "https://REPLACE-WITH-IBKR-MCP-URL/mcp"}),
+    dict(slug="bigdata", name="Bigdata.com", kind="mcp", secret_env="BIGDATA_API_KEY",
+         description="Bigdata.com MCP server: news, filings, transcripts and company tearsheets.",
          config={"transport": "http", "url": "https://REPLACE-WITH-BIGDATA-MCP-URL/mcp"}),
 ]
+
+# (slug, name, kind, connection, capabilities, config, description, add to these roles when first created)
+DATA_SOURCES = [
+    ("sec_filings", "SEC filings (EDGAR)", "python", "sec_edgar", ["sec_filings"], {"function": "sec_filings"}, "",
+     ["finance_analyst", "research_agent"]),
+    ("sec_filing_text", "Read SEC filing (EDGAR)", "python", "sec_edgar", ["sec_filings"], {"function": "sec_filing_text"}, "",
+     ["finance_analyst", "research_agent"]),
+    ("insider_trades", "Insider trades (EDGAR Form 4)", "python", "sec_edgar", ["insider_trading"],
+     {"function": "insider_trades"}, "", ["finance_analyst", "news_analyst"]),
+    ("ibkr_quotes", "IBKR real-time quotes", "mcp_server", "ibkr", ["realtime_quotes", "price_history"],
+     {"allowed_tools": ["get_price_snapshot", "get_price_history", "search_contracts"]},
+     "Live quotes and price history from Interactive Brokers.", ["technical_analyst", "strategy_optimizer"]),
+    ("ibkr_options", "IBKR option chains", "mcp_server", "ibkr", ["option_chains"],
+     {"allowed_tools": ["get_option_parameters", "get_option_data", "get_combo_identifier", "search_contracts"]},
+     "Live option chains, IV and Greeks from Interactive Brokers.", ["strategy_optimizer"]),
+    ("ibkr_account", "IBKR account (read-only)", "mcp_server", "ibkr", ["brokerage"],
+     {"allowed_tools": ["get_account_summary", "get_account_balances", "get_account_positions",
+                        "get_account_orders", "get_account_trades", "get_pa_performance_all_periods",
+                        "get_pa_allocation"]},
+     "Positions, balances, orders and trades. Order placement is always blocked.", []),
+    ("ibkr_screeners", "IBKR screeners", "mcp_server", "ibkr", ["screening"],
+     {"allowed_tools": ["get_screener_templates", "get_screener_capabilities", "preview_screener",
+                        "list_saved_screeners", "get_saved_screener", "run_saved_screener"]},
+     "IBKR market scanners and saved screens.", []),
+    ("ibkr_research", "IBKR earnings & themes", "mcp_server", "ibkr", ["fundamentals", "news"],
+     {"allowed_tools": ["get_earnings_insight", "search_earnings_insights", "get_company_themes",
+                        "get_theme_details", "search_investment_topics"]},
+     "Earnings insights and investment themes from Interactive Brokers.", ["finance_analyst"]),
+    ("bigdata_research", "Bigdata.com news & filings", "mcp_server", "bigdata", ["news", "sec_filings", "fundamentals"],
+     {"blocked_tools": ["bigdata_create_monitor", "bigdata_delete_monitor", "bigdata_edit_monitor",
+                        "bigdata_simulate_monitor", "bigdata_create_watchlist", "bigdata_delete_watchlist",
+                        "bigdata_edit_watchlist", "bigdata_upload_document"]},
+     "News, filings, transcripts and tearsheets (read-only tools).", ["news_analyst"]),
+]
+
+# Categories and connections for the built-in sources that already existed.
+EXISTING_TAGS = {
+    "web_search": ("anthropic_tools", ["web_search", "news"]), "web_fetch": ("anthropic_tools", ["web_search"]),
+    "ddg_search": ("duckduckgo", ["web_search", "news"]), "price_history": ("yahoo", ["price_history"]),
+    "technical_snapshot": ("yahoo", ["price_history"]), "fundamentals": ("yahoo", ["fundamentals"]),
+    "options_chain": ("yahoo", ["option_chains"]),
+}
+
+
+def ensure_data_sources(db: Session) -> None:
+    """Create connections and sources that don't exist yet, move older MCP tool settings onto
+    connections, and tag categories. Idempotent; never overwrites values you've edited."""
+    conns = {c.slug: c for c in db.exec(select(Connection)).all()}
+    for c in CONNECTIONS:
+        if c["slug"] not in conns:
+            conn = Connection(**c)
+            db.add(conn)
+            db.flush()
+            conns[conn.slug] = conn
+    tools = {t.slug: t for t in db.exec(select(Tool)).all()}
+
+    # Older databases had one "ibkr" / "bigdata" MCP tool holding the server settings.
+    for slug in ("ibkr", "bigdata"):
+        old = tools.get(slug)
+        if old is None or old.kind != "mcp_server" or old.connection_id is not None:
+            continue
+        conn = conns[slug]
+        server = {k: v for k, v in old.config.items() if k not in ("allowed_tools", "blocked_tools")}
+        if server.get("url") and "REPLACE" not in server.get("url", ""):
+            conn.config = {**conn.config, **server}  # keep the address you entered
+        if old.secret_env:
+            conn.secret_env = old.secret_env
+        old.connection_id = conn.id
+        old.name = f"{conn.name}: all read-only tools"
+        old.capabilities = old.capabilities or ["other"]
+        db.add_all([conn, old])
+
+    roles = {r.slug: r for r in db.exec(select(Role)).all()}
+    for slug, name, kind, conn_slug, caps, config, desc, role_slugs in DATA_SOURCES:
+        if slug in tools:
+            continue
+        tool = Tool(slug=slug, name=name, kind=kind, connection_id=conns[conn_slug].id, capabilities=caps,
+                    config=config, description=desc)
+        db.add(tool)
+        db.flush()
+        for rs in role_slugs:  # new sources join sensible roles once, when first created
+            role = roles.get(rs)
+            if role is not None and tool.id not in role.tool_ids:
+                role.tool_ids = [*role.tool_ids, tool.id]
+                db.add(role)
+
+    for slug, (conn_slug, caps) in EXISTING_TAGS.items():
+        tool = tools.get(slug)
+        if tool is None:
+            continue
+        if not tool.capabilities:
+            tool.capabilities = caps
+        if tool.connection_id is None:
+            tool.connection_id = conns[conn_slug].id
+        db.add(tool)
+    db.commit()
 
 # (slug, name, model, tools, description, prompt)
 ROLES = [
@@ -163,6 +271,7 @@ def ensure_models(db: Session) -> None:
 def seed(db: Session) -> None:
     ensure_models(db)
     if db.exec(select(Tool).where(Tool.kind != "model")).first() is not None:
+        ensure_data_sources(db)
         return
     db.add_all(TOOLS)
     db.commit()
@@ -174,3 +283,4 @@ def seed(db: Session) -> None:
     db.add_all(SKILLS)
     db.add_all(SCREENERS)
     db.commit()
+    ensure_data_sources(db)

@@ -8,9 +8,12 @@ def test_seeded_config_and_crud():
         roles = c.get("/api/roles").json()
         assert {r["slug"] for r in roles} >= {"lead", "technical_analyst", "strategy_optimizer"}
         assert sum(r["is_lead"] for r in roles) == 1
-        tools = c.get("/api/tools").json()
-        ibkr = next(t for t in tools if t["slug"] == "ibkr")
-        assert not ibkr["enabled"] and "create_order_instruction" in ibkr["config"]["blocked_tools"]
+        tools = {t["slug"]: t for t in c.get("/api/tools").json()}
+        conns = {x["slug"]: x for x in c.get("/api/connections").json()}
+        # One IBKR connection backs several sources.
+        assert {tools[s]["connection_id"] for s in ("ibkr_quotes", "ibkr_options", "ibkr_account")} == {conns["ibkr"]["id"]}
+        assert tools["ibkr_account"]["capabilities"] == ["brokerage"]
+        assert tools["insider_trades"]["capabilities"] == ["insider_trading"]
 
         new = c.post("/api/tools", json={"slug": "x", "name": "X", "kind": "python",
                                          "config": {"function": "fundamentals"}}).json()

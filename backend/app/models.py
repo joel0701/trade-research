@@ -33,16 +33,39 @@ class UTCDateTime(TypeDecorator):
         return value.replace(tzinfo=UTC) if value is not None and value.tzinfo is None else value
 
 
+class Connection(SQLModel, table=True):
+    """How to reach a provider: endpoint and credentials, set up once.
+
+    One connection can back several data sources (Tools): e.g. one IBKR connection serves
+    real-time quotes, option chains and account data. kind:
+      mcp  -> an MCP server; config: transport (http|stdio), url or command/args, headers, env
+      http -> a web API used by built-in Python tools (e.g. SEC EDGAR)
+      none -> no setup needed (e.g. Yahoo Finance)
+    secret_env names the environment variable that must be set for the connection to work
+    (its value lives in .env, never in the database).
+    """
+
+    id: int | None = Field(default=None, primary_key=True)
+    slug: str = Field(unique=True, index=True)
+    name: str
+    kind: str = "none"
+    description: str = ""
+    config: dict[str, Any] = Field(default_factory=dict, sa_column=Column(JSON))
+    secret_env: str | None = None
+    enabled: bool = True
+
+
 class Tool(SQLModel, table=True):
-    """A capability a role can use.
+    """A model or data source a role can use.
 
     kind:
-      model              -> a Claude model; config: model_id, effort, max_tokens, fallbacks
+      model              -> an LLM; config: provider, model_id, max_tokens, prices, ...
       python             -> a built-in Python function; config: function
       claude_server_tool -> an Anthropic-hosted tool (web search/fetch); config: the tool dict
-      mcp_server         -> an MCP server; config: transport (stdio|http), command/args or url,
-                            headers, allowed_tools / blocked_tools
-    Secrets never go in config: put the env var *name* in secret_env.
+      mcp_server         -> tools from an MCP server (normally via connection_id); config:
+                            allowed_tools / blocked_tools pick which of the server's tools
+    capabilities tags what the source provides (see app.catalog.CAPABILITIES).
+    Secrets never go in config: put the env var *name* in secret_env (or on the connection).
     """
 
     id: int | None = Field(default=None, primary_key=True)
@@ -50,6 +73,8 @@ class Tool(SQLModel, table=True):
     name: str
     kind: str
     description: str = ""
+    connection_id: int | None = Field(default=None, foreign_key="connection.id")
+    capabilities: list[str] = Field(default_factory=list, sa_column=Column(JSON))
     config: dict[str, Any] = Field(default_factory=dict, sa_column=Column(JSON))
     secret_env: str | None = None
     enabled: bool = True

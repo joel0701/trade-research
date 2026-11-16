@@ -64,15 +64,30 @@ export function Toggle({ label, value, onChange }: { label: string; value: boole
 }
 
 /** Left list + right editor layout. */
-export function MasterDetail({ title, crud, blank, children }: {
+export function MasterDetail({ title, crud, blank, children, filter, groups, rowExtra, header }: {
   title: string; crud: ReturnType<typeof useCrud>; blank: Json;
   children: (item: Json, set: (patch: Json) => void) => React.ReactNode;
+  filter?: (item: Json) => boolean;                       // which items this view lists
+  groups?: { key: string; label: string; match: (item: Json) => boolean }[]; // optional headed groups
+  rowExtra?: (item: Json) => React.ReactNode;             // e.g. a status badge
+  header?: React.ReactNode;                               // e.g. tabs above the list
 }) {
-  const { items, selected, setSelected, save, remove, error } = crud;
+  const { selected, setSelected, save, remove, error } = crud;
+  const items = filter ? crud.items.filter(filter) : crud.items;
   const [draft, setDraft] = useState<Json | null>(null);
   useEffect(() => { setDraft(selected ? structuredClone(selected) : null); }, [selected]);
+
+  const row = (it: Json) => (
+    <div key={it.id} className={`row ${selected?.id === it.id ? "active" : ""} ${it.enabled === false ? "off" : ""}`}
+         onClick={() => setSelected(it)}>
+      <span>{it.name}{!groups && it.kind && <span className="badge">{it.kind}</span>}{it.is_lead && <span className="badge">lead</span>}</span>
+      {rowExtra?.(it)}
+    </div>
+  );
+
   return (
     <div className="page">
+      {header}
       <div className="inline" style={{ justifyContent: "space-between", marginBottom: 12 }}>
         <h2 style={{ margin: 0 }}>{title}</h2>
         <button onClick={() => setSelected(structuredClone(blank))}>+ Add</button>
@@ -80,12 +95,17 @@ export function MasterDetail({ title, crud, blank, children }: {
       {error && !draft && <p className="error">{error}</p>}
       <div className="split">
         <div className="list">
-          {items.map((it) => (
-            <div key={it.id} className={`row ${selected?.id === it.id ? "active" : ""} ${it.enabled === false ? "off" : ""}`}
-                 onClick={() => setSelected(it)}>
-              {it.name}{it.kind && <span className="badge">{it.kind}</span>}{it.is_lead && <span className="badge">lead</span>}
-            </div>
-          ))}
+          {groups
+            ? groups.map((g) => {
+                const members = items.filter(g.match);
+                return (
+                  <div key={g.key}>
+                    <div className="list-group">{g.label} <span className="muted">{members.length || ""}</span></div>
+                    {members.length ? members.map(row) : <div className="row empty muted">No sources yet</div>}
+                  </div>
+                );
+              })
+            : items.map(row)}
         </div>
         <div className="card">
           {draft ? (

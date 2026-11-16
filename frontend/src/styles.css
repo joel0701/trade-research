@@ -237,3 +237,19 @@ body.resizing iframe { pointer-events: none; }
   .model-name { max-width: 110px; }
   .composer { padding-left: 12px; padding-right: 12px; }
 }
+
+/* tabs, groups and status dots */
+.tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--border); margin-bottom: 16px; }
+.tabs button { border: none; background: none; border-radius: 0; padding: 8px 14px; color: var(--muted); border-bottom: 2px solid transparent; margin-bottom: -1px; }
+.tabs button.active { color: var(--text); border-bottom-color: var(--accent); }
+.list .row { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.list .row.empty { cursor: default; font-size: 13px; }
+.list-group { font-size: 11px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); padding: 10px 12px 4px; background: var(--panel); }
+.list .list-group { border-bottom: 1px solid var(--border); }
+.role-group .list-group { padding: 8px 0 4px; background: none; }
+.dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; margin-right: 6px; }
+.dot.ok { background: var(--ok-fg); }
+.dot.off { background: transparent; border: 1.5px solid var(--muted); }
+ul.plain { list-style: none; padding: 0; margin: 4px 0; font-size: 14px; }
+ul.plain li { padding: 3px 0; }
+.nowrap { white-space: nowrap; }

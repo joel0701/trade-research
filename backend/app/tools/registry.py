@@ -1,7 +1,8 @@
 """Turns a role's configured tools into API tool definitions plus executors.
 
-A Toolbox is built per role run. It is an async context manager because MCP
-servers hold a live connection for the duration of the run.
+A Toolbox is built per role run. It is an async context manager because MCP servers hold a
+live connection for the duration of the run. Data sources that share a Connection (e.g.
+IBKR quotes, IBKR option chains, IBKR account) share one MCP session.
 """
 import json
 import logging
@@ -11,7 +12,9 @@ from collections.abc import Awaitable, Callable
 from contextlib import AsyncExitStack
 from typing import Any
 
-from app.models import Tool
+from sqlmodel import Session, select
+
+from app.models import Connection, Tool
 from app.tools.python_tools import PYTHON_TOOLS
 
 log = logging.getLogger(__name__)
@@ -19,17 +22,56 @@ log = logging.getLogger(__name__)
 Executor = Callable[[dict[str, Any]], Awaitable[str]]
 MAX_RESULT_CHARS = 40_000  # keep any single tool result from flooding context
 
+# Anything that can place, change or cancel orders (or move money) is never exposed to the
+# agents, whatever a source's allowed_tools says. Trading needs a per-order confirmation flow first.
+TRADING_TOOL = re.compile(
+    r"(create|place|submit|modify|update|replace|cancel|delete|transmit)_?\w*(order|trade|instruction)"
+    r"|(order|trade)_?(create|place|submit|modify|cancel|delete)|transfer|withdraw", re.I)
+
 
 def safe_name(name: str) -> str:
     """API tool names must match ^[a-zA-Z0-9_-]{1,64}$."""
     return re.sub(r"[^a-zA-Z0-9_-]", "_", name)[:64]
 
 
+def is_trading_tool(name: str) -> bool:
+    return bool(TRADING_TOOL.search(name))
+
+
+def availability(tool: Tool, conn: Connection | None) -> tuple[bool, str | None]:
+    """Whether a data source can be used now, and why not."""
+    if not tool.enabled:
+        return False, "disabled"
+    if tool.connection_id is not None:
+        if conn is None:
+            return False, "its connection was deleted"
+        if not conn.enabled:
+            return False, f"connection {conn.name} is disabled"
+        if conn.secret_env and not os.getenv(conn.secret_env):
+            return False, f"set {conn.secret_env} in .env"
+        if conn.kind == "mcp" and "REPLACE" in json.dumps(conn.config):
+            return False, f"set the server address on connection {conn.name}"
+    if tool.secret_env and not os.getenv(tool.secret_env):
+        return False, f"set {tool.secret_env} in .env"
+    if tool.kind == "python" and tool.config.get("function", tool.slug) not in PYTHON_TOOLS:
+        return False, f"no built-in function {tool.config.get('function')!r}"
+    return True, None
+
+
+def load_connections() -> dict[int, Connection]:
+    from app.db import engine
+
+    with Session(engine) as db:
+        return {c.id: c for c in db.exec(select(Connection)).all()}
+
+
 class Toolbox:
-    def __init__(self, tools: list[Tool]):
-        self._tools = [t for t in tools if t.enabled and t.kind != "model"]
+    def __init__(self, tools: list[Tool], connections: dict[int, Connection] | None = None):
+        self._requested = [t for t in tools if t.kind != "model"]
+        self._connections = connections
         self.definitions: list[dict[str, Any]] = []
         self.executors: dict[str, Executor] = {}
+        self.skipped: list[tuple[str, str]] = []  # (tool name, reason) for the trace/logs
         self._stack = AsyncExitStack()
 
     def add(self, definition: dict[str, Any], executor: Executor | None = None) -> None:
@@ -38,19 +80,40 @@ class Toolbox:
             self.executors[definition["name"]] = executor
 
     async def __aenter__(self) -> "Toolbox":
-        for tool in self._tools:
+        conns = self._connections if self._connections is not None else load_connections()
+        usable = []
+        for tool in self._requested:
+            ok, why = availability(tool, conns.get(tool.connection_id) if tool.connection_id else None)
+            if ok:
+                usable.append(tool)
+            else:
+                self.skipped.append((tool.name, why or "unavailable"))
+        if self.skipped:
+            log.info("Skipping unavailable tools: %s", self.skipped)
+
+        mcp_groups: dict[tuple[str, int], list[Tool]] = {}
+        for tool in usable:
             try:
                 if tool.kind == "python":
                     self._add_python(tool)
                 elif tool.kind == "claude_server_tool":
                     self.definitions.append(dict(tool.config))  # runs on Anthropic's side
                 elif tool.kind == "mcp_server":
-                    await self._add_mcp(tool)
+                    key = ("conn", tool.connection_id) if tool.connection_id else ("tool", tool.id)
+                    mcp_groups.setdefault(key, []).append(tool)
                 else:
                     log.warning("Unknown tool kind %s for %s", tool.kind, tool.slug)
             except Exception:
                 # One broken tool should not take down the whole run.
                 log.exception("Failed to load tool %s", tool.slug)
+
+        for (kind, ident), group in mcp_groups.items():
+            conn = conns.get(ident) if kind == "conn" else None
+            try:
+                await self._add_mcp_group(group, conn)
+            except Exception:
+                log.exception("Failed to connect to MCP server for %s", [t.slug for t in group])
+                self.skipped.extend((t.name, "connection failed") for t in group)
         return self
 
     async def __aexit__(self, *exc: object) -> None:
@@ -74,9 +137,7 @@ class Toolbox:
 
     def _add_python(self, tool: Tool) -> None:
         fn_name = tool.config.get("function", tool.slug)
-        spec = PYTHON_TOOLS.get(fn_name)
-        if spec is None:
-            raise ValueError(f"No built-in python tool named {fn_name!r}")
+        spec = PYTHON_TOOLS[fn_name]
 
         async def run(args: dict[str, Any], _fn=spec.fn) -> str:
             return await _fn(**args)
@@ -87,14 +148,14 @@ class Toolbox:
             run,
         )
 
-    async def _add_mcp(self, tool: Tool) -> None:
+    async def open_mcp(self, cfg: dict[str, Any], secret_env: str | None):
+        """Open an MCP client session (kept open until the toolbox closes)."""
         from mcp import ClientSession, StdioServerParameters
         from mcp.client.stdio import stdio_client
         from mcp.client.streamable_http import create_mcp_http_client, streamable_http_client
 
-        cfg = tool.config
-        secret = os.getenv(tool.secret_env) if tool.secret_env else None
-        if cfg.get("transport", "stdio") == "http":
+        secret = os.getenv(secret_env) if secret_env else None
+        if cfg.get("transport", "http") == "http":
             headers = dict(cfg.get("headers", {}))
             if secret:
                 headers[cfg.get("secret_header", "Authorization")] = cfg.get("secret_prefix", "Bearer ") + secret
@@ -102,20 +163,37 @@ class Toolbox:
             streams = await self._stack.enter_async_context(streamable_http_client(cfg["url"], http_client=http))
         else:
             env = {**os.environ, **cfg.get("env", {})}
-            if secret and tool.secret_env:
-                env[tool.secret_env] = secret
+            if secret and secret_env:
+                env[secret_env] = secret
             params = StdioServerParameters(command=cfg["command"], args=cfg.get("args", []), env=env)
             streams = await self._stack.enter_async_context(stdio_client(params))
         session = await self._stack.enter_async_context(ClientSession(streams[0], streams[1]))
         await session.initialize()
+        return session
 
-        allowed = set(cfg.get("allowed_tools") or [])
-        blocked = set(cfg.get("blocked_tools") or [])
+    async def _add_mcp_group(self, group: list[Tool], conn: Connection | None) -> None:
+        """One session per connection; expose the union of what each source allows."""
+        if conn is not None:
+            session = await self.open_mcp(conn.config, conn.secret_env)
+            prefix, allow_trading = conn.slug, bool(conn.config.get("allow_trading"))
+        else:  # older single-tool MCP configuration
+            tool = group[0]
+            session = await self.open_mcp(tool.config, tool.secret_env)
+            prefix, allow_trading = tool.slug, False
+
         listed = await session.list_tools()
+        exposed: dict[str, Any] = {}
         for t in listed.tools:
-            if (allowed and t.name not in allowed) or t.name in blocked:
+            if is_trading_tool(t.name) and not allow_trading:
                 continue
+            for source in group:
+                allowed = set(source.config.get("allowed_tools") or [])
+                blocked = set(source.config.get("blocked_tools") or [])
+                if (not allowed or t.name in allowed) and t.name not in blocked:
+                    exposed[t.name] = t
+                    break
 
+        for t in exposed.values():
             async def run(args: dict[str, Any], _name=t.name) -> str:
                 result = await session.call_tool(_name, args)
                 parts = []
@@ -128,7 +206,7 @@ class Toolbox:
 
             schema = getattr(t, "inputSchema", None) or getattr(t, "input_schema", None) or {"type": "object"}
             self.add(
-                {"name": safe_name(f"{tool.slug}__{t.name}"), "description": (t.description or t.name)[:1024],
+                {"name": safe_name(f"{prefix}__{t.name}"), "description": (t.description or t.name)[:1024],
                  "input_schema": schema},
                 run,
             )

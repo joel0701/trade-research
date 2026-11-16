@@ -93,6 +93,27 @@ format, so a session can switch vendors between questions. On non-Claude models:
 Default model names for other vendors change often: check them under Tools and fill in
 `price_input` / `price_output` (USD per million tokens) to get cost estimates.
 
+### Data sources and connections
+
+**Tools → Connections** holds how to reach each provider (endpoint and the name of the `.env`
+variable with its key). **Tools → Data sources** lists what each connection provides, grouped by
+category: real-time quotes, price history, option chains, fundamentals, SEC filings, insider trading,
+dark pool, news, web search, brokerage, screening. One connection can serve several sources: the
+IBKR connection backs *IBKR real-time quotes*, *option chains*, *account (read-only)*, *screeners*
+and *earnings & themes*, and a role using several of them shares one MCP session.
+
+Built in: Yahoo Finance (free, delayed), DuckDuckGo, Claude web search/fetch, and **SEC EDGAR**
+(free): recent filings, reading a filing's text, and Form 4 insider trades. EDGAR needs
+`SEC_USER_AGENT` in `.env` with an app name and contact email (an SEC requirement).
+
+Sources that aren't set up are marked in Tools and Roles and skipped at run time with the reason.
+**Order placement is always blocked**: any MCP tool that places, changes or cancels orders, or
+moves money, is never exposed to the agents (`TRADING_TOOL` in `backend/app/tools/registry.py`).
+
+To add a vendor (e.g. a dark pool feed): put its key in `.env`, add a Connection naming that
+variable, then add Data sources on it. MCP servers work with no code; REST APIs need a small
+built-in Python tool.
+
 ### Connecting IBKR or Bigdata.com (MCP)
 
 Edit the tool in **Tools**: set `url` to the server's MCP endpoint, put the token in `.env` under the

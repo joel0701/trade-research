@@ -113,7 +113,34 @@ async def ddg_search(query: str, max_results: int = 8, news: bool = False) -> st
     return await asyncio.to_thread(run)
 
 
+from app.tools import sec_edgar  # noqa: E402
+
 PYTHON_TOOLS: dict[str, PythonTool] = {
+    "sec_filings": PythonTool(
+        "Recent SEC EDGAR filings for a company (10-K, 10-Q, 8-K, S-1, DEF 14A, 13D/G...), with links. "
+        "Use sec_filing_text to read one.",
+        _ticker_schema({
+            "forms": {"type": "string", "description": "Comma-separated form types, e.g. '10-K,10-Q,8-K'. Empty = all."},
+            "limit": {"type": "integer", "description": "How many filings (default 10, max 50)"},
+        }),
+        sec_edgar.sec_filings,
+    ),
+    "sec_filing_text": PythonTool(
+        "Read an SEC filing document as plain text, optionally starting at a section such as "
+        "'Risk Factors' or 'Management's Discussion'. Takes a URL returned by sec_filings.",
+        {"type": "object", "properties": {
+            "url": {"type": "string", "description": "An https://www.sec.gov/Archives/... document URL"},
+            "find": {"type": "string", "description": "Phrase to start reading from (optional)"},
+            "max_chars": {"type": "integer", "description": "How much text to return (default 20000)"},
+        }, "required": ["url"]},
+        sec_edgar.sec_filing_text,
+    ),
+    "insider_trades": PythonTool(
+        "Recent insider transactions from SEC Form 4 filings: who (role), buy or sell, shares, price, "
+        "value, holdings after, plus totals for open-market buys and sales.",
+        _ticker_schema({"filings": {"type": "integer", "description": "How many recent Form 4 filings to read (default 15)"}}),
+        sec_edgar.insider_trades,
+    ),
     "price_history": PythonTool(
         "Daily or intraday OHLCV price bars for a stock (most recent 60 bars returned).",
         _ticker_schema({

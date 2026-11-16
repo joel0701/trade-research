@@ -10,7 +10,9 @@ from app.agents.orchestrator import mark_interrupted_runs
 from app.api.crud import crud_router
 from app.config import CORS_ORIGINS
 from app.db import engine, init_db
-from app.models import Role, Screener, Skill, Tool
+from app.catalog import CAPABILITIES
+from app.models import Connection, Role, Screener, Skill, Tool
+from app.tools.registry import availability
 from app.seed import seed
 from app.llm.providers import PROVIDERS, provider_of
 from app.tools.python_tools import PYTHON_TOOLS
@@ -30,7 +32,8 @@ async def lifespan(_: FastAPI):
 app = FastAPI(title="Trade Research", lifespan=lifespan)
 app.add_middleware(CORSMiddleware, allow_origins=CORS_ORIGINS, allow_methods=["*"], allow_headers=["*"])
 
-for model, prefix in [(Tool, "/tools"), (Role, "/roles"), (Skill, "/skills"), (Screener, "/screeners")]:
+for model, prefix in [(Tool, "/tools"), (Connection, "/connections"), (Role, "/roles"), (Skill, "/skills"),
+                      (Screener, "/screeners")]:
     app.include_router(crud_router(model, prefix), prefix="/api")
 app.include_router(sessions.router, prefix="/api")
 app.include_router(launch.router, prefix="/api")
@@ -50,6 +53,24 @@ def models() -> list[dict]:
                 info = {"provider": t.config.get("provider"), "provider_name": "?", "key_env": None,
                         "available": False, "problem": str(e)}
             out.append({**t.model_dump(), **info, "available": info["available"] and t.enabled})
+        return out
+
+
+@app.get("/api/capabilities")
+def capabilities() -> list[dict]:
+    """Data categories, in display order."""
+    return [{"slug": k, **v} for k, v in CAPABILITIES.items()]
+
+
+@app.get("/api/tools-status")
+def tools_status() -> list[dict]:
+    """Whether each data source can be used right now, and why not (e.g. a missing key)."""
+    with Session(engine) as db:
+        conns = {c.id: c for c in db.exec(select(Connection)).all()}
+        out = []
+        for t in db.exec(select(Tool).where(Tool.kind != "model").order_by(Tool.id)).all():
+            ok, why = availability(t, conns.get(t.connection_id) if t.connection_id else None)
+            out.append({"id": t.id, "available": ok, "reason": why})
         return out
 
 
