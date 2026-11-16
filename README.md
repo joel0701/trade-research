@@ -114,7 +114,12 @@ Built in: Yahoo Finance (free, delayed), DuckDuckGo, Claude web search/fetch, an
 with IV and Greeks, news with sentiment, and off-exchange prints (trades reported to FINRA TRFs,
 i.e. dark pool and internalized volume). What each returns depends on your Massive plan.
 
-Sources that aren't set up are marked in Tools and Roles and skipped at run time with the reason.
+Sources that aren't set up are marked in Tools and Roles. **Before a question runs**, the app
+checks every source assigned to the active roles; if any are unavailable it holds the question and
+asks in the chat whether to continue, grouped by cause, with the impact: *high* when a role has no
+other working source for that kind of data, *low* when another source covers it. You can continue,
+continue without being asked again in that session (until the set of unavailable sources changes),
+or cancel. Sources you've disabled yourself aren't reported.
 **Order placement is always blocked**: any MCP tool that places, changes or cancels orders, or
 moves money, is never exposed to the agents (`TRADING_TOOL` in `backend/app/tools/registry.py`).
 

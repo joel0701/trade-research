@@ -42,9 +42,16 @@ export type StreamEvent =
   | { type: "specialist_start"; role: string; name: string; question: string }
   | { type: "specialist_end"; role: string; name: string; summary: string }
   | { type: "error"; message: string }
+  | ({ type: "confirm_needed" } & UnavailableReport)
   | { type: "done"; usage: Json };
 
 /** POST a message and read the Server-Sent Events stream. */
+export type UnavailableItem = {
+  role: string; role_slug: string; tool: string; tool_id: number; reason: string | null;
+  categories: string[]; impact: "high" | "low"; gaps: string[]; covered_by: string[];
+};
+export type UnavailableReport = { fingerprint: string; summary: string; items: UnavailableItem[] };
+
 export type AttachmentInfo = { id: number; filename: string; kind: "pdf" | "image" | "text"; size: number };
 
 /** Upload one file into a session; send its id with the next message. */
@@ -61,11 +68,11 @@ export async function uploadAttachment(sessionId: number, file: File): Promise<A
 }
 
 export async function sendMessage(sessionId: number, text: string, onEvent: (e: StreamEvent) => void,
-                                  attachmentIds: number[] = []) {
+                                  attachmentIds: number[] = [], confirm: { proceed?: string; remember?: boolean } = {}) {
   const r = await fetch(`/api/sessions/${sessionId}/messages`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ text, attachment_ids: attachmentIds }),
+    body: JSON.stringify({ text, attachment_ids: attachmentIds, ...confirm }),
   });
   if (!r.ok || !r.body) throw new Error(`${r.status}: ${await r.text()}`);
   const reader = r.body.getReader();

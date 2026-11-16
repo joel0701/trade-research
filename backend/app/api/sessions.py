@@ -11,6 +11,7 @@ from app.agents.orchestrator import ACTIVE_SESSIONS, run_turn
 from app.db import get_session
 from app.attachments import UnsupportedFile, copy_attachment, delete_files, save_upload
 from app.llm.providers import model_available, provider_of
+from app.preflight import unavailable_report
 from app.skill_draft import DraftError, draft_skill
 from app.models import Attachment, ChatSession, Message, Run, Tool
 
@@ -41,6 +42,10 @@ class Feedback(BaseModel):
 class SendMessage(BaseModel):
     text: str = ""
     attachment_ids: list[int] = []
+    # Set after the user saw the unavailable-sources prompt: the fingerprint they agreed to,
+    # and whether to stop asking about that same set for the rest of the session.
+    proceed: str | None = None
+    remember: bool = False
 
 
 def _check_model(db: Session, tool_id: int | None) -> None:
@@ -268,13 +273,26 @@ def runs(session_id: int, db: Session = Depends(get_session)) -> list[dict[str, 
 
 @router.post("/{session_id}/messages")
 async def send(session_id: int, body: SendMessage, db: Session = Depends(get_session)) -> StreamingResponse:
-    if db.get(ChatSession, session_id) is None:
+    chat = db.get(ChatSession, session_id)
+    if chat is None:
         raise HTTPException(404)
     if session_id in ACTIVE_SESSIONS:
         raise HTTPException(409, "This session is still working on the previous question.")
     if not body.text.strip() and not body.attachment_ids:
         raise HTTPException(422, "Type a question or attach a file.")
     text = body.text.strip() or "Please analyse the attached document(s)."
+
+    # Some assigned data sources are down: ask the user before running (nothing is saved yet).
+    report = unavailable_report(db)
+    if report:
+        agreed = report["fingerprint"] in (body.proceed, chat.ack_unavailable)
+        if not agreed:
+            event = {"type": "confirm_needed", **report}
+            return StreamingResponse(iter([f"data: {json.dumps(event)}\n\n"]), media_type="text/event-stream")
+        if body.remember and chat.ack_unavailable != report["fingerprint"]:
+            chat.ack_unavailable = report["fingerprint"]
+            db.add(chat)
+            db.commit()
 
     async def events():
         try:

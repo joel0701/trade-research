@@ -2,7 +2,8 @@ import { useEffect, useRef, useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { api, AttachmentInfo, Json, sendMessage, StreamEvent } from "../api";
+import { api, AttachmentInfo, Json, sendMessage, StreamEvent, UnavailableReport } from "../api";
+import UnavailablePrompt from "../UnavailablePrompt";
 import Composer, { ModelTool } from "../Composer";
 import { FileIcon } from "../icons";
 import Trace, { parseTime, Run, setPriceTable } from "../Trace";
@@ -32,6 +33,10 @@ export default function Research() {
   const [runs, setRuns] = useState<Run[]>([]);
   const [models, setModels] = useState<ModelTool[]>([]);
   const [draftingSkill, setDraftingSkill] = useState(false);
+  // A question held back because some data sources are unavailable (see UnavailablePrompt).
+  const [pendingConfirm, setPendingConfirm] = useState<
+    { text: string; attachments: AttachmentInfo[]; report: UnavailableReport } | null>(null);
+  const [restore, setRestore] = useState<{ text: string; nonce: number } | undefined>();
   const left = usePanelWidth("panel.sidebar", 260, 180, 480);
   const right = usePanelWidth("panel.trace", 420, 280, 820);
   const [skills, setSkills] = useState<Json[]>([]);
@@ -115,7 +120,7 @@ export default function Research() {
   }
 
   useEffect(() => {
-    setError(""); setFocusRunId(null); setRuns([]); setBusy(false); setLiveText(false);
+    setError(""); setFocusRunId(null); setRuns([]); setBusy(false); setLiveText(false); setPendingConfirm(null);
     if (sessionId == null) { setMessages([]); setSessionModel(pendingModel); return; }
     try { localStorage.setItem("lastSession", String(sessionId)); } catch { /* storage unavailable */ }
     loadRuns(sessionId);
@@ -140,9 +145,10 @@ export default function Research() {
     return () => { cancelled = true; };
   }, [sessionId]);
 
-  async function send(text: string, sid: number | null = sessionId, attachments: AttachmentInfo[] = []) {
+  async function send(text: string, sid: number | null = sessionId, attachments: AttachmentInfo[] = [],
+                      confirm: { proceed?: string; remember?: boolean } = {}) {
     if ((!text.trim() && !attachments.length) || busy) return;
-    setError(""); setFocusRunId(null);
+    setError(""); setFocusRunId(null); setPendingConfirm(null);
     try {
       if (sid == null) {
         const s = await api.post("/sessions", { lead_model_tool_id: sessionModel });
@@ -158,9 +164,18 @@ export default function Research() {
       let startNewAnswer = true; // the Lead's text before a tool call is an interim note: replace it
       let scrolledToAnswer = false;
       let detached = false; // the user opened another session: stop drawing this stream
+      let needsConfirm = false;
       await sendMessage(target, text, (e: StreamEvent) => {
         if (viewing.current !== target) detached = true;
         if (detached) return;
+        if (e.type === "confirm_needed") {
+          // Some data sources are down: the question wasn't run. Ask the user first.
+          needsConfirm = true;
+          const { type: _t, ...report } = e;
+          setPendingConfirm({ text, attachments, report });
+          setMessages((m) => (m[m.length - 1]?.role === "user" ? m.slice(0, -1) : m));
+          return;
+        }
         if ((e.type === "text" || e.type === "thinking") && e.source === "lead") {
           setMessages((m) => {
             const copy = [...m];
@@ -185,8 +200,13 @@ export default function Research() {
         } else if (e.type === "error") {
           setError(e.message);
         }
-      }, attachments.map((a) => a.id));
+      }, attachments.map((a) => a.id), confirm);
       if (streaming.current === target) streaming.current = null;
+      if (needsConfirm) {
+        setBusy(false);
+        requestAnimationFrame(() => scroller.current?.scrollTo({ top: scroller.current.scrollHeight, behavior: "smooth" }));
+        return;
+      }
       loadSessions();
       if (viewing.current === target) {
         // Reload from the server so the view matches exactly what was saved.
@@ -316,6 +336,17 @@ export default function Research() {
               </span>
             </div>
           )}
+          {pendingConfirm && sessionId != null && (
+            <UnavailablePrompt
+              question={pendingConfirm.text}
+              report={pendingConfirm.report}
+              onContinue={(remember) => send(pendingConfirm.text, sessionId, pendingConfirm.attachments,
+                                             { proceed: pendingConfirm.report.fingerprint, remember })}
+              onCancel={() => {
+                setRestore({ text: pendingConfirm.text, nonce: Date.now() });
+                setPendingConfirm(null);
+              }} />
+          )}
           {error && <div className="msg error">{error}</div>}
         </div>
         <div className="composer">
@@ -330,6 +361,7 @@ export default function Research() {
             onSend={(text, atts) => send(text, viewing.current, atts)}
             skills={skills}
             onRunSkill={runSkill}
+            restore={restore}
           />
         </div>
       </section>

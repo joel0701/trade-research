@@ -253,3 +253,17 @@ body.resizing iframe { pointer-events: none; }
 ul.plain { list-style: none; padding: 0; margin: 4px 0; font-size: 14px; }
 ul.plain li { padding: 3px 0; }
 .nowrap { white-space: nowrap; }
+
+/* unavailable-sources prompt */
+.msg.unavailable { background: var(--raised); border: 1px solid #b8863b; border-left: 4px solid #e0a24a; }
+.unavail-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 12px; margin-bottom: 4px; }
+.unavail-group { font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; margin: 10px 0 4px; cursor: default; }
+.unavail-group.high { color: var(--error); }
+.unavail-group.low { color: var(--muted); cursor: pointer; }
+.unavail-list { margin: 0 0 4px; padding-left: 18px; font-size: 14px; }
+.unavail-list li { margin: 4px 0; }
+.unavail-link { align-self: center; font-size: 13px; color: var(--accent); margin-left: 4px; }
+.unavail-list > li { margin: 8px 0; list-style: none; }
+.unavail-list { padding-left: 0; }
+.unavail-list ul { margin: 2px 0 0; padding-left: 18px; font-size: 13px; }
+.unavail-cause { font-weight: 600; font-size: 13px; }

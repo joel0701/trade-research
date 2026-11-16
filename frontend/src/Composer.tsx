@@ -85,7 +85,7 @@ function SkillsMenu({ skills, onRun }: { skills: Json[]; onRun: (skill: Json, pa
 }
 
 export default function Composer({ placeholder, busy, models, modelId, defaultModelId, onModelChange,
-                                   ensureSession, onSend, skills, onRunSkill }: {
+                                   ensureSession, onSend, skills, onRunSkill, restore }: {
   placeholder: string;
   busy: boolean;
   models: ModelTool[];
@@ -96,8 +96,10 @@ export default function Composer({ placeholder, busy, models, modelId, defaultMo
   onSend: (text: string, attachments: AttachmentInfo[]) => void;
   skills: Json[];
   onRunSkill: (skill: Json, params: Record<string, string>) => Promise<void>;
+  restore?: { text: string; nonce: number }; // put text back in the box (e.g. after Cancel)
 }) {
   const [text, setText] = useState("");
+  useEffect(() => { if (restore) { setText(restore.text); box.current?.focus(); } }, [restore?.nonce]);
   const [files, setFiles] = useState<Pending[]>([]);
   const [dragging, setDragging] = useState(false);
   const fileInput = useRef<HTMLInputElement>(null);

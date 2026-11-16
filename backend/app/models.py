@@ -101,6 +101,8 @@ class ChatSession(SQLModel, table=True):
     origin: str = "chat"  # chat | skill:<id> | screener:<id>
     # Model the Lead uses in this session (a Tool of kind "model"); None = the Lead role's default.
     lead_model_tool_id: int | None = None
+    # "Don't ask again in this session" for this set of unavailable sources (see app.preflight).
+    ack_unavailable: str | None = None
     created_at: datetime = Field(default_factory=now, sa_type=UTCDateTime)
     updated_at: datetime = Field(default_factory=now, sa_type=UTCDateTime)
 
