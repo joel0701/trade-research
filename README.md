@@ -40,11 +40,14 @@ Requires Python 3.11+ with [uv](https://docs.astral.sh/uv/), and Node 20+.
 cp .env.example .env        # add your ANTHROPIC_API_KEY
 ```
 
-Backend (http://localhost:8000, API docs at /docs):
+Backend (http://localhost:8321, API docs at /docs):
 
 ```bash
-cd backend && uv sync && uv run uvicorn app.main:app --reload
+cd backend && uv sync && uv run uvicorn app.main:app --reload --port 8321
 ```
+
+Port 8321 avoids clashing with other tools that commonly use 8000. To use a different port,
+start uvicorn with `--port N` and the frontend with `BACKEND_PORT=N npm run dev`.
 
 Frontend (http://localhost:5173):
 

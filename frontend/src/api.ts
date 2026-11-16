@@ -1,7 +1,7 @@
 export type Json = Record<string, any>;
 
 export const BACKEND_DOWN =
-  "Can't reach the backend. Check that it is running (uv run uvicorn app.main:app --reload in the backend folder) "
+  "Can't reach the backend. Check that it is running (uv run uvicorn app.main:app --reload --port 8321 in the backend folder) "
   + "and look at that terminal for errors.";
 
 async function req<T = any>(method: string, path: string, body?: unknown): Promise<T> {
@@ -18,6 +18,11 @@ async function req<T = any>(method: string, path: string, body?: unknown): Promi
   // The dev server answers 500/502/504 itself when it cannot forward to the backend.
   if ([500, 502, 504].includes(r.status) && !(r.headers.get("content-type") ?? "").includes("json")) {
     throw new Error(BACKEND_DOWN);
+  }
+  const isJson = (r.headers.get("content-type") ?? "").includes("json");
+  if (r.status === 404 && !isJson) {
+    throw new Error("Something other than the Trade Research backend answered on the backend port. "
+      + "Check the backend terminal for errors such as 'address already in use'.");
   }
   if (!r.ok) throw new Error(`${r.status}: ${await r.text()}`);
   return r.json();
