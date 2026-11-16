@@ -113,9 +113,37 @@ async def ddg_search(query: str, max_results: int = 8, news: bool = False) -> st
     return await asyncio.to_thread(run)
 
 
-from app.tools import sec_edgar  # noqa: E402
+from app.tools import massive, sec_edgar  # noqa: E402
 
 PYTHON_TOOLS: dict[str, PythonTool] = {
+    "massive_quote": PythonTool(
+        "Latest price, bid/ask, today's OHLCV and change from Massive.com (real-time or delayed per plan).",
+        _ticker_schema(), massive.massive_quote),
+    "massive_bars": PythonTool(
+        "OHLCV price bars from Massive.com (minute, hour, day, week, month); the most recent 120 bars.",
+        _ticker_schema({
+            "timespan": {"type": "string", "description": "minute, hour, day, week or month (default day)"},
+            "multiplier": {"type": "integer", "description": "Bar size multiple, e.g. 5 with minute = 5-minute bars"},
+            "days": {"type": "integer", "description": "How many calendar days back (default 180)"},
+        }), massive.massive_bars),
+    "massive_option_chain": PythonTool(
+        "Option chain snapshot from Massive.com for one expiry: bid/ask, volume, open interest, implied "
+        "volatility and Greeks, for strikes near the money. Defaults to the nearest expiry.",
+        {"type": "object", "properties": {
+            "underlying": {"type": "string", "description": "Underlying stock symbol, e.g. EQT"},
+            "expiration": {"type": "string", "description": "YYYY-MM-DD; empty = nearest expiry"},
+            "contract_type": {"type": "string", "description": "call, put, or empty for both"},
+            "strikes_around_spot": {"type": "integer", "description": "Strikes each side of spot (default 10)"},
+        }, "required": ["underlying"]}, massive.massive_option_chain),
+    "massive_news": PythonTool(
+        "Recent news articles for a ticker from Massive.com, with per-ticker sentiment where available.",
+        _ticker_schema({"limit": {"type": "integer", "description": "How many articles (default 10)"}}),
+        massive.massive_news),
+    "massive_offexchange": PythonTool(
+        "Dark pool / off-exchange activity from Massive.com trades: share of volume reported to FINRA TRFs "
+        "and the largest off-exchange prints, for today (or a given day).",
+        _ticker_schema({"day": {"type": "string", "description": "YYYY-MM-DD; empty = most recent trades"}}),
+        massive.massive_offexchange),
     "sec_filings": PythonTool(
         "Recent SEC EDGAR filings for a company (10-K, 10-Q, 8-K, S-1, DEF 14A, 13D/G...), with links. "
         "Use sec_filing_text to read one.",
