@@ -2,6 +2,8 @@
 
 Edit them in the UI afterwards; this only runs when the tables are empty.
 """
+import json
+
 from sqlmodel import Session, select
 
 from app.models import Connection, Role, Screener, Skill, Tool
@@ -39,6 +41,9 @@ CONNECTIONS = [
     dict(slug="anthropic_tools", name="Anthropic server tools", kind="none",
          description="Web search and fetch run by Anthropic; work with Claude models only."),
     dict(slug="duckduckgo", name="DuckDuckGo", kind="none", description="Free web and news search."),
+    dict(slug="ib_gateway", name="Interactive Brokers (IB Gateway)", kind="tws",
+         description="IB Gateway or TWS running on this computer, via the TWS API. No key: log in to IB Gateway and "
+                     "enable API access. Read-only. Settings: IBKR_HOST, IBKR_PORT (4002 paper, 4001 live), IBKR_CLIENT_ID."),
     dict(slug="ibkr", name="Interactive Brokers", kind="mcp", secret_env="IBKR_MCP_TOKEN",
          description="IBKR's MCP server: real-time quotes, option chains, account data and screeners.",
          config={"transport": "http", "url": "https://REPLACE-WITH-IBKR-MCP-URL/mcp"}),
@@ -62,6 +67,14 @@ DATA_SOURCES = [
      ["finance_analyst", "research_agent"]),
     ("insider_trades", "Insider trades (EDGAR Form 4)", "python", "sec_edgar", ["insider_trading"],
      {"function": "insider_trades"}, "", ["finance_analyst", "news_analyst"]),
+    ("ibkr_gw_quote", "IBKR quote (IB Gateway)", "python", "ib_gateway", ["realtime_quotes"],
+     {"function": "ibkr_quote"}, "", ["technical_analyst", "strategy_optimizer"]),
+    ("ibkr_gw_bars", "IBKR price bars (IB Gateway)", "python", "ib_gateway", ["price_history"],
+     {"function": "ibkr_bars"}, "", ["technical_analyst"]),
+    ("ibkr_gw_options", "IBKR option chain (IB Gateway)", "python", "ib_gateway", ["option_chains"],
+     {"function": "ibkr_option_chain"}, "", ["strategy_optimizer"]),
+    ("ibkr_gw_account", "IBKR account, read-only (IB Gateway)", "python", "ib_gateway", ["brokerage"],
+     {"function": "ibkr_account"}, "", ["strategy_optimizer"]),
     ("ibkr_quotes", "IBKR real-time quotes", "mcp_server", "ibkr", ["realtime_quotes", "price_history"],
      {"allowed_tools": ["get_price_snapshot", "get_price_history", "search_contracts"]},
      "Live quotes and price history from Interactive Brokers.", ["technical_analyst", "strategy_optimizer"]),
@@ -152,6 +165,15 @@ def ensure_data_sources(db: Session) -> None:
             if role is not None and tool.id not in role.tool_ids:
                 role.tool_ids = [*role.tool_ids, tool.id]
                 db.add(role)
+
+    # The IBKR MCP connection was a placeholder (IBKR has no public MCP server with a token).
+    # If it was never set up, turn it off so its sources don't sit in roles as "not ready".
+    mcp = conns.get("ibkr")
+    if mcp is not None and mcp.enabled and "REPLACE" in json.dumps(mcp.config):
+        mcp.enabled = False
+        mcp.description = ("Unused: IBKR is reached through IB Gateway instead. Only enable this if you run an "
+                           "IBKR MCP server and set its address.")
+        db.add(mcp)
 
     # Tell the Lead that the Technical Analyst now covers dark pool flow (only if you haven't edited it).
     tech = roles.get("technical_analyst")

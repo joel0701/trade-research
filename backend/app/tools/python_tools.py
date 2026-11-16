@@ -113,9 +113,32 @@ async def ddg_search(query: str, max_results: int = 8, news: bool = False) -> st
     return await asyncio.to_thread(run)
 
 
-from app.tools import finra, massive, sec_edgar  # noqa: E402
+from app.tools import finra, ibkr_gateway, massive, sec_edgar  # noqa: E402
 
 PYTHON_TOOLS: dict[str, PythonTool] = {
+    "ibkr_quote": PythonTool(
+        "Current quote from Interactive Brokers: last, bid/ask with sizes, high/low, volume, previous close "
+        "(live if subscribed, otherwise delayed; the result says which).",
+        _ticker_schema(), ibkr_gateway.ibkr_quote),
+    "ibkr_bars": PythonTool(
+        "Historical price bars from Interactive Brokers (most recent 120 returned).",
+        _ticker_schema({
+            "duration": {"type": "string", "description": "How far back, e.g. '5 D', '3 M', '1 Y' (default '6 M')"},
+            "bar_size": {"type": "string", "description": "1 min, 5 mins, 15 mins, 30 mins, 1 hour, 4 hours, 1 day, 1 week, 1 month"},
+            "regular_hours_only": {"type": "boolean", "description": "Exclude pre/post-market (default true)"},
+        }), ibkr_gateway.ibkr_bars),
+    "ibkr_option_chain": PythonTool(
+        "Option chain from Interactive Brokers for one expiry: bid/ask, last, volume, model IV and Greeks for "
+        "strikes near the money, plus the list of upcoming expirations. Defaults to the nearest expiry.",
+        {"type": "object", "properties": {
+            "underlying": {"type": "string", "description": "Underlying stock symbol"},
+            "expiration": {"type": "string", "description": "YYYY-MM-DD; empty = nearest"},
+            "right": {"type": "string", "description": "C, P, or empty for both"},
+            "strikes_around_spot": {"type": "integer", "description": "Strikes each side of spot (default 8)"},
+        }, "required": ["underlying"]}, ibkr_gateway.ibkr_option_chain),
+    "ibkr_account": PythonTool(
+        "Your Interactive Brokers account (read-only): balances, buying power, positions with P&L, and open orders.",
+        {"type": "object", "properties": {}}, ibkr_gateway.ibkr_account),
     "finra_short_volume": PythonTool(
         "FINRA daily off-exchange short volume for a stock (the 'dark pool short ratio'): off-exchange volume, "
         "short volume and short % per day for recent trading days, with the recent trend. Free, updated daily.",

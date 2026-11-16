@@ -122,6 +122,21 @@ To add a vendor (e.g. a dark pool feed): put its key in `.env`, add a Connection
 variable, then add Data sources on it. MCP servers work with no code; REST APIs need a small
 built-in Python tool.
 
+### Interactive Brokers (IB Gateway)
+
+IBKR has no simple API key for individual accounts. The app talks to **IB Gateway** (or TWS) on
+your computer through the TWS API, with one read-only connection that reconnects automatically:
+
+1. Install IB Gateway (Stable) from interactivebrokers.com, log in (paper first), and in
+   Configure → Settings → API enable *ActiveX and Socket Clients*; keep *Read-Only API* on.
+2. If your port isn't 4002 (paper IB Gateway), set `IBKR_PORT` in `.env` (4001 live; TWS 7497/7496).
+3. Tools → Connections → *Interactive Brokers (IB Gateway)* shows whether it's reachable.
+
+Sources: quote, price bars, option chain with model IV and Greeks, and account (balances,
+positions with P&L, open orders; read-only). Real-time data needs IBKR market data subscriptions;
+otherwise IBKR returns delayed data and the result says so. To avoid daily logins, turn on
+*Auto restart* in IB Gateway (Configure → Settings → Lock and Exit) and keep the Mac awake.
+
 ### Connecting IBKR or Bigdata.com (MCP)
 
 Edit the tool in **Tools**: set `url` to the server's MCP endpoint, put the token in `.env` under the

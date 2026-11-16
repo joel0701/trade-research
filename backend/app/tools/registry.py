@@ -51,6 +51,12 @@ def availability(tool: Tool, conn: Connection | None) -> tuple[bool, str | None]
             return False, f"set {conn.secret_env} in .env"
         if conn.kind == "mcp" and "REPLACE" in json.dumps(conn.config):
             return False, f"set the server address on connection {conn.name}"
+        if conn.kind == "tws":
+            from app.tools.ibkr_gateway import gateway_reachable, settings
+
+            if not gateway_reachable():
+                host, port, _ = settings()
+                return False, f"IB Gateway isn't running or API access is off (expected at {host}:{port})"
     if tool.secret_env and not os.getenv(tool.secret_env):
         return False, f"set {tool.secret_env} in .env"
     if tool.kind == "python" and tool.config.get("function", tool.slug) not in PYTHON_TOOLS:
