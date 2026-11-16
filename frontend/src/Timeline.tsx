@@ -1,15 +1,10 @@
 /** Timeline rail: one marker per message (rings for your questions, dots for answers).
  *  Hover a marker for its time and first line; click to jump; the message in view is highlighted. */
 import { RefObject, useEffect, useState } from "react";
-import { parseTime } from "./Trace";
+import { useSettings } from "./settings";
 
 export type TimelineItem = { key: string; role: "user" | "assistant"; text: string; created_at?: string; label?: string };
 
-function when(iso?: string) {
-  const d = iso ? new Date(parseTime(iso)) : new Date();
-  return d.toLocaleString(undefined, { month: "2-digit", day: "2-digit", year: "numeric",
-                                       hour: "2-digit", minute: "2-digit", hour12: false });
-}
 
 function firstLine(text: string) {
   const line = text.replace(/[#*_`>|]/g, "").split("\n").map((l) => l.trim()).find(Boolean) ?? "";
@@ -19,6 +14,8 @@ function firstLine(text: string) {
 const HINT_KEY = "timelineHintSeen";
 
 export default function Timeline({ items, scroller }: { items: TimelineItem[]; scroller: RefObject<HTMLDivElement> }) {
+  const { fmt } = useSettings();
+  const when = (iso?: string) => fmt(iso);
   const [active, setActive] = useState(0);
   // The tooltip is drawn outside the scrolling rail (so it isn't clipped), at the marker's position.
   const [hover, setHover] = useState<{ i: number; x: number; y: number } | null>(null);

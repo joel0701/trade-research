@@ -6,12 +6,31 @@ editable from the UI, so adding a role or tool needs no code change.
 from datetime import UTC, datetime
 from typing import Any
 
-from sqlalchemy import JSON, Column
+from sqlalchemy import JSON, Column, DateTime
+from sqlalchemy.types import TypeDecorator
 from sqlmodel import Field, SQLModel
 
 
 def now() -> datetime:
     return datetime.now(UTC)
+
+
+class UTCDateTime(TypeDecorator):
+    """Timestamps are stored in UTC and always come back marked as UTC.
+
+    SQLite has no time-zone type, so values are saved as naive UTC and tagged on the way
+    out. The API then sends ISO 8601 with +00:00 and the UI converts to the user's zone."""
+
+    impl = DateTime
+    cache_ok = True
+
+    def process_bind_param(self, value, dialect):
+        if value is not None and value.tzinfo is not None:
+            value = value.astimezone(UTC).replace(tzinfo=None)
+        return value
+
+    def process_result_value(self, value, dialect):
+        return value.replace(tzinfo=UTC) if value is not None and value.tzinfo is None else value
 
 
 class Tool(SQLModel, table=True):
@@ -57,8 +76,8 @@ class ChatSession(SQLModel, table=True):
     origin: str = "chat"  # chat | skill:<id> | screener:<id>
     # Model the Lead uses in this session (a Tool of kind "model"); None = the Lead role's default.
     lead_model_tool_id: int | None = None
-    created_at: datetime = Field(default_factory=now)
-    updated_at: datetime = Field(default_factory=now)
+    created_at: datetime = Field(default_factory=now, sa_type=UTCDateTime)
+    updated_at: datetime = Field(default_factory=now, sa_type=UTCDateTime)
 
 
 class Message(SQLModel, table=True):
@@ -78,7 +97,7 @@ class Message(SQLModel, table=True):
     feedback: str | None = None  # "up" | "down" | None: the user's rating of an answer
     model: str | None = None
     usage: dict[str, Any] | None = Field(default=None, sa_column=Column(JSON))
-    created_at: datetime = Field(default_factory=now)
+    created_at: datetime = Field(default_factory=now, sa_type=UTCDateTime)
 
 
 class Run(SQLModel, table=True):
@@ -95,8 +114,8 @@ class Run(SQLModel, table=True):
     usage: dict[str, Any] = Field(default_factory=dict, sa_column=Column(JSON))
     status: str = "running"  # running | ok | error
     error: str | None = None
-    started_at: datetime = Field(default_factory=now)
-    finished_at: datetime | None = None
+    started_at: datetime = Field(default_factory=now, sa_type=UTCDateTime)
+    finished_at: datetime | None = Field(default=None, sa_type=UTCDateTime)
 
 
 class Skill(SQLModel, table=True):
@@ -142,4 +161,16 @@ class Attachment(SQLModel, table=True):
     kind: str  # pdf | image | text
     size: int
     path: str
-    created_at: datetime = Field(default_factory=now)
+    created_at: datetime = Field(default_factory=now, sa_type=UTCDateTime)
+
+
+class UserProfile(SQLModel, table=True):
+    """The person using the app (single row, id=1) and their display preferences."""
+
+    id: int | None = Field(default=None, primary_key=True)
+    name: str = ""
+    email: str = ""
+    avatar_path: str | None = None
+    timezone: str = "auto"  # IANA name like "America/New_York", or "auto" = the browser's zone
+    hour12: bool = False
+    updated_at: datetime = Field(default_factory=now, sa_type=UTCDateTime)

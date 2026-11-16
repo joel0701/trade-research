@@ -4,14 +4,10 @@ import { api } from "./api";
 import { Check, Copy, Fork, ModelMark, Sparkles, ThumbDown, ThumbUp } from "./icons";
 import { ModelInfo, VENDOR_COLORS } from "./models";
 import { parseTime, Run, runCost } from "./Trace";
+import { useSettings } from "./settings";
 
 const clock = (s: number) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, "0")}`;
 
-function when(iso?: string) {
-  if (!iso) return "";
-  return new Date(parseTime(iso)).toLocaleString(undefined, {
-    month: "2-digit", day: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit", hour12: false });
-}
 
 export default function AnswerFooter({ sessionId, message, models, runs, roleNames, onViewTrace, onSaveSkill,
                                        onFork, onError }: {
@@ -25,6 +21,7 @@ export default function AnswerFooter({ sessionId, message, models, runs, roleNam
   onFork: (messageId: number) => void;
   onError: (msg: string) => void;
 }) {
+  const { fmt } = useSettings();
   const [feedback, setFeedback] = useState<string | null>(message.feedback ?? null);
   const [copied, setCopied] = useState(false);
   const model = models.find((m) => m.config?.model_id === message.model);
@@ -65,7 +62,7 @@ export default function AnswerFooter({ sessionId, message, models, runs, roleNam
             <ModelMark color={VENDOR_COLORS[model?.provider ?? "anthropic"]} /> {modelName}
           </span>
         )}
-        {message.created_at && <span>{when(message.created_at)}</span>}
+        {message.created_at && <span>{fmt(message.created_at)}</span>}
         {took != null && <span>Answered in {clock(took)}</span>}
         {lead && <span>{names.length ? names.join(", ") : "No specialists consulted"}</span>}
         {lead && <span>{costLabel}</span>}

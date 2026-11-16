@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React from "react";
 import { Moon, Sun } from "./icons";
 import ReactDOM from "react-dom/client";
 import { BrowserRouter, NavLink, Navigate, Route, Routes, useNavigate } from "react-router-dom";
@@ -7,6 +7,8 @@ import Skills from "./pages/Skills";
 import Screeners from "./pages/Screeners";
 import Roles from "./pages/Roles";
 import Tools from "./pages/Tools";
+import Settings from "./pages/Settings";
+import { Avatar, SettingsProvider, useSettings } from "./settings";
 import "./styles.css";
 
 function lastSessionPath(): string {
@@ -16,20 +18,9 @@ function lastSessionPath(): string {
   } catch { return "/research"; }
 }
 
-function useTheme(): [string, () => void] {
-  const [theme, setTheme] = useState(() => {
-    try { return localStorage.getItem("theme") ?? "dark"; } catch { return "dark"; }
-  });
-  useEffect(() => {
-    document.documentElement.dataset.theme = theme;
-    try { localStorage.setItem("theme", theme); } catch { /* storage unavailable */ }
-  }, [theme]);
-  return [theme, () => setTheme(theme === "dark" ? "light" : "dark")];
-}
-
 function App() {
   const navigate = useNavigate();
-  const [theme, toggleTheme] = useTheme();
+  const { theme, toggleTheme, profile } = useSettings();
   const links = [["/research", "Research"], ["/skills", "Skills"], ["/screeners", "Screeners"],
                  ["/roles", "Roles"], ["/tools", "Tools"]];
   return (
@@ -45,6 +36,8 @@ function App() {
         ))}
         <button className="theme-btn" onClick={toggleTheme} title={theme === "dark" ? "Light mode" : "Dark mode"}
                 aria-label="Toggle light and dark mode">{theme === "dark" ? <Sun /> : <Moon />}</button>
+        <NavLink to="/settings" className="nav-avatar" title={profile.name ? `${profile.name}: settings` : "Profile and settings"}
+                 aria-label="Profile and settings"><Avatar size={26} /></NavLink>
       </nav>
       <main>
         <Routes>
@@ -55,6 +48,7 @@ function App() {
           <Route path="/screeners" element={<Screeners />} />
           <Route path="/roles" element={<Roles />} />
           <Route path="/tools" element={<Tools />} />
+          <Route path="/settings" element={<Settings />} />
         </Routes>
       </main>
     </div>
@@ -62,5 +56,5 @@ function App() {
 }
 
 ReactDOM.createRoot(document.getElementById("root")!).render(
-  <React.StrictMode><BrowserRouter><App /></BrowserRouter></React.StrictMode>,
+  <React.StrictMode><BrowserRouter><SettingsProvider><App /></SettingsProvider></BrowserRouter></React.StrictMode>,
 );

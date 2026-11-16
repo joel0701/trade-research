@@ -5,7 +5,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from sqlmodel import Session, select
 
-from app.api import launch, sessions
+from app.api import launch, profile, sessions
 from app.agents.orchestrator import mark_interrupted_runs
 from app.api.crud import crud_router
 from app.config import CORS_ORIGINS
@@ -34,6 +34,7 @@ for model, prefix in [(Tool, "/tools"), (Role, "/roles"), (Skill, "/skills"), (S
     app.include_router(crud_router(model, prefix), prefix="/api")
 app.include_router(sessions.router, prefix="/api")
 app.include_router(launch.router, prefix="/api")
+app.include_router(profile.router, prefix="/api")
 
 
 @app.get("/api/models")

@@ -9,6 +9,7 @@ import Trace, { parseTime, Run, setPriceTable } from "../Trace";
 import AnswerFooter from "../AnswerFooter";
 import SkillDraftDialog from "../SkillDraftDialog";
 import Timeline from "../Timeline";
+import ProfileCard from "../ProfileCard";
 import SessionList, { SessionRow } from "../SessionList";
 
 type ChatMsg = { id?: number; role: "user" | "assistant"; text: string; thinking?: string; run_id?: number | null;
@@ -260,9 +261,12 @@ export default function Research() {
         <button className="primary" style={{ width: "100%", marginBottom: 8 }} onClick={() => navigate("/research")}>
           + New research
         </button>
-        <SessionList sessions={sessions} activeId={sessionId}
-                     onOpen={(sid) => navigate(`/research/${sid}`)}
-                     onChanged={loadSessions} onDeleted={onDeleted} onError={setError} />
+        <div className="session-scroll">
+          <SessionList sessions={sessions} activeId={sessionId}
+                       onOpen={(sid) => navigate(`/research/${sid}`)}
+                       onChanged={loadSessions} onDeleted={onDeleted} onError={setError} />
+        </div>
+        <ProfileCard />
       </aside>
       <section className="chat">
         <div className="chat-head">
