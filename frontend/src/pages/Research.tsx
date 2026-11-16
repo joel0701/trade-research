@@ -8,6 +8,7 @@ import { FileIcon } from "../icons";
 import Trace, { parseTime, Run, setPriceTable } from "../Trace";
 import AnswerFooter from "../AnswerFooter";
 import SkillDraftDialog from "../SkillDraftDialog";
+import Timeline from "../Timeline";
 import SessionList, { SessionRow } from "../SessionList";
 
 type ChatMsg = { id?: number; role: "user" | "assistant"; text: string; thinking?: string; run_id?: number | null;
@@ -268,12 +269,17 @@ export default function Research() {
           <span className="title">{sessions.find((s) => s.id === sessionId)?.title ?? "New research"}</span>
           <button onClick={() => toggleTrace(!showTrace)}>{showTrace ? "Hide trace" : "Show trace"}</button>
         </div>
+        <Timeline scroller={scroller} items={messages.map((m, i) => ({
+          key: String(m.id ?? `live-${i}`), role: m.role, text: m.text, created_at: m.created_at,
+          label: models.find((x) => x.config?.model_id === m.model)?.name ?? m.model ?? undefined,
+        }))} />
         <div className="messages" ref={scroller}>
           {messages.length === 0 && !busy && (
             <div className="msg muted">Ask about the market, a sector or a stock. The Lead Analyst will consult the team as needed.</div>
           )}
           {messages.map((m, i) => (
-            <div key={m.id ?? `live-${i}`} ref={i === lastAssistant ? answerRef : undefined} className={`msg ${m.role}`}>
+            <div key={m.id ?? `live-${i}`} ref={i === lastAssistant ? answerRef : undefined} className={`msg ${m.role}`}
+                 data-msg-index={i}>
               {m.attachments && m.attachments.length > 0 && (
                 <div className="chips">
                   {m.attachments.map((a) => (
