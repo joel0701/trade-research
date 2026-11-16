@@ -2,11 +2,14 @@ import { useEffect, useRef, useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { api, sendMessage, StreamEvent } from "../api";
+import { api, AttachmentInfo, Json, sendMessage, StreamEvent } from "../api";
+import Composer, { ModelTool } from "../Composer";
+import { FileIcon } from "../icons";
 import Trace, { parseTime, Run, runCost } from "../Trace";
 import SessionList, { SessionRow } from "../SessionList";
 
-type ChatMsg = { id?: number; role: "user" | "assistant"; text: string; thinking?: string; run_id?: number | null };
+type ChatMsg = { id?: number; role: "user" | "assistant"; text: string; thinking?: string; run_id?: number | null;
+                attachments?: AttachmentInfo[] };
 
 function Markdown({ text }: { text: string }) {
   return <ReactMarkdown remarkPlugins={[remarkGfm]}>{text}</ReactMarkdown>;
@@ -43,7 +46,11 @@ export default function Research() {
   const [sessions, setSessions] = useState<SessionRow[]>([]);
   const [messages, setMessages] = useState<ChatMsg[]>([]);
   const [runs, setRuns] = useState<Run[]>([]);
-  const [draft, setDraft] = useState("");
+  const [models, setModels] = useState<ModelTool[]>([]);
+  const [skills, setSkills] = useState<Json[]>([]);
+  const [defaultModelId, setDefaultModelId] = useState<number | null>(null); // the Lead role's model
+  const [sessionModel, setSessionModel] = useState<number | null>(null);     // this session's override
+  const [pendingModel, setPendingModel] = useState<number | null>(null);     // chosen before a session exists
   // True while the session on screen has a turn in progress, whether this page started it
   // or it was started earlier (e.g. before you switched to another screen).
   const [busy, setBusy] = useState(false);
@@ -62,8 +69,12 @@ export default function Research() {
   });
   const [roleNames, setRoleNames] = useState<Record<string, string>>({});
   useEffect(() => {
-    api.get("/roles").then((rs) => setRoleNames(Object.fromEntries(rs.map((r: any) => [r.slug, r.name]))))
-      .catch(() => { /* names fall back to slugs */ });
+    api.get("/roles").then((rs) => {
+      setRoleNames(Object.fromEntries(rs.map((r: any) => [r.slug, r.name])));
+      setDefaultModelId(rs.find((r: any) => r.is_lead)?.model_tool_id ?? null);
+    }).catch(() => { /* names fall back to slugs */ });
+    api.get("/tools").then((ts) => setModels(ts.filter((t: any) => t.kind === "model"))).catch(() => {});
+    api.get("/skills").then((ss) => setSkills(ss.filter((x: any) => x.enabled))).catch(() => {});
   }, []);
   function toggleTrace(v: boolean) {
     setShowTrace(v);
@@ -118,7 +129,7 @@ export default function Research() {
 
   useEffect(() => {
     setError(""); setFocusRunId(null); setRuns([]); setBusy(false); setLiveText(false);
-    if (sessionId == null) { setMessages([]); return; }
+    if (sessionId == null) { setMessages([]); setSessionModel(pendingModel); return; }
     try { localStorage.setItem("lastSession", String(sessionId)); } catch { /* storage unavailable */ }
     loadRuns(sessionId);
     // Only the latest load may update the screen. React runs this effect twice in
@@ -128,6 +139,7 @@ export default function Research() {
       if (cancelled || viewing.current !== sessionId) return;
       if (streaming.current === sessionId) return; // this page is streaming it: don't overwrite
       setMessages(s.messages);
+      setSessionModel(s.lead_model_tool_id ?? null);
       setBusy(!!s.running); // a turn started earlier is still going: show its status
       showLatestAnswer();
       // Skills and screeners open a new session with a prompt to send right away.
@@ -141,19 +153,19 @@ export default function Research() {
     return () => { cancelled = true; };
   }, [sessionId]);
 
-  async function send(text: string, sid: number | null = sessionId) {
-    if (!text.trim() || busy) return;
-    setError(""); setDraft(""); setFocusRunId(null);
+  async function send(text: string, sid: number | null = sessionId, attachments: AttachmentInfo[] = []) {
+    if ((!text.trim() && !attachments.length) || busy) return;
+    setError(""); setFocusRunId(null);
     try {
       if (sid == null) {
-        const s = await api.post("/sessions", {});
+        const s = await api.post("/sessions", { lead_model_tool_id: sessionModel });
         navigate(`/research/${s.id}`, { state: { autoSend: text } });
         return; // the effect for the new session sends it
       }
       const target = sid;
       streaming.current = target;
       setBusy(true); setNow(Date.now());
-      setMessages((m) => [...m, { role: "user", text }]);
+      setMessages((m) => [...m, { role: "user", text, attachments }]);
       requestAnimationFrame(() => scroller.current?.scrollTo({ top: scroller.current.scrollHeight, behavior: "smooth" }));
 
       let startNewAnswer = true; // the Lead's text before a tool call is an interim note: replace it
@@ -186,7 +198,7 @@ export default function Research() {
         } else if (e.type === "error") {
           setError(e.message);
         }
-      });
+      }, attachments.map((a) => a.id));
       if (streaming.current === target) streaming.current = null;
       loadSessions();
       if (viewing.current === target) {
@@ -209,6 +221,29 @@ export default function Research() {
     try { if (localStorage.getItem("lastSession") === String(sid)) localStorage.removeItem("lastSession"); } catch { /* ignore */ }
     if (sid === sessionId) navigate("/research");
     loadSessions();
+  }
+
+  async function changeModel(id: number | null) {
+    setSessionModel(id);
+    if (sessionId == null) { setPendingModel(id); return; }
+    try { await api.patch(`/sessions/${sessionId}`, { lead_model_tool_id: id }); }
+    catch (e: any) { setError(e.message); }
+  }
+
+  /** Uploads need a session: create one (with the chosen model) on the first attachment. */
+  async function ensureSession(): Promise<number> {
+    if (viewing.current != null) return viewing.current;
+    const s = await api.post("/sessions", { lead_model_tool_id: sessionModel });
+    viewing.current = s.id;
+    navigate(`/research/${s.id}`);
+    loadSessions();
+    return s.id;
+  }
+
+  async function runSkill(skill: Json, params: Record<string, string>) {
+    // An explicit choice in the composer wins; otherwise the skill's own default applies.
+    const r = await api.post(`/skills/${skill.id}/run`, { params, lead_model_tool_id: sessionModel });
+    navigate(`/research/${r.session_id}`, { state: { autoSend: r.prompt } });
   }
 
   function viewInTrace(runId: number) {
@@ -246,6 +281,15 @@ export default function Research() {
           )}
           {messages.map((m, i) => (
             <div key={m.id ?? `live-${i}`} ref={i === lastAssistant ? answerRef : undefined} className={`msg ${m.role}`}>
+              {m.attachments && m.attachments.length > 0 && (
+                <div className="chips">
+                  {m.attachments.map((a) => (
+                    <a key={a.id} className="chip" href={`/api/sessions/${sessionId}/attachments/${a.id}`} target="_blank" rel="noreferrer">
+                      <FileIcon /><span className="chip-name">{a.filename}</span>
+                    </a>
+                  ))}
+                </div>
+              )}
               {m.thinking && <details><summary>Reasoning</summary><Markdown text={m.thinking} /></details>}
               <Markdown text={m.text} />
               {m.role === "assistant" && m.run_id != null && !busy && (
@@ -266,13 +310,18 @@ export default function Research() {
           {error && <div className="msg error">{error}</div>}
         </div>
         <div className="composer">
-          <textarea
-            value={draft}
-            placeholder="Ask a question… (Enter to send, Shift+Enter for a new line)"
-            onChange={(e) => setDraft(e.target.value)}
-            onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(draft); } }}
+          <Composer
+            placeholder={messages.length ? "Ask a follow up…" : "Ask about the market, a sector or a stock…"}
+            busy={busy}
+            models={models}
+            modelId={sessionModel}
+            defaultModelId={defaultModelId}
+            onModelChange={changeModel}
+            ensureSession={ensureSession}
+            onSend={(text, atts) => send(text, viewing.current, atts)}
+            skills={skills}
+            onRunSkill={runSkill}
           />
-          <button className="primary" disabled={busy || !draft.trim()} onClick={() => send(draft)}>Send</button>
         </div>
       </section>
       {showTrace && sessionId != null && (

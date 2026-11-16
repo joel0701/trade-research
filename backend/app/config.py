@@ -11,3 +11,5 @@ DATABASE_URL = os.getenv("DATABASE_URL", f"sqlite:///{ROOT / 'data' / 'trade_res
 CORS_ORIGINS = os.getenv("CORS_ORIGINS", "http://localhost:5173").split(",")
 # Hard cap on agent-loop iterations per role run, regardless of role config.
 MAX_LOOP_ITERATIONS = int(os.getenv("MAX_LOOP_ITERATIONS", "25"))
+UPLOAD_DIR = Path(os.getenv("UPLOAD_DIR", str(ROOT / "data" / "uploads")))
+MAX_UPLOAD_MB = int(os.getenv("MAX_UPLOAD_MB", "20"))

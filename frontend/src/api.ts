@@ -45,11 +45,27 @@ export type StreamEvent =
   | { type: "done"; usage: Json };
 
 /** POST a message and read the Server-Sent Events stream. */
-export async function sendMessage(sessionId: number, text: string, onEvent: (e: StreamEvent) => void) {
+export type AttachmentInfo = { id: number; filename: string; kind: "pdf" | "image" | "text"; size: number };
+
+/** Upload one file into a session; send its id with the next message. */
+export async function uploadAttachment(sessionId: number, file: File): Promise<AttachmentInfo> {
+  const form = new FormData();
+  form.append("file", file);
+  const r = await fetch(`/api/sessions/${sessionId}/attachments`, { method: "POST", body: form });
+  if (!r.ok) {
+    let msg = `${r.status}`;
+    try { msg = (await r.json()).detail ?? msg; } catch { /* not json */ }
+    throw new Error(msg);
+  }
+  return r.json();
+}
+
+export async function sendMessage(sessionId: number, text: string, onEvent: (e: StreamEvent) => void,
+                                  attachmentIds: number[] = []) {
   const r = await fetch(`/api/sessions/${sessionId}/messages`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ text }),
+    body: JSON.stringify({ text, attachment_ids: attachmentIds }),
   });
   if (!r.ok || !r.body) throw new Error(`${r.status}: ${await r.text()}`);
   const reader = r.body.getReader();

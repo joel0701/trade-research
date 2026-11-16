@@ -14,7 +14,8 @@ from sqlmodel import Session, select
 
 from app.agents.loop import Emit, ModelConfig, run_agent
 from app.db import engine
-from app.models import ChatSession, Message, Role, Run, Tool, now
+from app.attachments import expand_refs
+from app.models import Attachment, ChatSession, Message, Role, Run, Tool, now
 from app.tools.registry import Toolbox, safe_name
 
 log = logging.getLogger(__name__)
@@ -50,6 +51,8 @@ Today's date is {today}.
 Your team (consult them with the consult_* tools; call several at once when their work is independent):
 {team}
 Consult only the specialists the question needs. Simple questions may need none.
+Documents the user attaches are visible only to you. When a specialist needs their contents,
+put the relevant figures or excerpts in the consult context.
 This is research and education, not personalised financial advice."""
 
 
@@ -121,7 +124,8 @@ async def consult(specialist: Role, question: str, session_id: int, tools: dict[
     return answer
 
 
-async def run_turn(session_id: int, user_text: str) -> AsyncIterator[dict[str, Any]]:
+async def run_turn(session_id: int, user_text: str,
+                   attachment_ids: list[int] | None = None) -> AsyncIterator[dict[str, Any]]:
     """Persist the user message, run the Lead, and stream events to the caller.
 
     The turn runs as a background task: if the caller disconnects (the user leaves the
@@ -131,7 +135,7 @@ async def run_turn(session_id: int, user_text: str) -> AsyncIterator[dict[str, A
         raise TurnInProgress(f"Session {session_id} is already working on a question.")
     ACTIVE_SESSIONS.add(session_id)
     try:
-        prepared = _prepare_turn(session_id, user_text)
+        prepared = _prepare_turn(session_id, user_text, attachment_ids)
     except Exception:
         ACTIVE_SESSIONS.discard(session_id)
         raise
@@ -139,7 +143,15 @@ async def run_turn(session_id: int, user_text: str) -> AsyncIterator[dict[str, A
         yield event
 
 
-def _prepare_turn(session_id: int, user_text: str):
+def _lead_model_for(chat: ChatSession, lead: Role, tools: dict[int, Tool]) -> ModelConfig:
+    """The session's chosen Lead model if set and usable, else the Lead role's default."""
+    t = tools.get(chat.lead_model_tool_id) if chat.lead_model_tool_id else None
+    if t is not None and t.kind == "model" and t.enabled:
+        return ModelConfig.from_tool_config(t.config)
+    return _model_for(lead, tools)
+
+
+def _prepare_turn(session_id: int, user_text: str, attachment_ids: list[int] | None = None):
     # expire_on_commit=False: roles/tools are used after this block closes.
     with Session(engine, expire_on_commit=False) as db:
         chat = db.get(ChatSession, session_id)
@@ -151,28 +163,46 @@ def _prepare_turn(session_id: int, user_text: str):
         if lead is None:
             raise ValueError("No enabled Lead role configured")
         specialists = [r for r in roles if not r.is_lead]
-        history = [{"role": m.role, "content": m.content} for m in
+        history = [{"role": m.role, "content": expand_refs(db, m.content)} for m in
                    db.exec(select(Message).where(Message.session_id == session_id).order_by(Message.id)).all()]
-        user_content = [{"type": "text", "text": user_text}]
-        db.add(Message(session_id=session_id, role="user", content=user_content))
+
+        atts = []
+        if attachment_ids:
+            atts = db.exec(select(Attachment).where(Attachment.id.in_(attachment_ids))).all()
+            bad = [a.id for a in atts if a.session_id != session_id or a.message_id is not None]
+            if bad or len(atts) != len(set(attachment_ids)):
+                raise ValueError("Some attachments are missing, already sent, or belong to another session.")
+        # Documents go before the question (Claude reads them first). Stored as references
+        # so files stay on disk instead of being copied into every saved message.
+        user_content = [{"type": "attachment_ref", "attachment_id": a.id, "filename": a.filename} for a in atts]
+        user_content.append({"type": "text", "text": user_text})
+        msg = Message(session_id=session_id, role="user", content=user_content)
+        db.add(msg)
+        db.flush()
+        for a in atts:
+            a.message_id = msg.id
+            db.add(a)
         if chat.title == "New research":
-            chat.title = user_text.strip().splitlines()[0][:80] or chat.title
+            first = user_text.strip().splitlines()[0][:80] if user_text.strip() else ""
+            chat.title = first or (atts[0].filename if atts else chat.title)
         chat.updated_at = now()
         db.add(chat)
         db.commit()
+        current = expand_refs(db, user_content)
+        lead_model = _lead_model_for(chat, lead, tools)
 
-    messages = repair_history(history) + [{"role": "user", "content": user_content}]
-    return tools, lead, specialists, messages
+    messages = repair_history(history) + [{"role": "user", "content": current}]
+    return tools, lead, specialists, messages, lead_model
 
 
 async def _run_prepared(session_id: int, user_text: str, tools: dict[int, Tool], lead: Role,
-                        specialists: list[Role], messages: list[dict[str, Any]]) -> AsyncIterator[dict[str, Any]]:
+                        specialists: list[Role], messages: list[dict[str, Any]],
+                        lead_model: ModelConfig) -> AsyncIterator[dict[str, Any]]:
     queue: asyncio.Queue[dict[str, Any] | None] = asyncio.Queue()
 
     async def emit(event: dict[str, Any]) -> None:
         await queue.put(event)
 
-    lead_model = _model_for(lead, tools)
 
     current_run: dict[str, int | None] = {"id": None}
 

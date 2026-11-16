@@ -1,16 +1,38 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { api, Json } from "../api";
 import { Field, JsonField, MasterDetail, Toggle, useCrud } from "../admin";
 
-function SkillCard({ skill }: { skill: Json }) {
+function ModelSelect({ models, value, onChange, defaultLabel }:
+  { models: Json[]; value: number | null; onChange: (v: number | null) => void; defaultLabel: string }) {
+  return (
+    <select value={value ?? ""} onChange={(e) => onChange(e.target.value ? Number(e.target.value) : null)}>
+      <option value="">{defaultLabel}</option>
+      {models.filter((m) => m.enabled).map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
+    </select>
+  );
+}
+
+function useModels() {
+  const [models, setModels] = useState<Json[]>([]);
+  const [leadDefault, setLeadDefault] = useState<string>("");
+  useEffect(() => {
+    api.get("/tools").then((ts) => setModels(ts.filter((t: Json) => t.kind === "model")));
+    api.get("/roles").then((rs) => setLeadDefault(rs.find((r: Json) => r.is_lead)?.model_tool_id ?? ""));
+  }, []);
+  return { models, leadDefault };
+}
+
+function SkillCard({ skill, models, leadDefault }: { skill: Json; models: Json[]; leadDefault: string }) {
   const navigate = useNavigate();
   const [params, setParams] = useState<Record<string, string>>(
     Object.fromEntries(skill.params.map((p: Json) => [p.name, p.default ?? ""])));
+  const [model, setModel] = useState<number | null>(skill.lead_model_tool_id ?? null);
   const [error, setError] = useState("");
+  const fallback = models.find((m) => m.id === Number(leadDefault))?.name ?? "Lead role default";
   async function run() {
     try {
-      const r = await api.post(`/skills/${skill.id}/run`, { params });
+      const r = await api.post(`/skills/${skill.id}/run`, { params, lead_model_tool_id: model });
       navigate(`/research/${r.session_id}`, { state: { autoSend: r.prompt } });
     } catch (e: any) { setError(e.message); }
   }
@@ -21,6 +43,8 @@ function SkillCard({ skill }: { skill: Json }) {
       {skill.params.map((p: Json) => (
         <Field key={p.name} label={p.label ?? p.name} value={params[p.name]} onChange={(v) => setParams({ ...params, [p.name]: v })} />
       ))}
+      <label>Lead Analyst model</label>
+      <ModelSelect models={models} value={model} onChange={setModel} defaultLabel={`${fallback} (Lead default)`} />
       {error && <p className="error">{error}</p>}
       <div className="actions"><button className="primary" onClick={run}>Run</button></div>
     </div>
@@ -30,6 +54,7 @@ function SkillCard({ skill }: { skill: Json }) {
 export default function Skills() {
   const crud = useCrud("/skills");
   const [editing, setEditing] = useState(false);
+  const { models, leadDefault } = useModels();
   if (editing) {
     return (
       <>
@@ -44,6 +69,9 @@ export default function Skills() {
               <Field label="Prompt template (use {param} placeholders)" value={s.prompt_template}
                      onChange={(prompt_template) => set({ prompt_template })} multiline rows={6} />
               <JsonField label='Parameters: [{"name", "label", "default"}]' value={s.params} onChange={(params) => set({ params })} rows={6} />
+              <label>Default Lead Analyst model</label>
+              <ModelSelect models={models} value={s.lead_model_tool_id ?? null} defaultLabel="Lead role default"
+                           onChange={(lead_model_tool_id) => set({ lead_model_tool_id })} />
               <Toggle label="Enabled" value={s.enabled} onChange={(enabled) => set({ enabled })} />
             </>
           )}
@@ -59,7 +87,7 @@ export default function Skills() {
       </div>
       {crud.error && <p className="error">{crud.error}</p>}
       <div className="cards">
-        {crud.items.filter((s) => s.enabled).map((s) => <SkillCard key={s.id} skill={s} />)}
+        {crud.items.filter((s) => s.enabled).map((s) => <SkillCard key={s.id} skill={s} models={models} leadDefault={leadDefault} />)}
       </div>
     </div>
   );

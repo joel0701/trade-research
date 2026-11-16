@@ -11,7 +11,7 @@ from pydantic import BaseModel
 from sqlmodel import Session
 
 from app.db import get_session
-from app.models import ChatSession, Screener, Skill
+from app.models import ChatSession, Screener, Skill, Tool
 from app.screeners.engine import results_to_markdown, run_screener
 
 router = APIRouter(tags=["launch"])
@@ -19,6 +19,7 @@ router = APIRouter(tags=["launch"])
 
 class SkillRun(BaseModel):
     params: dict[str, str] = {}
+    lead_model_tool_id: int | None = None  # overrides the skill's default Lead model
 
 
 def render(template: str, params: dict[str, str], defaults: list[dict[str, Any]]) -> str:
@@ -36,7 +37,12 @@ def run_skill(skill_id: int, body: SkillRun, db: Session = Depends(get_session))
         raise HTTPException(404)
     prompt = render(skill.prompt_template, body.params, skill.params)
     label = " ".join(v for v in body.params.values() if v)
-    chat = ChatSession(title=f"{skill.name}: {label}".strip(": "), origin=f"skill:{skill.id}")
+    model_id = body.lead_model_tool_id or skill.lead_model_tool_id
+    model = db.get(Tool, model_id) if model_id else None
+    if model_id and (model is None or model.kind != "model"):
+        raise HTTPException(422, "lead_model_tool_id must refer to a model in Tools")
+    chat = ChatSession(title=f"{skill.name}: {label}".strip(": "), origin=f"skill:{skill.id}",
+                       lead_model_tool_id=model_id)
     db.add(chat)
     db.commit()
     db.refresh(chat)

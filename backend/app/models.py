@@ -55,6 +55,8 @@ class ChatSession(SQLModel, table=True):
     id: int | None = Field(default=None, primary_key=True)
     title: str = "New research"
     origin: str = "chat"  # chat | skill:<id> | screener:<id>
+    # Model the Lead uses in this session (a Tool of kind "model"); None = the Lead role's default.
+    lead_model_tool_id: int | None = None
     created_at: datetime = Field(default_factory=now)
     updated_at: datetime = Field(default_factory=now)
 
@@ -105,6 +107,7 @@ class Skill(SQLModel, table=True):
     description: str = ""
     prompt_template: str
     params: list[dict[str, Any]] = Field(default_factory=list, sa_column=Column(JSON))
+    lead_model_tool_id: int | None = None  # default Lead model for sessions this skill starts
     enabled: bool = True
 
 
@@ -124,3 +127,18 @@ class Screener(SQLModel, table=True):
         "noting risks and any options strategies worth considering."
     )
     enabled: bool = True
+
+
+class Attachment(SQLModel, table=True):
+    """A document uploaded into a session. The file lives on disk under UPLOAD_DIR;
+    messages reference it by id and it is expanded into a content block per request."""
+
+    id: int | None = Field(default=None, primary_key=True)
+    session_id: int = Field(foreign_key="chatsession.id", index=True)
+    message_id: int | None = None  # set once it is sent with a message
+    filename: str
+    media_type: str
+    kind: str  # pdf | image | text
+    size: int
+    path: str
+    created_at: datetime = Field(default_factory=now)
