@@ -57,6 +57,7 @@ export default function Skills() {
         <h2 style={{ margin: 0 }}>Skills</h2>
         <button onClick={() => setEditing(true)}>Edit skills</button>
       </div>
+      {crud.error && <p className="error">{crud.error}</p>}
       <div className="cards">
         {crud.items.filter((s) => s.enabled).map((s) => <SkillCard key={s.id} skill={s} />)}
       </div>

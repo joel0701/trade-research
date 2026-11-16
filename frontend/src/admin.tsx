@@ -6,7 +6,8 @@ export function useCrud(path: string) {
   const [items, setItems] = useState<Json[]>([]);
   const [selected, setSelected] = useState<Json | null>(null);
   const [error, setError] = useState("");
-  const reload = () => api.get<Json[]>(path).then(setItems);
+  const reload = () => api.get<Json[]>(path).then((x) => { setItems(x); setError(""); })
+    .catch((e) => setError(e.message));
   useEffect(() => { reload(); }, [path]);
 
   async function save(item: Json) {
@@ -76,6 +77,7 @@ export function MasterDetail({ title, crud, blank, children }: {
         <h2 style={{ margin: 0 }}>{title}</h2>
         <button onClick={() => setSelected(structuredClone(blank))}>+ Add</button>
       </div>
+      {error && !draft && <p className="error">{error}</p>}
       <div className="split">
         <div className="list">
           {items.map((it) => (

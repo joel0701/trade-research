@@ -1,11 +1,24 @@
 export type Json = Record<string, any>;
 
+export const BACKEND_DOWN =
+  "Can't reach the backend. Check that it is running (uv run uvicorn app.main:app --reload in the backend folder) "
+  + "and look at that terminal for errors.";
+
 async function req<T = any>(method: string, path: string, body?: unknown): Promise<T> {
-  const r = await fetch(`/api${path}`, {
+  let r: Response;
+  try {
+    r = await fetch(`/api${path}`, {
     method,
     headers: body ? { "Content-Type": "application/json" } : undefined,
     body: body ? JSON.stringify(body) : undefined,
-  });
+    });
+  } catch {
+    throw new Error(BACKEND_DOWN);
+  }
+  // The dev server answers 500/502/504 itself when it cannot forward to the backend.
+  if ([500, 502, 504].includes(r.status) && !(r.headers.get("content-type") ?? "").includes("json")) {
+    throw new Error(BACKEND_DOWN);
+  }
   if (!r.ok) throw new Error(`${r.status}: ${await r.text()}`);
   return r.json();
 }

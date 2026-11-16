@@ -37,7 +37,8 @@ export default function Research() {
     try { localStorage.setItem("showTrace", v ? "1" : "0"); } catch { /* storage unavailable */ }
   }
 
-  const loadSessions = () => api.get<SessionRow[]>("/sessions").then(setSessions);
+  const loadSessions = () => api.get<SessionRow[]>("/sessions").then(setSessions)
+    .catch((e) => setError(e.message));
   useEffect(() => { loadSessions(); }, []);
 
   useEffect(() => {
@@ -52,7 +53,7 @@ export default function Research() {
         navigate(location.pathname, { replace: true, state: null });
         send(auto, sessionId);
       }
-    });
+    }).catch((e) => setError(e.message));
   }, [sessionId]);
 
   useEffect(() => { bottom.current?.scrollIntoView({ behavior: "smooth" }); }, [messages, activity]);
