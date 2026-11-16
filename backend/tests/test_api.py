@@ -10,9 +10,12 @@ def test_seeded_config_and_crud():
         assert sum(r["is_lead"] for r in roles) == 1
         tools = {t["slug"]: t for t in c.get("/api/tools").json()}
         conns = {x["slug"]: x for x in c.get("/api/connections").json()}
-        # One IBKR connection backs several sources.
-        assert {tools[s]["connection_id"] for s in ("ibkr_quotes", "ibkr_options", "ibkr_account")} == {conns["ibkr"]["id"]}
-        assert tools["ibkr_account"]["capabilities"] == ["brokerage"]
+        # One IB Gateway connection backs several sources.
+        gw = ("ibkr_gw_quote", "ibkr_gw_options", "ibkr_gw_account", "ibkr_gw_scanner")
+        assert {tools[s]["connection_id"] for s in gw} == {conns["ib_gateway"]["id"]}
+        assert tools["ibkr_gw_account"]["capabilities"] == ["brokerage"]
+        assert tools["ibkr_gw_scanner"]["capabilities"] == ["screening"]
+        assert "ibkr" not in conns and not any(t.startswith("ibkr_") and not t.startswith("ibkr_gw") for t in tools)
         assert tools["insider_trades"]["capabilities"] == ["insider_trading"]
 
         new = c.post("/api/tools", json={"slug": "x", "name": "X", "kind": "python",

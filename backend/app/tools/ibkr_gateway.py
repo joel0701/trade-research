@@ -185,3 +185,76 @@ async def ibkr_account() -> str:
         return {"balances": summary, "positions": positions, "open_orders": orders,
                 "note": "Read-only. This app cannot place, change or cancel orders."}
     return await _run(go)
+
+
+# ── Market scanners ─────────────────────────────────────────────────────────────
+# A curated set of IBKR scan codes (IB Gateway supports many more; any valid code works).
+SCAN_CODES: dict[str, str] = {
+    "TOP_PERC_GAIN": "Top % gainers",
+    "TOP_PERC_LOSE": "Top % losers",
+    "MOST_ACTIVE": "Most active (shares)",
+    "MOST_ACTIVE_USD": "Most active (dollar volume)",
+    "HOT_BY_VOLUME": "Hot by volume (vs average)",
+    "TOP_TRADE_COUNT": "Most trades",
+    "HIGH_VS_52W_HL": "Near 52-week high",
+    "LOW_VS_52W_HL": "Near 52-week low",
+    "TOP_PRICE_RANGE": "Widest price range",
+    "HOT_BY_OPT_VOLUME": "Unusual option volume",
+    "OPT_VOLUME_MOST_ACTIVE": "Most active options",
+    "HIGH_OPT_IMP_VOLAT": "Highest option implied volatility",
+    "HIGH_OPT_IMP_VOLAT_OVER_HIST": "Implied vs historical volatility (highest)",
+    "TOP_OPT_IMP_VOLAT_GAIN": "Biggest IV increase",
+    "HIGH_OPT_VOLUME_PUT_CALL_RATIO": "Highest put/call volume ratio",
+    "LOW_OPT_VOLUME_PUT_CALL_RATIO": "Lowest put/call volume ratio",
+}
+LOCATIONS: dict[str, str] = {
+    "STK.US.MAJOR": "US listed stocks (NYSE, Nasdaq, AMEX…)",
+    "STK.US": "All US stocks (incl. OTC)",
+    "STK.NASDAQ": "Nasdaq",
+    "STK.NYSE": "NYSE",
+}
+
+
+async def run_scan(scan_code: str, location: str = "STK.US.MAJOR", rows: int = 25, above_price: float | None = None,
+                   above_volume: int | None = None, market_cap_above: float | None = None,
+                   average_option_volume_above: int | None = None) -> list[dict[str, Any]]:
+    """Run an IBKR market scanner; returns ranked rows. Raises GatewayError if IB Gateway is down."""
+    from ib_async import ScannerSubscription
+
+    ib = await connection()
+    sub = ScannerSubscription(instrument="STK", locationCode=location or "STK.US.MAJOR",
+                              scanCode=scan_code.strip().upper(), numberOfRows=max(1, min(int(rows or 25), 50)))
+    if above_price:
+        sub.abovePrice = float(above_price)
+    if above_volume:
+        sub.aboveVolume = int(above_volume)
+    if market_cap_above:
+        sub.marketCapAbove = float(market_cap_above)  # millions of USD
+    if average_option_volume_above:
+        sub.averageOptionVolumeAbove = int(average_option_volume_above)
+    try:
+        data = await asyncio.wait_for(ib.reqScannerDataAsync(sub), TIMEOUT)
+    except asyncio.TimeoutError as e:
+        raise GatewayError("IBKR's scanner didn't answer in time; try again.") from e
+    out = []
+    for d in data:
+        cd = d.contractDetails
+        c = cd.contract
+        out.append({"rank": d.rank + 1, "ticker": c.symbol, "name": getattr(cd, "longName", "") or None,
+                    "exchange": c.primaryExchange or c.exchange, "industry": getattr(cd, "industry", "") or None})
+    return out
+
+
+async def ibkr_scanner(scan_code: str = "TOP_PERC_GAIN", location: str = "STK.US.MAJOR", rows: int = 25,
+                       above_price: float = 0, above_volume: int = 0, market_cap_above: float = 0) -> str:
+    """Agent tool: run an IBKR market scanner."""
+    try:
+        results = await run_scan(scan_code, location, rows, above_price or None, above_volume or None,
+                                 market_cap_above or None)
+    except GatewayError as e:
+        return str(e)
+    except Exception as e:  # e.g. an invalid scan code
+        return f"IBKR scanner error: {e}"
+    return json.dumps({"scan": scan_code, "label": SCAN_CODES.get(scan_code.upper(), scan_code),
+                       "location": location, "results": results,
+                       "available_scans": SCAN_CODES if not results else None}, default=str)

@@ -14,7 +14,8 @@ from app.db import get_session
 from app.api.sessions import check_model
 from app.llm.providers import model_available
 from app.models import ChatSession, Screener, Skill, Tool
-from app.screeners.engine import results_to_markdown, run_screener
+from app.screeners.engine import results_to_markdown, run_ibkr_scanner, run_screener
+from app.tools.ibkr_gateway import LOCATIONS, SCAN_CODES, GatewayError
 
 router = APIRouter(tags=["launch"])
 
@@ -54,18 +55,37 @@ def run_skill(skill_id: int, body: SkillRun, db: Session = Depends(get_session))
     return {"session_id": chat.id, "prompt": prompt}
 
 
+@router.get("/scanner-options")
+def scanner_options() -> dict[str, Any]:
+    """IBKR scan types and locations offered in the Scanners editor."""
+    return {"scan_codes": [{"code": k, "label": v} for k, v in SCAN_CODES.items()],
+            "locations": [{"code": k, "label": v} for k, v in LOCATIONS.items()]}
+
+
 @router.post("/screeners/{screener_id}/run")
 async def run_screen(screener_id: int, db: Session = Depends(get_session)) -> dict[str, Any]:
     scr = db.get(Screener, screener_id)
     if scr is None:
         raise HTTPException(404)
-    rows = await run_screener(scr.universe, scr.rules, scr.sort_by, scr.limit)
+    if scr.source == "ibkr":
+        try:
+            rows = await run_ibkr_scanner(scr.params, scr.rules, scr.sort_by, scr.limit)
+        except GatewayError as e:
+            raise HTTPException(503, str(e)) from e
+        except Exception as e:  # e.g. an invalid scan code
+            raise HTTPException(502, f"IBKR scanner error: {e}") from e
+        code = str(scr.params.get("scan_code", ""))
+        what = (f"IBKR scanner **{scr.name}** ({SCAN_CODES.get(code, code)}, "
+                f"{LOCATIONS.get(scr.params.get('location', 'STK.US.MAJOR'), 'US stocks')})"
+                f"{' filtered by your rules' if scr.rules else ''} returned {len(rows)} stocks")
+    else:
+        rows = await run_screener(scr.universe, scr.rules, scr.sort_by, scr.limit)
+        what = f"Scanner **{scr.name}** ({scr.description}) checked {len(scr.universe)} tickers and found {len(rows)} matches"
     table = results_to_markdown(rows)
-    chat = ChatSession(title=f"Screener: {scr.name} ({len(rows)} matches)", origin=f"screener:{scr.id}")
+    chat = ChatSession(title=f"Scanner: {scr.name} ({len(rows)} results)", origin=f"screener:{scr.id}")
     db.add(chat)
     db.commit()
     db.refresh(chat)
     # Results go in the first user prompt so the Lead sees exactly what the user sees.
-    prompt = (f"Screener **{scr.name}** ({scr.description}) scanned {len(scr.universe)} tickers "
-              f"and found {len(rows)} matches:\n\n{table}\n\n{scr.follow_up_prompt}")
+    prompt = f"{what}:\n\n{table}\n\n{scr.follow_up_prompt}"
     return {"session_id": chat.id, "prompt": prompt, "matches": rows}

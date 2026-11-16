@@ -137,6 +137,70 @@ def test_status_reflects_gateway(monkeypatch):
         assert "IB Gateway isn't running" in st[tools["ibkr_gw_quote"]]["reason"]
         monkeypatch.setattr(gw, "gateway_reachable", lambda timeout=0.3: True)
         st = {s["id"]: s for s in c.get("/api/tools-status").json()}
-        assert all(st[tools[s]]["available"] for s in ("ibkr_gw_quote", "ibkr_gw_bars", "ibkr_gw_options", "ibkr_gw_account"))
+        assert all(st[tools[s]]["available"] for s in ("ibkr_gw_quote", "ibkr_gw_bars", "ibkr_gw_options",
+                                                        "ibkr_gw_account", "ibkr_gw_scanner"))
         conns = {x["slug"]: x for x in c.get("/api/connections").json()}
-        assert conns["ib_gateway"]["kind"] == "tws" and conns["ibkr"]["enabled"] is False  # unused MCP placeholder off
+        assert conns["ib_gateway"]["kind"] == "tws" and "ibkr" not in conns  # old MCP placeholder removed
+
+
+def scan_row(rank, sym, name):
+    return NS(rank=rank, contractDetails=NS(contract=NS(symbol=sym, primaryExchange="NASDAQ", exchange="SMART"),
+                                            longName=name, industry="Technology"))
+
+
+class ScanIB(FakeIB):
+    async def reqScannerDataAsync(self, sub):
+        self.calls.append(("scan", sub.scanCode, sub.locationCode, sub.numberOfRows, sub.abovePrice, sub.marketCapAbove))
+        if sub.scanCode == "BOGUS":
+            raise ValueError("Scanner code BOGUS not found")
+        return [scan_row(0, "CRWV", "CoreWeave"), scan_row(1, "NVDA", "NVIDIA"), scan_row(2, "AMD", "AMD")]
+
+
+def use_scan_ib(monkeypatch):
+    ib = ScanIB()
+
+    async def fake_connection():
+        return ib
+    monkeypatch.setattr(gw, "connection", fake_connection)
+    return ib
+
+
+async def test_scanner_tool(monkeypatch):
+    ib = use_scan_ib(monkeypatch)
+    out = json.loads(await gw.ibkr_scanner("hot_by_opt_volume", rows=99, above_price=5, market_cap_above=1000))
+    assert [r["ticker"] for r in out["results"]] == ["CRWV", "NVDA", "AMD"] and out["results"][0]["rank"] == 1
+    assert out["label"] == "Unusual option volume"
+    assert ib.calls[-1] == ("scan", "HOT_BY_OPT_VOLUME", "STK.US.MAJOR", 50, 5.0, 1000.0)  # rows capped at 50
+    assert "IBKR scanner error" in await gw.ibkr_scanner("BOGUS")
+
+
+def test_scanners_page_runs_ibkr_scanner(monkeypatch):
+    use_scan_ib(monkeypatch)
+    from app.screeners import engine
+    snaps = {"CRWV": {"close": 100.0, "rsi_14": 72.0}, "NVDA": {"close": 180.0, "rsi_14": 55.0}}  # AMD: no data
+    monkeypatch.setattr(engine, "fetch_snapshots", lambda tickers: {t: snaps[t] for t in tickers if t in snaps})
+    with TestClient(app) as c:
+        scanners = {s["slug"]: s for s in c.get("/api/screeners").json()}
+        assert {"ibkr_top_gainers", "ibkr_unusual_options", "ibkr_iv_rich"} <= set(scanners)
+        sc = scanners["ibkr_unusual_options"]
+        assert sc["source"] == "ibkr" and sc["params"]["scan_code"] == "HOT_BY_OPT_VOLUME"
+
+        r = c.post(f"/api/screeners/{sc['id']}/run").json()
+        assert [m["ticker"] for m in r["matches"]] == ["CRWV", "NVDA", "AMD"]  # IBKR rank order
+        assert r["matches"][0]["rsi_14"] == 72.0 and "rank" in r["prompt"] and "IBKR scanner" in r["prompt"]
+        chat = c.get(f"/api/sessions/{r['session_id']}").json()
+        assert chat["title"].startswith("Scanner: IBKR: unusual option volume (3 results)")
+
+        # Your rules filter IBKR's results; AMD has no indicator data so it can't pass.
+        c.put(f"/api/screeners/{sc['id']}", json={"rules": {"field": "rsi_14", "op": "<", "value": 70}})
+        r = c.post(f"/api/screeners/{sc['id']}/run").json()
+        assert [m["ticker"] for m in r["matches"]] == ["NVDA"] and "filtered by your rules" in r["prompt"]
+
+        opts = c.get("/api/scanner-options").json()
+        assert {"code": "TOP_PERC_GAIN", "label": "Top % gainers"} in opts["scan_codes"]
+
+        async def down():
+            raise gw.GatewayError("IB Gateway isn't reachable at 127.0.0.1:4002")
+        monkeypatch.setattr(gw, "connection", down)
+        bad = c.post(f"/api/screeners/{sc['id']}/run")
+        assert bad.status_code == 503 and "IB Gateway isn't reachable" in bad.json()["detail"]

@@ -159,7 +159,13 @@ class Skill(SQLModel, table=True):
 
 
 class Screener(SQLModel, table=True):
-    """A deterministic scan: a universe of tickers plus rules. See screeners/engine.py."""
+    """A scanner (shown as "Scanners" in the UI).
+
+    source="rules": your rules over a universe of tickers, using computed indicators.
+    source="ibkr":  an IBKR market scanner run through IB Gateway (params: scan_code, location,
+                    rows, above_price, above_volume, market_cap_above); results are enriched with
+                    the same indicator fields, and rules (optional) filter them further.
+    See screeners/engine.py."""
 
     id: int | None = Field(default=None, primary_key=True)
     slug: str = Field(unique=True, index=True)
@@ -167,6 +173,8 @@ class Screener(SQLModel, table=True):
     description: str = ""
     universe: list[str] = Field(default_factory=list, sa_column=Column(JSON))
     rules: dict[str, Any] = Field(default_factory=dict, sa_column=Column(JSON))
+    source: str = "rules"
+    params: dict[str, Any] = Field(default_factory=dict, sa_column=Column(JSON))
     sort_by: str | None = None
     limit: int = 25
     follow_up_prompt: str = (

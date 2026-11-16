@@ -136,6 +136,17 @@ PYTHON_TOOLS: dict[str, PythonTool] = {
             "right": {"type": "string", "description": "C, P, or empty for both"},
             "strikes_around_spot": {"type": "integer", "description": "Strikes each side of spot (default 8)"},
         }, "required": ["underlying"]}, ibkr_gateway.ibkr_option_chain),
+    "ibkr_scanner": PythonTool(
+        "Run an Interactive Brokers market scanner over US stocks and get the ranked list. scan_code options: "
+        + ", ".join(f"{k} ({v})" for k, v in ibkr_gateway.SCAN_CODES.items()) + ".",
+        {"type": "object", "properties": {
+            "scan_code": {"type": "string", "description": "IBKR scan code, e.g. TOP_PERC_GAIN or HOT_BY_OPT_VOLUME"},
+            "location": {"type": "string", "description": "STK.US.MAJOR (default), STK.US, STK.NASDAQ or STK.NYSE"},
+            "rows": {"type": "integer", "description": "How many results (default 25, max 50)"},
+            "above_price": {"type": "number", "description": "Minimum share price"},
+            "above_volume": {"type": "integer", "description": "Minimum daily volume (shares)"},
+            "market_cap_above": {"type": "number", "description": "Minimum market cap in millions of USD"},
+        }}, ibkr_gateway.ibkr_scanner),
     "ibkr_account": PythonTool(
         "Your Interactive Brokers account (read-only): balances, buying power, positions with P&L, and open orders.",
         {"type": "object", "properties": {}}, ibkr_gateway.ibkr_account),

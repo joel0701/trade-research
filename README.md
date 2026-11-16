@@ -4,9 +4,9 @@ A multi-agent research assistant for stocks and options. You chat with a **Lead 
 which consults a team of specialists (Sector Mapper, Finance Analyst, Technical Analyst,
 News Analyst, Strategy Optimizer, Research Agent), each with its own Claude model, prompt and tools.
 Every chat session is saved and can be reopened and continued. **Skills** (pre-built analyses) and
-**Screeners** (rule-based scans) each start a new session with their results.
+**Scanners** (rule-based scans, or IBKR market scanners via IB Gateway) each start a new session with their results.
 
-Roles, tools, skills and screeners are all data, editable in the app; no code change is needed to
+Roles, tools, skills and scanners are all data, editable in the app; no code change is needed to
 add a role or connect a tool.
 
 ## Architecture
@@ -17,8 +17,8 @@ React UI (Vite)  ──/api──►  FastAPI
                              │    └─ consult_<role> tools → specialist agent loops (run in parallel)
                              ├─ Tool registry: Claude models, Python functions,
                              │    Claude server tools (web search/fetch), MCP servers (IBKR, Bigdata.com…)
-                             ├─ Screener engine: deterministic rules over computed indicators
-                             └─ SQLite (SQLModel): sessions, messages, runs, tools, roles, skills, screeners
+                             ├─ Scanner engine: rules over computed indicators, or IBKR market scanners
+                             └─ SQLite (SQLModel): sessions, messages, runs, tools, roles, skills, scanners
 ```
 
 - **No agent framework.** `backend/app/agents/loop.py` is a small loop over the Anthropic Messages API.
@@ -27,7 +27,8 @@ React UI (Vite)  ──/api──►  FastAPI
   conversation can be continued exactly. The UI shows only the visible text.
 - **Runs** record every Lead and specialist call (input, output, tool calls, token usage):
   `GET /api/sessions/{id}/runs`.
-- **Screeners never use the LLM to scan.** They compute indicators in pandas and apply JSON rules;
+- **Scanners never use the LLM to scan.** Rule-based scanners compute indicators in pandas and apply JSON rules
+  (IBKR scanners use IBKR's own ranking, optionally filtered by your rules);
   only the matches go to the Lead.
 - **Safety:** the IBKR MCP tool ships disabled, with every order, alert and watchlist-changing tool
   blocked. Secrets live in `.env`; tool configs only name the environment variable.
@@ -56,7 +57,7 @@ cd frontend && npm install && npm run dev
 ```
 
 The database is created at `data/trade_research.db` and seeded with default roles, tools, skills
-and screeners on first start. Delete the file to reset.
+and scanners on first start. Delete the file to reset.
 
 Tests (no API calls; Claude is faked):
 
@@ -71,7 +72,7 @@ cd backend && uv run pytest
 | **Tools** | Models (model id, effort, max tokens, refusal fallbacks), built-in Python functions, Claude web search/fetch, MCP servers |
 | **Roles** | Each analyst's model, system prompt, allowed tools, iteration limit; which role is the Lead |
 | **Skills** | Prompt templates with parameters, e.g. `{ticker}` |
-| **Screeners** | Ticker universe, rules, sort, follow-up prompt |
+| **Scanners** | Rule-based (ticker universe + rules) or IBKR market scanner (scan type, market, price/volume/market-cap filters, optional rules); sort, follow-up prompt |
 
 Default models: Lead and Strategy Optimizer on Claude Opus 5.5; most specialists on Sonnet 5.5;
 Sector Mapper on Haiku 5.5. Opus, Sonnet and Fable use server-side refusal fallbacks
@@ -99,8 +100,8 @@ Default model names for other vendors change often: check them under Tools and f
 variable with its key). **Tools → Data sources** lists what each connection provides, grouped by
 category: real-time quotes, price history, option chains, fundamentals, SEC filings, insider trading,
 dark pool, news, web search, brokerage, screening. One connection can serve several sources: the
-IBKR connection backs *IBKR real-time quotes*, *option chains*, *account (read-only)*, *screeners*
-and *earnings & themes*, and a role using several of them shares one MCP session.
+IB Gateway connection backs *IBKR quote*, *price bars*, *option chain*, *scanner* and
+*account (read-only)*, and sources on one MCP connection share one session.
 
 Built in: Yahoo Finance (free, delayed), DuckDuckGo, Claude web search/fetch, and **SEC EDGAR**
 (free): recent filings, reading a filing's text, and Form 4 insider trades. EDGAR needs
@@ -163,7 +164,7 @@ delayed and unofficial. Use the IBKR MCP server for real-time quotes and options
 - Trace view in the UI for runs (the API already records them)
 - Keep MCP connections open between turns (they reconnect per run today)
 - Compaction for very long sessions
-- Scheduled screeners and alerts
+- Scheduled scanners and alerts
 - AWS deployment: Postgres via `DATABASE_URL`, secrets from Secrets Manager as env vars, and the
   frontend built as static files
 

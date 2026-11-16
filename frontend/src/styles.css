@@ -278,3 +278,6 @@ ul.plain li { padding: 3px 0; }
 .list.grouped .row.empty { font-style: italic; }
 .role-group { margin-top: 6px; }
 .role-group .list-group { padding: 8px 0 4px; border-bottom: 1px solid var(--border); margin-bottom: 4px; }
+.badge-ibkr { background: #3a2a12; color: #e0a24a; }
+:root[data-theme="light"] .badge-ibkr { background: #fbf0dd; color: #8a5a10; }
+.grid-3 { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 0 12px; }

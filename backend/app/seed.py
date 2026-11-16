@@ -44,9 +44,6 @@ CONNECTIONS = [
     dict(slug="ib_gateway", name="Interactive Brokers (IB Gateway)", kind="tws",
          description="IB Gateway or TWS running on this computer, via the TWS API. No key: log in to IB Gateway and "
                      "enable API access. Read-only. Settings: IBKR_HOST, IBKR_PORT (4002 paper, 4001 live), IBKR_CLIENT_ID."),
-    dict(slug="ibkr", name="Interactive Brokers", kind="mcp", secret_env="IBKR_MCP_TOKEN",
-         description="IBKR's MCP server: real-time quotes, option chains, account data and screeners.",
-         config={"transport": "http", "url": "https://REPLACE-WITH-IBKR-MCP-URL/mcp"}),
     dict(slug="finra", name="FINRA (free)", kind="http",
          description="FINRA's free off-exchange data: daily short sale volume (dark pool short ratio) and weekly "
                      "dark pool (ATS) volume by venue. No key needed."),
@@ -73,27 +70,10 @@ DATA_SOURCES = [
      {"function": "ibkr_bars"}, "", ["technical_analyst"]),
     ("ibkr_gw_options", "IBKR option chain (IB Gateway)", "python", "ib_gateway", ["option_chains"],
      {"function": "ibkr_option_chain"}, "", ["strategy_optimizer"]),
+    ("ibkr_gw_scanner", "IBKR scanner (IB Gateway)", "python", "ib_gateway", ["screening"],
+     {"function": "ibkr_scanner"}, "", ["technical_analyst", "strategy_optimizer"]),
     ("ibkr_gw_account", "IBKR account, read-only (IB Gateway)", "python", "ib_gateway", ["brokerage"],
      {"function": "ibkr_account"}, "", ["strategy_optimizer"]),
-    ("ibkr_quotes", "IBKR real-time quotes", "mcp_server", "ibkr", ["realtime_quotes", "price_history"],
-     {"allowed_tools": ["get_price_snapshot", "get_price_history", "search_contracts"]},
-     "Live quotes and price history from Interactive Brokers.", ["technical_analyst", "strategy_optimizer"]),
-    ("ibkr_options", "IBKR option chains", "mcp_server", "ibkr", ["option_chains"],
-     {"allowed_tools": ["get_option_parameters", "get_option_data", "get_combo_identifier", "search_contracts"]},
-     "Live option chains, IV and Greeks from Interactive Brokers.", ["strategy_optimizer"]),
-    ("ibkr_account", "IBKR account (read-only)", "mcp_server", "ibkr", ["brokerage"],
-     {"allowed_tools": ["get_account_summary", "get_account_balances", "get_account_positions",
-                        "get_account_orders", "get_account_trades", "get_pa_performance_all_periods",
-                        "get_pa_allocation"]},
-     "Positions, balances, orders and trades. Order placement is always blocked.", []),
-    ("ibkr_screeners", "IBKR screeners", "mcp_server", "ibkr", ["screening"],
-     {"allowed_tools": ["get_screener_templates", "get_screener_capabilities", "preview_screener",
-                        "list_saved_screeners", "get_saved_screener", "run_saved_screener"]},
-     "IBKR market scanners and saved screens.", []),
-    ("ibkr_research", "IBKR earnings & themes", "mcp_server", "ibkr", ["fundamentals", "news"],
-     {"allowed_tools": ["get_earnings_insight", "search_earnings_insights", "get_company_themes",
-                        "get_theme_details", "search_investment_topics"]},
-     "Earnings insights and investment themes from Interactive Brokers.", ["finance_analyst"]),
     ("finra_short_volume", "FINRA daily short volume", "python", "finra", ["dark_pool"],
      {"function": "finra_short_volume"}, "", ["technical_analyst"]),
     ("finra_ats_weekly", "FINRA weekly dark pool (ATS) volume", "python", "finra", ["dark_pool"],
@@ -138,11 +118,30 @@ def ensure_data_sources(db: Session) -> None:
             conns[conn.slug] = conn
     tools = {t.slug: t for t in db.exec(select(Tool)).all()}
 
+    roles = {r.slug: r for r in db.exec(select(Role)).all()}
+
+    def drop(tool: Tool) -> None:
+        for role in roles.values():
+            if tool.id in role.tool_ids:
+                role.tool_ids = [i for i in role.tool_ids if i != tool.id]
+                db.add(role)
+        db.delete(tool)
+        tools.pop(tool.slug, None)
+
     # Older databases had one "ibkr" / "bigdata" MCP tool holding the server settings.
     for slug in ("ibkr", "bigdata"):
         old = tools.get(slug)
         if old is None or old.kind != "mcp_server" or old.connection_id is not None:
             continue
+        real_url = old.config.get("url") and "REPLACE" not in old.config.get("url", "")
+        if slug == "ibkr":
+            if not real_url:  # never set up; IBKR is reached through IB Gateway now
+                drop(old)
+                continue
+            if "ibkr" not in conns:
+                conns["ibkr"] = Connection(slug="ibkr", name="Interactive Brokers (MCP)", kind="mcp")
+                db.add(conns["ibkr"])
+                db.flush()
         conn = conns[slug]
         server = {k: v for k, v in old.config.items() if k not in ("allowed_tools", "blocked_tools")}
         if server.get("url") and "REPLACE" not in server.get("url", ""):
@@ -154,7 +153,6 @@ def ensure_data_sources(db: Session) -> None:
         old.capabilities = old.capabilities or ["other"]
         db.add_all([conn, old])
 
-    roles = {r.slug: r for r in db.exec(select(Role)).all()}
     for slug, name, kind, conn_slug, caps, config, desc, role_slugs in DATA_SOURCES:
         if slug in tools:
             continue
@@ -168,14 +166,17 @@ def ensure_data_sources(db: Session) -> None:
                 role.tool_ids = [*role.tool_ids, tool.id]
                 db.add(role)
 
-    # The IBKR MCP connection was a placeholder (IBKR has no public MCP server with a token).
-    # If it was never set up, turn it off so its sources don't sit in roles as "not ready".
+    # The IBKR MCP connection was a placeholder (IBKR has no public MCP server with a token for
+    # individual accounts). If it was never given a real address, remove it and its sources;
+    # IB Gateway covers quotes, options, account and scanners.
     mcp = conns.get("ibkr")
-    if mcp is not None and mcp.enabled and "REPLACE" in json.dumps(mcp.config):
-        mcp.enabled = False
-        mcp.description = ("Unused: IBKR is reached through IB Gateway instead. Only enable this if you run an "
-                           "IBKR MCP server and set its address.")
-        db.add(mcp)
+    if mcp is not None and "REPLACE" in json.dumps(mcp.config):
+        for t in list(tools.values()):
+            if t.connection_id == mcp.id:
+                drop(t)
+        db.flush()
+        db.delete(mcp)
+        conns.pop("ibkr")
 
     # Vendor name first in source names (only names you haven't edited).
     for slug, (old_name, new_name) in RENAMES.items():
@@ -330,10 +331,42 @@ def ensure_models(db: Session) -> None:
     db.commit()
 
 
+IBKR_SCANNERS = [
+    dict(slug="ibkr_top_gainers", name="IBKR: top % gainers", source="ibkr",
+         description="Biggest % gainers today among US listed stocks over $5 with real volume.",
+         params={"scan_code": "TOP_PERC_GAIN", "location": "STK.US.MAJOR", "rows": 25, "above_price": 5,
+                 "above_volume": 500000},
+         follow_up_prompt="Review today's top gainers. Which moves look like they have real catalysts and could "
+                          "continue, and which look exhausted? Note risks and any options setups worth a look."),
+    dict(slug="ibkr_unusual_options", name="IBKR: unusual option volume", source="ibkr",
+         description="Stocks with unusually high option volume versus normal, over $5 and $1B market cap.",
+         params={"scan_code": "HOT_BY_OPT_VOLUME", "location": "STK.US.MAJOR", "rows": 25, "above_price": 5,
+                 "market_cap_above": 1000},
+         follow_up_prompt="Look into the unusual options activity. For the most interesting names, what is the "
+                          "likely catalyst, is the flow bullish or bearish, and what trades would fit?"),
+    dict(slug="ibkr_iv_rich", name="IBKR: IV rich vs historical", source="ibkr",
+         description="Highest implied volatility relative to historical volatility (options look expensive).",
+         params={"scan_code": "HIGH_OPT_IMP_VOLAT_OVER_HIST", "location": "STK.US.MAJOR", "rows": 25,
+                 "above_price": 10, "market_cap_above": 2000},
+         follow_up_prompt="These stocks have options priced rich versus realized volatility. Explain why (earnings, "
+                          "events) and suggest premium-selling strategies with defined risk where they make sense."),
+]
+
+
+def ensure_scanners(db: Session) -> None:
+    """Add the default IBKR scanners if they're missing (never changes ones you've edited)."""
+    existing = {s.slug for s in db.exec(select(Screener)).all()}
+    for spec in IBKR_SCANNERS:
+        if spec["slug"] not in existing:
+            db.add(Screener(universe=[], rules={}, **spec))
+    db.commit()
+
+
 def seed(db: Session) -> None:
     ensure_models(db)
     if db.exec(select(Tool).where(Tool.kind != "model")).first() is not None:
         ensure_data_sources(db)
+        ensure_scanners(db)
         return
     db.add_all(TOOLS)
     db.commit()
@@ -346,3 +379,4 @@ def seed(db: Session) -> None:
     db.add_all(SCREENERS)
     db.commit()
     ensure_data_sources(db)
+    ensure_scanners(db)

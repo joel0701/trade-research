@@ -74,7 +74,7 @@ def test_status_endpoint_explains_missing_setup(monkeypatch):
         status = {s["id"]: s for s in c.get("/api/tools-status").json()}
         assert status[tools["sec_filings"]] == {"id": tools["sec_filings"], "available": False,
                                                 "reason": "set SEC_USER_AGENT in .env"}
-        assert not status[tools["ibkr_quotes"]]["available"]
+        assert not status[tools["bigdata_research"]]["available"]  # Bigdata.com not set up
         assert status[tools["fundamentals"]]["available"]  # Yahoo needs no setup
         monkeypatch.setenv("SEC_USER_AGENT", "TradeResearch test@example.com")
         status = {s["id"]: s for s in c.get("/api/tools-status").json()}
@@ -183,7 +183,7 @@ def test_older_database_is_migrated(tmp_path):
         tools = {t.slug: t for t in db.exec(select(Tool)).all()}
         assert tools["ibkr"].connection_id == conn.id
         assert tools["ibkr"].config["blocked_tools"] == ["create_order_instruction"]  # kept
-        assert tools["ibkr_quotes"].connection_id == conn.id
+        assert "ibkr_quotes" not in tools  # old MCP sources are no longer created
         role = db.exec(select(Role)).one()
         assert {tools["sec_filings"].id, tools["insider_trades"].id} <= set(role.tool_ids)
         assert len(db.exec(select(Connection)).all()) == len({c.slug for c in db.exec(select(Connection)).all()})
@@ -201,3 +201,28 @@ def test_vendor_first_renames_respect_edits(tmp_path):
         assert names["price_history"] == "Yahoo price history"
         assert names["fundamentals"] == "My fundamentals"  # edited by the user: left alone
         assert names["sec_filings"] == "SEC EDGAR filings"
+
+
+def test_unconfigured_ibkr_mcp_placeholder_is_removed(tmp_path):
+    engine = create_engine(f"sqlite:///{tmp_path / 'mcp.db'}")
+    SQLModel.metadata.create_all(engine)
+    with Session(engine) as db:
+        conn = Connection(slug="ibkr", name="Interactive Brokers", kind="mcp", secret_env="IBKR_MCP_TOKEN",
+                          config={"transport": "http", "url": "https://REPLACE-WITH-IBKR-MCP-URL/mcp"})
+        db.add(conn)
+        db.flush()
+        q = Tool(slug="ibkr_quotes", name="IBKR real-time quotes", kind="mcp_server", connection_id=conn.id)
+        legacy = Tool(slug="ibkr", name="Interactive Brokers (MCP)", kind="mcp_server",
+                      config={"url": "https://REPLACE-WITH-IBKR-MCP-URL/mcp"})
+        db.add_all([q, legacy])
+        db.flush()
+        db.add(Role(slug="technical_analyst", name="Technical Analyst", tool_ids=[q.id, legacy.id]))
+        db.commit()
+        ensure_data_sources(db)
+        slugs = {t.slug for t in db.exec(select(Tool)).all()}
+        assert not {"ibkr_quotes", "ibkr"} & slugs and "ibkr_gw_scanner" in slugs
+        assert db.exec(select(Connection).where(Connection.slug == "ibkr")).first() is None
+        role = db.exec(select(Role)).one()
+        ids = {t.id: t.slug for t in db.exec(select(Tool)).all()}
+        assert all(i in ids for i in role.tool_ids)  # no dangling references
+        assert {"ibkr_gw_quote", "ibkr_gw_scanner"} <= {ids[i] for i in role.tool_ids}

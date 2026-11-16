@@ -85,11 +85,34 @@ async def run_screener(universe: list[str], rules: dict[str, Any], sort_by: str 
     return screen(snaps, rules, sort_by, limit)
 
 
+async def run_ibkr_scanner(params: dict[str, Any], rules: dict[str, Any], sort_by: str | None, limit: int,
+                           fetch: Callable[[list[str]], dict[str, Snapshot]] | None = None) -> list[dict[str, Any]]:
+    """Run an IBKR market scanner, add indicator fields, then apply optional rules."""
+    from app.tools.ibkr_gateway import run_scan
+
+    allowed = {"scan_code", "location", "rows", "above_price", "above_volume", "market_cap_above",
+               "average_option_volume_above"}
+    results = await run_scan(**{k: v for k, v in params.items() if k in allowed})
+    try:
+        fetch = fetch or fetch_snapshots  # looked up at call time
+        snaps = await asyncio.to_thread(fetch, [r["ticker"] for r in results]) if results else {}
+    except Exception:
+        log.warning("Couldn't add indicator data to IBKR scanner results", exc_info=True)
+        snaps = {}
+    rows = [{**r, **snaps.get(r["ticker"], {})} for r in results]
+    if rules:
+        rows = [r for r in rows if evaluate(rules, r)]
+    if sort_by:
+        return screen({r["ticker"]: {k: v for k, v in r.items() if k != "ticker"} for r in rows}, {}, sort_by, limit)
+    return rows[:limit]
+
+
 def results_to_markdown(rows: list[dict[str, Any]], cols: list[str] | None = None) -> str:
     if not rows:
         return "_No matches._"
-    cols = cols or ["ticker", "close", "pct_change_1d", "pct_change_20d", "rsi_14", "rel_volume",
-                    "sma_50", "sma_200", "pct_from_52w_high"]
+    cols = cols or (["rank"] if any("rank" in r for r in rows) else []) + [
+        "ticker", "close", "pct_change_1d", "pct_change_20d", "rsi_14", "rel_volume",
+        "sma_50", "sma_200", "pct_from_52w_high"]
     head = "| " + " | ".join(cols) + " |\n|" + "---|" * len(cols) + "\n"
     body = "\n".join("| " + " | ".join("" if r.get(c) is None else str(r.get(c)) for c in cols) + " |" for r in rows)
     return head + body

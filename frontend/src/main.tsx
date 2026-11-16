@@ -4,7 +4,7 @@ import ReactDOM from "react-dom/client";
 import { BrowserRouter, NavLink, Navigate, Route, Routes, useNavigate } from "react-router-dom";
 import Research from "./pages/Research";
 import Skills from "./pages/Skills";
-import Screeners from "./pages/Screeners";
+import Scanners from "./pages/Scanners";
 import Roles from "./pages/Roles";
 import Tools from "./pages/Tools";
 import Settings from "./pages/Settings";
@@ -21,7 +21,7 @@ function lastSessionPath(): string {
 function App() {
   const navigate = useNavigate();
   const { theme, toggleTheme, profile } = useSettings();
-  const links = [["/research", "Research"], ["/skills", "Skills"], ["/screeners", "Screeners"],
+  const links = [["/research", "Research"], ["/skills", "Skills"], ["/scanners", "Scanners"],
                  ["/roles", "Roles"], ["/tools", "Tools"]];
   return (
     <div className="app">
@@ -45,7 +45,8 @@ function App() {
           <Route path="/research" element={<Research />} />
           <Route path="/research/:id" element={<Research />} />
           <Route path="/skills" element={<Skills />} />
-          <Route path="/screeners" element={<Screeners />} />
+          <Route path="/scanners" element={<Scanners />} />
+          <Route path="/screeners" element={<Navigate to="/scanners" replace />} />
           <Route path="/roles" element={<Roles />} />
           <Route path="/tools" element={<Tools />} />
           <Route path="/settings" element={<Settings />} />
