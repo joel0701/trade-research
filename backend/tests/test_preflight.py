@@ -40,7 +40,7 @@ def test_preflight_prompt_then_continue(monkeypatch):
         items = {(i["role_slug"], i["tool"]): i for i in report["items"]}
         # Finance Analyst: EDGAR down and Bigdata.com (also SEC filings) not set up -> a real gap.
         sec = items[("finance_analyst", "SEC EDGAR filings")]
-        assert sec["impact"] == "high" and "SEC filings" in sec["gaps"] and "contact email" in sec["reason"]
+        assert sec["impact"] == "high" and "SEC filings" in sec["gaps"] and "SEC_USER_AGENT" in sec["reason"]
         # Technical Analyst: IBKR bars down but Yahoo price history works -> low impact, covered.
         bars = items[("technical_analyst", "IBKR price bars (IB Gateway)")]
         assert bars["impact"] == "low" and "Yahoo price history" in bars["covered_by"]

@@ -31,36 +31,11 @@ class EdgarError(Exception):
     pass
 
 
-EMAIL = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
-
-
-def configured_email() -> str | None:
-    """The contact email saved in Settings (on the SEC EDGAR connection), if any."""
-    from sqlmodel import Session, select
-
-    from app.db import engine
-    from app.models import Connection
-
-    with Session(engine) as db:
-        conn = db.exec(select(Connection).where(Connection.slug == "sec_edgar")).first()
-    email = (conn.config.get("contact_email") or "").strip() if conn else ""
-    return email if EMAIL.match(email) else None
-
-
-def user_agent() -> str | None:
-    """SEC_USER_AGENT from .env if set, otherwise built from the email saved in Settings."""
-    ua = os.getenv("SEC_USER_AGENT", "").strip()
-    if ua and "@" in ua:
-        return ua
-    email = configured_email()
-    return f"TradeResearch {email}" if email else None
-
-
 def _headers() -> dict[str, str]:
-    ua = user_agent()
-    if not ua:
-        raise EdgarError("SEC EDGAR needs your contact email (an SEC requirement). Add it in Settings under "
-                         "SEC EDGAR, or set SEC_USER_AGENT in .env.")
+    ua = os.getenv("SEC_USER_AGENT", "").strip()
+    if not ua or "@" not in ua:
+        raise EdgarError("SEC EDGAR needs SEC_USER_AGENT in .env, e.g. 'TradeResearch you@example.com' "
+                         "(the SEC requires a contact email). Restart the backend after setting it.")
     return {"User-Agent": ua, "Accept-Encoding": "gzip, deflate"}
 
 

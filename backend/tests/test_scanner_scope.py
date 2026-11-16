@@ -5,7 +5,7 @@ from fastapi.testclient import TestClient
 
 from app.agents import loop
 from app.main import app
-from app.tools import ibkr_gateway, sec_edgar
+from app.tools import ibkr_gateway
 from tests.test_orchestrator import FakeClient
 
 
@@ -77,21 +77,13 @@ def test_scope_limits_team_and_gives_unheld_sources_to_lead(monkeypatch):
             c.put(f"/api/roles/{tech['id']}", json={"tool_ids": tech["tool_ids"]})
 
 
-def test_edgar_email_from_settings(monkeypatch):
+def test_edgar_is_configured_in_env_only(monkeypatch):
     monkeypatch.delenv("SEC_USER_AGENT", raising=False)
     with TestClient(app) as c:
         conn = next(x for x in c.get("/api/connections").json() if x["slug"] == "sec_edgar")
-        assert conn["config"]["needs_contact_email"] and conn["secret_env"] is None
+        assert conn["secret_env"] == "SEC_USER_AGENT" and "needs_contact_email" not in conn["config"]
         sec_id = ids(c)["sec_filings"]
         status = lambda: {s["id"]: s for s in c.get("/api/tools-status").json()}[sec_id]  # noqa: E731
-        assert not status()["available"] and "Settings" in status()["reason"]
-        assert sec_edgar.user_agent() is None
-
-        c.put(f"/api/connections/{conn['id']}", json={"config": {**conn["config"], "contact_email": "not-an-email"}})
-        assert sec_edgar.user_agent() is None
-        c.put(f"/api/connections/{conn['id']}", json={"config": {**conn["config"], "contact_email": "joe@example.com"}})
-        assert sec_edgar.user_agent() == "TradeResearch joe@example.com" and status()["available"]
-
-        monkeypatch.setenv("SEC_USER_AGENT", "MyApp other@example.com")  # .env wins when set
-        assert sec_edgar.user_agent() == "MyApp other@example.com"
-        c.put(f"/api/connections/{conn['id']}", json={"config": conn["config"]})  # tidy up
+        assert status() == {"id": sec_id, "available": False, "reason": "set SEC_USER_AGENT in .env"}
+        monkeypatch.setenv("SEC_USER_AGENT", "TradeResearch joe@example.com")
+        assert status()["available"]

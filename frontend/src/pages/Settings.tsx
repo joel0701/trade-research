@@ -10,52 +10,6 @@ function zones(): string[] {
                   "Europe/London", "Europe/Paris", "Asia/Tokyo", "Asia/Hong_Kong", "Australia/Sydney"]; }
 }
 
-const EMAIL = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
-
-/** The SEC requires a contact email in every EDGAR request; it's saved on the SEC EDGAR connection. */
-function EdgarEmail({ profileEmail }: { profileEmail: string }) {
-  const [conn, setConn] = useState<any>(null);
-  const [email, setEmail] = useState("");
-  const [msg, setMsg] = useState("");
-  useEffect(() => {
-    api.get("/connections").then((cs) => {
-      const c = cs.find((x: any) => x.slug === "sec_edgar");
-      setConn(c ?? null);
-      setEmail(c?.config?.contact_email ?? "");
-    }).catch(() => {});
-  }, []);
-  if (!conn) return null;
-  const saved = conn.config?.contact_email ?? "";
-  const valid = email === "" || EMAIL.test(email);
-
-  async function save(value: string) {
-    setMsg("");
-    try {
-      const updated = await api.put(`/connections/${conn.id}`, { config: { ...conn.config, contact_email: value.trim() } });
-      setConn(updated); setEmail(value.trim());
-      setMsg(value.trim() ? "Saved. SEC EDGAR sources are ready." : "Removed.");
-    } catch (e: any) { setMsg(e.message); }
-  }
-
-  return (
-    <section className="card">
-      <h3>SEC EDGAR</h3>
-      <p className="muted small">The SEC requires a contact email with every EDGAR request (filings and insider trades).
-        It's sent only to sec.gov. SEC_USER_AGENT in .env, if set, takes priority.</p>
-      <label>Contact email for EDGAR</label>
-      <input type="email" value={email} placeholder="you@example.com" onChange={(e) => setEmail(e.target.value)} />
-      {!valid && <p className="error small">That doesn't look like an email address.</p>}
-      <div className="actions">
-        <button className="primary" disabled={!valid || email.trim() === saved} onClick={() => save(email)}>Save</button>
-        {profileEmail && profileEmail !== email && (
-          <button onClick={() => setEmail(profileEmail)}>Use my profile email</button>
-        )}
-      </div>
-      {msg && <p className="muted small">{msg}</p>}
-    </section>
-  );
-}
-
 export default function Settings() {
   const { profile, save, uploadAvatar, removeAvatar, fmt, zone, theme, toggleTheme } = useSettings();
   const [name, setName] = useState(profile.name);
@@ -116,8 +70,6 @@ export default function Settings() {
         </div>
         <p className="muted small">Now: {fmt()} ({zone.replace(/_/g, " ")})</p>
       </section>
-
-      <EdgarEmail profileEmail={profile.email} />
 
       <section className="card">
         <h3>Appearance</h3>

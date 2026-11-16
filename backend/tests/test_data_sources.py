@@ -73,7 +73,7 @@ def test_status_endpoint_explains_missing_setup(monkeypatch):
         tools = {t["slug"]: t["id"] for t in c.get("/api/tools").json()}
         status = {s["id"]: s for s in c.get("/api/tools-status").json()}
         assert status[tools["sec_filings"]] == {"id": tools["sec_filings"], "available": False,
-                                                "reason": "add your contact email in Settings (SEC EDGAR requires one)"}
+                                                "reason": "set SEC_USER_AGENT in .env"}
         assert not status[tools["bigdata_research"]]["available"]  # Bigdata.com not set up
         assert status[tools["fundamentals"]]["available"]  # Yahoo needs no setup
         monkeypatch.setenv("SEC_USER_AGENT", "TradeResearch test@example.com")
@@ -226,3 +226,15 @@ def test_unconfigured_ibkr_mcp_placeholder_is_removed(tmp_path):
         ids = {t.id: t.slug for t in db.exec(select(Tool)).all()}
         assert all(i in ids for i in role.tool_ids)  # no dangling references
         assert {"ibkr_gw_quote", "ibkr_gw_scanner"} <= {ids[i] for i in role.tool_ids}
+
+
+def test_settings_email_version_is_undone(tmp_path):
+    engine = create_engine(f"sqlite:///{tmp_path / 'sec.db'}")
+    SQLModel.metadata.create_all(engine)
+    with Session(engine) as db:
+        db.add(Connection(slug="sec_edgar", name="SEC EDGAR", kind="http", secret_env=None,
+                          config={"needs_contact_email": True, "contact_email": "joe@example.com"}))
+        db.commit()
+        ensure_data_sources(db)
+        sec = db.exec(select(Connection).where(Connection.slug == "sec_edgar")).one()
+        assert sec.config == {} and sec.secret_env == "SEC_USER_AGENT"

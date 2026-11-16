@@ -105,7 +105,7 @@ IB Gateway connection backs *IBKR quote*, *price bars*, *option chain*, *scanner
 
 Built in: Yahoo Finance (free, delayed), DuckDuckGo, Claude web search/fetch, and **SEC EDGAR**
 (free): recent filings, reading a filing's text, and Form 4 insider trades. EDGAR needs
-a contact email (an SEC requirement): set it in **Settings → SEC EDGAR**, or `SEC_USER_AGENT` in `.env`.
+`SEC_USER_AGENT` in `.env` with an app name and contact email (an SEC requirement).
 
 **FINRA** (free, no key): daily off-exchange short volume (the "dark pool short ratio", posted by
 6 pm ET) and weekly dark pool (ATS) volume by venue with ATS share of off-exchange volume (published

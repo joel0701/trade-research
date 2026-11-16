@@ -35,9 +35,9 @@ TOOLS = [
 CONNECTIONS = [
     dict(slug="yahoo", name="Yahoo Finance", kind="none",
          description="Free, delayed market data and fundamentals via yfinance. No setup needed."),
-    dict(slug="sec_edgar", name="SEC EDGAR", kind="http", config={"needs_contact_email": True},
-         description="Free SEC filings and insider (Form 4) data. The SEC requires a contact email: add it in "
-                     "Settings (or set SEC_USER_AGENT in .env)."),
+    dict(slug="sec_edgar", name="SEC EDGAR", kind="http", secret_env="SEC_USER_AGENT",
+         description="Free SEC filings and insider (Form 4) data. The SEC requires SEC_USER_AGENT in .env "
+                     "with your app name and contact email."),
     dict(slug="anthropic_tools", name="Anthropic server tools", kind="none",
          description="Web search and fetch run by Anthropic; work with Claude models only."),
     dict(slug="duckduckgo", name="DuckDuckGo", kind="none", description="Free web and news search."),
@@ -178,12 +178,12 @@ def ensure_data_sources(db: Session) -> None:
         db.delete(mcp)
         conns.pop("ibkr")
 
-    # SEC EDGAR: the contact email can now be set in Settings, so .env is no longer required.
+    # SEC EDGAR is configured only through SEC_USER_AGENT in .env. Undo a short-lived version
+    # that also allowed a contact email in Settings.
     sec = conns.get("sec_edgar")
-    if sec is not None and not sec.config.get("needs_contact_email"):
-        sec.config = {**sec.config, "needs_contact_email": True}
-        if sec.secret_env == "SEC_USER_AGENT":
-            sec.secret_env = None
+    if sec is not None and ("needs_contact_email" in sec.config or "contact_email" in sec.config):
+        sec.config = {k: v for k, v in sec.config.items() if k not in ("needs_contact_email", "contact_email")}
+        sec.secret_env = "SEC_USER_AGENT"
         sec.description = next(c["description"] for c in CONNECTIONS if c["slug"] == "sec_edgar")
         db.add(sec)
 
