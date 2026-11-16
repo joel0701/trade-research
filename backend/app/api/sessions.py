@@ -1,6 +1,6 @@
 """Chat sessions: list, read, send a message (streamed as Server-Sent Events)."""
 import json
-from typing import Any
+from typing import Any, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, UploadFile
 from fastapi.responses import FileResponse, StreamingResponse
@@ -9,8 +9,9 @@ from sqlmodel import Session, delete, select
 
 from app.agents.orchestrator import ACTIVE_SESSIONS, run_turn
 from app.db import get_session
-from app.attachments import UnsupportedFile, delete_files, save_upload
+from app.attachments import UnsupportedFile, copy_attachment, delete_files, save_upload
 from app.llm.providers import model_available, provider_of
+from app.skill_draft import DraftError, draft_skill
 from app.models import Attachment, ChatSession, Message, Run, Tool
 
 router = APIRouter(prefix="/sessions", tags=["sessions"])
@@ -27,6 +28,14 @@ class SessionUpdate(BaseModel):
     Send lead_model_tool_id: null to go back to the Lead role's default model."""
     title: str | None = None
     lead_model_tool_id: int | None = None
+
+
+class Fork(BaseModel):
+    message_id: int  # copy the conversation up to and including this message
+
+
+class Feedback(BaseModel):
+    rating: Literal["up", "down"] | None  # None clears it
 
 
 class SendMessage(BaseModel):
@@ -72,7 +81,7 @@ def _visible_messages(db: Session, session_id: int) -> list[dict[str, Any]]:
         if text.strip() or m.role == "user":
             atts = [_attachment_info(a) for a in db.exec(select(Attachment).where(Attachment.id.in_(refs))).all()] if refs else []
             out.append({"id": m.id, "role": m.role, "text": text, "thinking": thinking, "run_id": m.run_id,
-                        "attachments": atts,
+                        "attachments": atts, "model": m.model, "feedback": m.feedback,
                         "created_at": m.created_at.isoformat()})
     return out
 
@@ -168,6 +177,86 @@ def delete_chat(session_id: int, db: Session = Depends(get_session)) -> dict[str
         db.delete(chat)
     db.commit()
     return {"ok": True}
+
+
+@router.put("/{session_id}/messages/{message_id}/feedback")
+def set_feedback(session_id: int, message_id: int, body: Feedback, db: Session = Depends(get_session)) -> dict[str, Any]:
+    msg = db.get(Message, message_id)
+    if msg is None or msg.session_id != session_id or msg.role != "assistant":
+        raise HTTPException(404)
+    msg.feedback = body.rating
+    db.add(msg)
+    db.commit()
+    return {"id": msg.id, "feedback": msg.feedback}
+
+
+@router.post("/{session_id}/fork")
+def fork(session_id: int, body: Fork, db: Session = Depends(get_session)) -> dict[str, Any]:
+    """Start a new session holding this conversation up to a message, to explore another direction.
+    Messages, attachments (files copied) and trace runs are copied, so the two sessions are independent."""
+    src = db.get(ChatSession, session_id)
+    cut = db.get(Message, body.message_id)
+    if src is None or cut is None or cut.session_id != session_id:
+        raise HTTPException(404)
+    new = ChatSession(title=f"{src.title} (fork)"[:200], origin=f"fork:{session_id}",
+                      lead_model_tool_id=src.lead_model_tool_id)
+    db.add(new)
+    db.flush()
+
+    msgs = db.exec(select(Message).where(Message.session_id == session_id, Message.id <= cut.id)
+                   .order_by(Message.id)).all()
+
+    # Copy the trace runs those messages point to (and the specialist runs under them).
+    lead_ids = {m.run_id for m in msgs if m.run_id}
+    runs = db.exec(select(Run).where(Run.session_id == session_id)).all()
+    keep = [r for r in runs if r.id in lead_ids or r.parent_run_id in lead_ids]
+    run_map: dict[int, int] = {}
+    for r in sorted(keep, key=lambda r: (r.parent_run_id is not None, r.id)):  # parents first
+        data = r.model_dump(exclude={"id"})
+        data.update(session_id=new.id, parent_run_id=run_map.get(r.parent_run_id) if r.parent_run_id else None)
+        copy = Run(**data)
+        db.add(copy)
+        db.flush()
+        run_map[r.id] = copy.id
+
+    att_map: dict[int, int] = {}
+    for m in msgs:
+        content = []
+        for b in m.content:
+            if b.get("type") == "attachment_ref":
+                old = db.get(Attachment, b["attachment_id"])
+                if old is not None and b["attachment_id"] not in att_map:
+                    att = copy_attachment(db, old, new.id)
+                    att_map[old.id] = att.id
+                b = {**b, "attachment_id": att_map.get(b["attachment_id"], b["attachment_id"])}
+            content.append(b)
+        copy = Message(session_id=new.id, role=m.role, content=content, visible=m.visible, model=m.model,
+                       usage=m.usage, feedback=None, run_id=run_map.get(m.run_id) if m.run_id else None)
+        db.add(copy)
+        db.flush()
+        for old_id, new_id in att_map.items():
+            att = db.get(Attachment, new_id)
+            if att.message_id is None and any(b.get("attachment_id") == new_id for b in content
+                                              if b.get("type") == "attachment_ref"):
+                att.message_id = copy.id
+                db.add(att)
+    db.commit()
+    db.refresh(new)
+    return new.model_dump(mode="json")
+
+
+@router.post("/{session_id}/skill-draft")
+async def skill_draft(session_id: int, db: Session = Depends(get_session)) -> dict[str, Any]:
+    """Draft a reusable skill from this conversation, for the user to review and save."""
+    if db.get(ChatSession, session_id) is None:
+        raise HTTPException(404)
+    convo = [m for m in _visible_messages(db, session_id) if m["text"].strip()]
+    if not any(m["role"] == "user" for m in convo):
+        raise HTTPException(422, "Ask at least one question before saving the conversation as a skill.")
+    try:
+        return await draft_skill(db, convo)
+    except DraftError as e:
+        raise HTTPException(422, str(e)) from e
 
 
 @router.get("/{session_id}/runs")

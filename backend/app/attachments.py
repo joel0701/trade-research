@@ -85,6 +85,20 @@ def expand_refs(db: Session, content: list[dict[str, Any]]) -> list[dict[str, An
     return out
 
 
+def copy_attachment(db: Session, att: Attachment, session_id: int) -> Attachment:
+    """Duplicate an attachment (and its file) into another session, e.g. when forking."""
+    data = Path(att.path).read_bytes() if Path(att.path).exists() else b""
+    folder = UPLOAD_DIR / str(session_id)
+    folder.mkdir(parents=True, exist_ok=True)
+    path = folder / f"{uuid.uuid4().hex[:12]}_{Path(att.path).name.split('_', 1)[-1]}"
+    path.write_bytes(data)
+    copy = Attachment(session_id=session_id, filename=att.filename, media_type=att.media_type,
+                      kind=att.kind, size=att.size, path=str(path))
+    db.add(copy)
+    db.flush()
+    return copy
+
+
 def delete_files(atts: list[Attachment]) -> None:
     for a in atts:
         Path(a.path).unlink(missing_ok=True)

@@ -5,40 +5,19 @@ import remarkGfm from "remark-gfm";
 import { api, AttachmentInfo, Json, sendMessage, StreamEvent } from "../api";
 import Composer, { ModelTool } from "../Composer";
 import { FileIcon } from "../icons";
-import Trace, { parseTime, Run, runCost, setPriceTable } from "../Trace";
+import Trace, { parseTime, Run, setPriceTable } from "../Trace";
+import AnswerFooter from "../AnswerFooter";
+import SkillDraftDialog from "../SkillDraftDialog";
 import SessionList, { SessionRow } from "../SessionList";
 
 type ChatMsg = { id?: number; role: "user" | "assistant"; text: string; thinking?: string; run_id?: number | null;
-                attachments?: AttachmentInfo[] };
+                attachments?: AttachmentInfo[]; model?: string | null; feedback?: string | null; created_at?: string };
 
 function Markdown({ text }: { text: string }) {
   return <ReactMarkdown remarkPlugins={[remarkGfm]}>{text}</ReactMarkdown>;
 }
 
 const clock = (s: number) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, "0")}`;
-
-/** "Answered in 1:12 · Technical Analyst, News Analyst · est. $0.084 · View in trace" */
-function TurnSummary({ runId, runs, roleNames, onView }:
-  { runId: number; runs: Run[]; roleNames: Record<string, string>; onView: () => void }) {
-  const lead = runs.find((r) => r.id === runId);
-  if (!lead) return null;
-  const kids = runs.filter((r) => r.parent_run_id === runId);
-  const costs = [lead, ...kids].map(runCost);
-  const cost = costs.reduce<number>((s, c) => s + (c ?? 0), 0);
-  const partial = costs.some((c) => c == null);
-  const took = lead.finished_at ? (parseTime(lead.finished_at) - parseTime(lead.started_at)) / 1000 : null;
-  const names = [...new Set(kids.map((k) => roleNames[k.role_slug] ?? k.role_slug))];
-  const failed = [lead, ...kids].some((r) => r.status === "error");
-  return (
-    <div className="turn-summary">
-      {took != null && <span>Answered in {clock(took)}</span>}
-      <span>{names.length ? names.join(", ") : "No specialists consulted"}</span>
-      <span>{partial && cost === 0 ? "cost n/a" : `est. $${cost.toFixed(3)}${partial ? "+" : ""}`}</span>
-      {failed && <span className="error">some steps failed</span>}
-      <button className="link" onClick={onView}>View in trace</button>
-    </div>
-  );
-}
 
 export default function Research() {
   const { id } = useParams();
@@ -49,6 +28,7 @@ export default function Research() {
   const [messages, setMessages] = useState<ChatMsg[]>([]);
   const [runs, setRuns] = useState<Run[]>([]);
   const [models, setModels] = useState<ModelTool[]>([]);
+  const [draftingSkill, setDraftingSkill] = useState(false);
   const [skills, setSkills] = useState<Json[]>([]);
   const [defaultModelId, setDefaultModelId] = useState<number | null>(null); // the Lead role's model
   const [sessionModel, setSessionModel] = useState<number | null>(null);     // this session's override
@@ -248,6 +228,17 @@ export default function Research() {
     navigate(`/research/${r.session_id}`, { state: { autoSend: r.prompt } });
   }
 
+  async function forkAt(messageId: number) {
+    if (sessionId == null) return;
+    try {
+      const f = await api.post(`/sessions/${sessionId}/fork`, { message_id: messageId });
+      await loadSessions();
+      navigate(`/research/${f.id}`);
+    } catch (e: any) { setError(e.message); }
+  }
+
+  const reloadSkills = () => api.get("/skills").then((ss) => setSkills(ss.filter((x: any) => x.enabled))).catch(() => {});
+
   function viewInTrace(runId: number) {
     toggleTrace(true);
     setFocusRunId(runId);
@@ -294,8 +285,10 @@ export default function Research() {
               )}
               {m.thinking && <details><summary>Reasoning</summary><Markdown text={m.thinking} /></details>}
               <Markdown text={m.text} />
-              {m.role === "assistant" && m.run_id != null && !busy && (
-                <TurnSummary runId={m.run_id} runs={runs} roleNames={roleNames} onView={() => viewInTrace(m.run_id!)} />
+              {m.role === "assistant" && m.id != null && sessionId != null && !(busy && i === lastAssistant) && (
+                <AnswerFooter sessionId={sessionId} message={m} models={models} runs={runs} roleNames={roleNames}
+                              onViewTrace={viewInTrace} onSaveSkill={() => setDraftingSkill(true)} onFork={forkAt}
+                              onError={setError} />
               )}
             </div>
           ))}
@@ -326,6 +319,9 @@ export default function Research() {
           />
         </div>
       </section>
+      {draftingSkill && sessionId != null && (
+        <SkillDraftDialog sessionId={sessionId} models={models} onClose={() => setDraftingSkill(false)} onSaved={reloadSkills} />
+      )}
       {showTrace && sessionId != null && (
         <Trace runs={runs} roleNames={roleNames} focusRunId={focusRunId} onClose={() => toggleTrace(false)} />
       )}
