@@ -26,9 +26,11 @@ class NewSession(BaseModel):
 
 class SessionUpdate(BaseModel):
     """Partial update: only fields present in the request change.
-    Send lead_model_tool_id: null to go back to the Lead role's default model."""
+    Send lead_model_tool_id: null to go back to the Lead role's default model.
+    Send tool_scope: null to lift a scanner session's data-source limit (use the full team)."""
     title: str | None = None
     lead_model_tool_id: int | None = None
+    tool_scope: list[int] | None = None
 
 
 class Fork(BaseModel):
@@ -129,6 +131,8 @@ def update_session(session_id: int, body: SessionUpdate, db: Session = Depends(g
     if "lead_model_tool_id" in body.model_fields_set:
         _check_model(db, body.lead_model_tool_id)
         chat.lead_model_tool_id = body.lead_model_tool_id
+    if "tool_scope" in body.model_fields_set:
+        chat.tool_scope = body.tool_scope or None
     db.add(chat)
     db.commit()
     db.refresh(chat)
@@ -283,7 +287,7 @@ async def send(session_id: int, body: SendMessage, db: Session = Depends(get_ses
     text = body.text.strip() or "Please analyse the attached document(s)."
 
     # Some assigned data sources are down: ask the user before running (nothing is saved yet).
-    report = unavailable_report(db)
+    report = unavailable_report(db, chat.tool_scope)
     if report:
         agreed = report["fingerprint"] in (body.proceed, chat.ack_unavailable)
         if not agreed:

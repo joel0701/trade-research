@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { api } from "../api";
 import { Field, JsonField, MasterDetail, Toggle, useCrud } from "../admin";
+import SourcePicker from "../SourcePicker";
 
 type Option = { code: string; label: string };
 
@@ -46,7 +47,7 @@ export default function Scanners() {
   return (
     <MasterDetail title="Scanners" crud={crud}
       rowExtra={(s) => <span className={`badge ${s.source === "ibkr" ? "badge-ibkr" : ""}`}>{s.source === "ibkr" ? "IBKR" : "Rules"}</span>}
-      blank={{ slug: "", name: "", description: "", source: "rules", params: {}, universe: [], rules: { all: [] },
+      blank={{ slug: "", name: "", description: "", source: "rules", params: {}, universe: [], rules: { all: [] }, tool_ids: [],
                sort_by: null, limit: 25, follow_up_prompt: "Review these results and pick the most promising candidates.", enabled: true }}>
       {(s, set) => {
         const p = s.params ?? {};
@@ -104,6 +105,12 @@ export default function Scanners() {
                    value={s.sort_by ?? ""} onChange={(v) => set({ sort_by: v || null })} />
             <label>Max results</label>
             <input type="number" value={s.limit} onChange={(e) => set({ limit: Number(e.target.value) })} />
+            <label>Data sources for the follow-up analysis</label>
+            <p className="muted small">
+              The session this scanner opens uses only these sources, and only these are checked before it runs.
+              {(s.tool_ids ?? []).length === 0 && <strong> None chosen: the full team's sources are used.</strong>}
+            </p>
+            <SourcePicker value={s.tool_ids ?? []} onChange={(tool_ids) => set({ tool_ids })} />
             <Field label="Follow-up prompt for the Lead" value={s.follow_up_prompt}
                    onChange={(follow_up_prompt) => set({ follow_up_prompt })} multiline rows={3} />
             <Toggle label="Enabled" value={s.enabled} onChange={(enabled) => set({ enabled })} />

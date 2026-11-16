@@ -35,9 +35,9 @@ TOOLS = [
 CONNECTIONS = [
     dict(slug="yahoo", name="Yahoo Finance", kind="none",
          description="Free, delayed market data and fundamentals via yfinance. No setup needed."),
-    dict(slug="sec_edgar", name="SEC EDGAR", kind="http", secret_env="SEC_USER_AGENT",
-         description="Free SEC filings and insider (Form 4) data. The SEC requires SEC_USER_AGENT in .env "
-                     "with your app name and contact email."),
+    dict(slug="sec_edgar", name="SEC EDGAR", kind="http", config={"needs_contact_email": True},
+         description="Free SEC filings and insider (Form 4) data. The SEC requires a contact email: add it in "
+                     "Settings (or set SEC_USER_AGENT in .env)."),
     dict(slug="anthropic_tools", name="Anthropic server tools", kind="none",
          description="Web search and fetch run by Anthropic; work with Claude models only."),
     dict(slug="duckduckgo", name="DuckDuckGo", kind="none", description="Free web and news search."),
@@ -177,6 +177,15 @@ def ensure_data_sources(db: Session) -> None:
         db.flush()
         db.delete(mcp)
         conns.pop("ibkr")
+
+    # SEC EDGAR: the contact email can now be set in Settings, so .env is no longer required.
+    sec = conns.get("sec_edgar")
+    if sec is not None and not sec.config.get("needs_contact_email"):
+        sec.config = {**sec.config, "needs_contact_email": True}
+        if sec.secret_env == "SEC_USER_AGENT":
+            sec.secret_env = None
+        sec.description = next(c["description"] for c in CONNECTIONS if c["slug"] == "sec_edgar")
+        db.add(sec)
 
     # Vendor name first in source names (only names you haven't edited).
     for slug, (old_name, new_name) in RENAMES.items():
@@ -353,12 +362,35 @@ IBKR_SCANNERS = [
 ]
 
 
+# Data sources each built-in scanner's follow-up analysis uses (by source slug).
+TECHNICALS = ["ibkr_gw_quote", "ibkr_gw_bars", "technical_snapshot", "price_history", "massive_quote"]
+NEWS = ["massive_news", "web_search", "ddg_search"]
+OPTIONS = ["ibkr_gw_options", "massive_option_chain", "options_chain"]
+SCANNER_SOURCES = {
+    "oversold_uptrend": TECHNICALS + NEWS,
+    "momentum_breakout": TECHNICALS + NEWS + ["finra_short_volume"],
+    "ibkr_top_gainers": TECHNICALS + NEWS + ["finra_short_volume"],
+    "ibkr_unusual_options": OPTIONS + ["ibkr_gw_quote", "massive_quote", "technical_snapshot"] + NEWS
+                            + ["finra_short_volume"],
+    "ibkr_iv_rich": OPTIONS + ["ibkr_gw_quote", "massive_quote", "technical_snapshot", "fundamentals"] + NEWS,
+}
+
+
 def ensure_scanners(db: Session) -> None:
-    """Add the default IBKR scanners if they're missing (never changes ones you've edited)."""
-    existing = {s.slug for s in db.exec(select(Screener)).all()}
+    """Add the default IBKR scanners if missing, and give built-in scanners their default data
+    sources if they have none yet (never changes scanners you've edited)."""
+    existing = {s.slug: s for s in db.exec(select(Screener)).all()}
     for spec in IBKR_SCANNERS:
         if spec["slug"] not in existing:
-            db.add(Screener(universe=[], rules={}, **spec))
+            sc = Screener(universe=[], rules={}, **spec)
+            db.add(sc)
+            existing[sc.slug] = sc
+    tool_ids = {t.slug: t.id for t in db.exec(select(Tool)).all()}
+    for slug, sources in SCANNER_SOURCES.items():
+        sc = existing.get(slug)
+        if sc is not None and not sc.tool_ids:
+            sc.tool_ids = [tool_ids[s] for s in sources if s in tool_ids]
+            db.add(sc)
     db.commit()
 
 

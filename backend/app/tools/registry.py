@@ -51,6 +51,11 @@ def availability(tool: Tool, conn: Connection | None) -> tuple[bool, str | None]
             return False, f"set {conn.secret_env} in .env"
         if conn.kind == "mcp" and "REPLACE" in json.dumps(conn.config):
             return False, f"set the server address on connection {conn.name}"
+        if conn.config.get("needs_contact_email"):
+            from app.tools.sec_edgar import user_agent
+
+            if not user_agent():
+                return False, "add your contact email in Settings (SEC EDGAR requires one)"
         if conn.kind == "tws":
             from app.tools.ibkr_gateway import gateway_reachable, settings
 

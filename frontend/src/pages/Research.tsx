@@ -42,6 +42,7 @@ export default function Research() {
   const [skills, setSkills] = useState<Json[]>([]);
   const [defaultModelId, setDefaultModelId] = useState<number | null>(null); // the Lead role's model
   const [sessionModel, setSessionModel] = useState<number | null>(null);     // this session's override
+  const [toolScope, setToolScope] = useState<number[] | null>(null);         // scanner sessions: limited sources
   const [pendingModel, setPendingModel] = useState<number | null>(null);     // chosen before a session exists
   // True while the session on screen has a turn in progress, whether this page started it
   // or it was started earlier (e.g. before you switched to another screen).
@@ -121,7 +122,7 @@ export default function Research() {
 
   useEffect(() => {
     setError(""); setFocusRunId(null); setRuns([]); setBusy(false); setLiveText(false); setPendingConfirm(null);
-    if (sessionId == null) { setMessages([]); setSessionModel(pendingModel); return; }
+    if (sessionId == null) { setMessages([]); setSessionModel(pendingModel); setToolScope(null); return; }
     try { localStorage.setItem("lastSession", String(sessionId)); } catch { /* storage unavailable */ }
     loadRuns(sessionId);
     // Only the latest load may update the screen. React runs this effect twice in
@@ -132,6 +133,7 @@ export default function Research() {
       if (streaming.current === sessionId) return; // this page is streaming it: don't overwrite
       setMessages(s.messages);
       setSessionModel(s.lead_model_tool_id ?? null);
+      setToolScope(s.tool_scope ?? null);
       setBusy(!!s.running); // a turn started earlier is still going: show its status
       showLatestAnswer();
       // Skills and screeners open a new session with a prompt to send right away.
@@ -295,6 +297,15 @@ export default function Research() {
       <section className="chat">
         <div className="chat-head">
           <span className="title">{sessions.find((s) => s.id === sessionId)?.title ?? "New research"}</span>
+          {toolScope && toolScope.length > 0 && (
+            <span className="scope-chip" title="This session (started from a scanner) only uses the scanner's data sources">
+              Scanner sources only ({toolScope.length})
+              <button className="link" onClick={async () => {
+                try { await api.patch(`/sessions/${sessionId}`, { tool_scope: null }); setToolScope(null); }
+                catch (e: any) { setError(e.message); }
+              }}>Use full team</button>
+            </span>
+          )}
           <button onClick={() => toggleTrace(!showTrace)}>{showTrace ? "Hide trace" : "Show trace"}</button>
         </div>
         <Timeline scroller={scroller} items={messages.map((m, i) => ({

@@ -22,4 +22,4 @@ def _no_preflight_prompt(request, monkeypatch):
         return
     from app.api import sessions
 
-    monkeypatch.setattr(sessions, "unavailable_report", lambda db: None)
+    monkeypatch.setattr(sessions, "unavailable_report", lambda db, scope=None: None)

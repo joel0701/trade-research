@@ -281,3 +281,7 @@ ul.plain li { padding: 3px 0; }
 .badge-ibkr { background: #3a2a12; color: #e0a24a; }
 :root[data-theme="light"] .badge-ibkr { background: #fbf0dd; color: #8a5a10; }
 .grid-3 { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 0 12px; }
+.scope-chip { display: inline-flex; align-items: center; gap: 8px; margin-left: auto; margin-right: 10px; padding: 3px 10px;
+  border-radius: 999px; font-size: 12px; white-space: nowrap; background: #3a2a12; color: #e0a24a; }
+:root[data-theme="light"] .scope-chip { background: #fbf0dd; color: #8a5a10; }
+.scope-chip .link { color: var(--accent); padding: 0; font-size: 12px; }

@@ -153,6 +153,30 @@ def _lead_model_for(chat: ChatSession, lead: Role, tools: dict[int, Tool]) -> Mo
     return _model_for(lead, tools)
 
 
+def apply_scope(scope: list[int] | None, lead: Role, specialists: list[Role],
+                tools: dict[int, Tool]) -> tuple[Role, list[Role]]:
+    """Limit a session to a set of data sources (e.g. a scanner's). Works on copies, so role
+    settings are never changed. Specialists left with no sources aren't offered to the Lead."""
+    if not scope:
+        return lead, specialists
+    allowed = set(scope)
+
+    def scoped(r: Role) -> Role:
+        copy = Role.model_validate(r.model_dump())
+        copy.tool_ids = [i for i in r.tool_ids if i in allowed]
+        return copy
+
+    names = ", ".join(tools[i].name for i in scope if i in tools)
+    lead = scoped(lead)
+    specialists = [s for s in map(scoped, specialists) if s.tool_ids]
+    # A chosen source no specialist has is given to the Lead, so it still gets used.
+    held = {i for s in specialists for i in s.tool_ids} | set(lead.tool_ids)
+    lead.tool_ids += [i for i in scope if i not in held and i in tools and tools[i].kind != "model"]
+    lead.system_prompt += (f"\n\nThis session is limited to these data sources: {names}. Work from them and the "
+                           "information already in the conversation.")
+    return lead, specialists
+
+
 def _prepare_turn(session_id: int, user_text: str, attachment_ids: list[int] | None = None):
     # expire_on_commit=False: roles/tools are used after this block closes.
     with Session(engine, expire_on_commit=False) as db:
@@ -165,6 +189,7 @@ def _prepare_turn(session_id: int, user_text: str, attachment_ids: list[int] | N
         if lead is None:
             raise ValueError("No enabled Lead role configured")
         specialists = [r for r in roles if not r.is_lead]
+        lead, specialists = apply_scope(chat.tool_scope, lead, specialists, tools)
         history = [{"role": m.role, "content": expand_refs(db, m.content)} for m in
                    db.exec(select(Message).where(Message.session_id == session_id).order_by(Message.id)).all()]
 

@@ -72,7 +72,7 @@ cd backend && uv run pytest
 | **Tools** | Models (model id, effort, max tokens, refusal fallbacks), built-in Python functions, Claude web search/fetch, MCP servers |
 | **Roles** | Each analyst's model, system prompt, allowed tools, iteration limit; which role is the Lead |
 | **Skills** | Prompt templates with parameters, e.g. `{ticker}` |
-| **Scanners** | Rule-based (ticker universe + rules) or IBKR market scanner (scan type, market, price/volume/market-cap filters, optional rules); sort, follow-up prompt |
+| **Scanners** | Rule-based (ticker universe + rules) or IBKR market scanner (scan type, market, price/volume/market-cap filters, optional rules); sort; the data sources the follow-up analysis may use; follow-up prompt |
 
 Default models: Lead and Strategy Optimizer on Claude Opus 5.5; most specialists on Sonnet 5.5;
 Sector Mapper on Haiku 5.5. Opus, Sonnet and Fable use server-side refusal fallbacks
@@ -105,7 +105,7 @@ IB Gateway connection backs *IBKR quote*, *price bars*, *option chain*, *scanner
 
 Built in: Yahoo Finance (free, delayed), DuckDuckGo, Claude web search/fetch, and **SEC EDGAR**
 (free): recent filings, reading a filing's text, and Form 4 insider trades. EDGAR needs
-`SEC_USER_AGENT` in `.env` with an app name and contact email (an SEC requirement).
+a contact email (an SEC requirement): set it in **Settings → SEC EDGAR**, or `SEC_USER_AGENT` in `.env`.
 
 **FINRA** (free, no key): daily off-exchange short volume (the "dark pool short ratio", posted by
 6 pm ET) and weekly dark pool (ATS) volume by venue with ATS share of off-exchange volume (published
@@ -120,7 +120,8 @@ checks every source assigned to the active roles; if any are unavailable it hold
 asks in the chat whether to continue, grouped by cause, with the impact: *high* when a role has no
 other working source for that kind of data, *low* when another source covers it. You can continue,
 continue without being asked again in that session (until the set of unavailable sources changes),
-or cancel. Sources you've disabled yourself aren't reported.
+or cancel. Sources you've disabled yourself aren't reported. Sessions started from a scanner use
+only that scanner's data sources (and only those are checked); **Use full team** lifts the limit.
 **Order placement is always blocked**: any MCP tool that places, changes or cancels orders, or
 moves money, is never exposed to the agents (`TRADING_TOOL` in `backend/app/tools/registry.py`).
 

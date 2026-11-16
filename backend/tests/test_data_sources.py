@@ -73,7 +73,7 @@ def test_status_endpoint_explains_missing_setup(monkeypatch):
         tools = {t["slug"]: t["id"] for t in c.get("/api/tools").json()}
         status = {s["id"]: s for s in c.get("/api/tools-status").json()}
         assert status[tools["sec_filings"]] == {"id": tools["sec_filings"], "available": False,
-                                                "reason": "set SEC_USER_AGENT in .env"}
+                                                "reason": "add your contact email in Settings (SEC EDGAR requires one)"}
         assert not status[tools["bigdata_research"]]["available"]  # Bigdata.com not set up
         assert status[tools["fundamentals"]]["available"]  # Yahoo needs no setup
         monkeypatch.setenv("SEC_USER_AGENT", "TradeResearch test@example.com")

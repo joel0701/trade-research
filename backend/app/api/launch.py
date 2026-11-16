@@ -82,7 +82,8 @@ async def run_screen(screener_id: int, db: Session = Depends(get_session)) -> di
         rows = await run_screener(scr.universe, scr.rules, scr.sort_by, scr.limit)
         what = f"Scanner **{scr.name}** ({scr.description}) checked {len(scr.universe)} tickers and found {len(rows)} matches"
     table = results_to_markdown(rows)
-    chat = ChatSession(title=f"Scanner: {scr.name} ({len(rows)} results)", origin=f"screener:{scr.id}")
+    chat = ChatSession(title=f"Scanner: {scr.name} ({len(rows)} results)", origin=f"screener:{scr.id}",
+                       tool_scope=list(scr.tool_ids) or None)  # follow-up uses the scanner's sources
     db.add(chat)
     db.commit()
     db.refresh(chat)

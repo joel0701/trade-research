@@ -103,6 +103,9 @@ class ChatSession(SQLModel, table=True):
     lead_model_tool_id: int | None = None
     # "Don't ask again in this session" for this set of unavailable sources (see app.preflight).
     ack_unavailable: str | None = None
+    # When set (e.g. a session started from a scanner), only these data sources are used: each role
+    # keeps just the ones it has, and roles left with none aren't offered to the Lead.
+    tool_scope: list[int] | None = Field(default=None, sa_column=Column(JSON))
     created_at: datetime = Field(default_factory=now, sa_type=UTCDateTime)
     updated_at: datetime = Field(default_factory=now, sa_type=UTCDateTime)
 
@@ -175,6 +178,8 @@ class Screener(SQLModel, table=True):
     rules: dict[str, Any] = Field(default_factory=dict, sa_column=Column(JSON))
     source: str = "rules"
     params: dict[str, Any] = Field(default_factory=dict, sa_column=Column(JSON))
+    # Data sources the follow-up analysis may use (empty = the full team's sources).
+    tool_ids: list[int] = Field(default_factory=list, sa_column=Column(JSON))
     sort_by: str | None = None
     limit: int = 25
     follow_up_prompt: str = (

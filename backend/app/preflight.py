@@ -14,7 +14,8 @@ from app.models import Connection, Role, Tool
 from app.tools.registry import availability
 
 
-def unavailable_report(db: Session) -> dict[str, Any] | None:
+def unavailable_report(db: Session, scope: list[int] | None = None) -> dict[str, Any] | None:
+    """scope: limit the check to these sources (a scanner session's), as the run itself will."""
     roles = db.exec(select(Role).where(Role.enabled == True)).all()  # noqa: E712
     tools = {t.id: t for t in db.exec(select(Tool)).all()}
     conns = {c.id: c for c in db.exec(select(Connection)).all()}
@@ -29,9 +30,15 @@ def unavailable_report(db: Session) -> dict[str, Any] | None:
             status[t.id] = availability(t, conn)
         return status[t.id]
 
+    # A scoped source no role has goes to the Lead at run time (see orchestrator.apply_scope).
+    held = {i for r in roles for i in r.tool_ids}
+    orphans = [i for i in (scope or []) if i not in held]
+
     items = []
     for role in sorted(roles, key=lambda r: (not r.is_lead, r.name)):
-        assigned = [tools[i] for i in role.tool_ids if i in tools and tools[i].kind != "model"]
+        ids = list(role.tool_ids) + (orphans if role.is_lead else [])
+        assigned = [tools[i] for i in ids if i in tools and tools[i].kind != "model"
+                    and (not scope or i in scope)]
         working = [t for t in assigned if (check(t) or (False,))[0]]
         for t in assigned:
             st = check(t)
