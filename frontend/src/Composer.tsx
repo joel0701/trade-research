@@ -47,7 +47,7 @@ function SkillsMenu({ skills, onRun }: { skills: Json[]; onRun: (skill: Json, pa
   return (
     <div className="pop-anchor" ref={pop.ref}>
       <button type="button" className="tool-btn" onClick={() => { pop.setOpen(!pop.open); setChosen(null); }}>
-        <Sparkles /> Skills
+        <Sparkles /> <span className="tool-label">Skills</span>
       </button>
       {pop.open && (
         <div className="popover up">
@@ -178,7 +178,7 @@ export default function Composer({ placeholder, busy, models, modelId, defaultMo
           <button type="button" className="tool-btn model-btn" onClick={() => modelPop.setOpen(!modelPop.open)}
                   title="Model the Lead Analyst uses for this session">
             <ModelMark color={VENDOR_COLORS[effective?.provider ?? ""]} />
-            <strong>{effective?.name.replace(/^Claude /, "") ?? "Model"}</strong>
+            <strong className="model-name">{effective?.name.replace(/^Claude /, "") ?? "Model"}</strong>
             {effective && !effective.available && <span className="error small">no API key</span>}
             <Chevron />
           </button>
@@ -213,7 +213,7 @@ export default function Composer({ placeholder, busy, models, modelId, defaultMo
             </div>
           )}
         </div>
-        <button type="button" className="tool-btn" onClick={() => fileInput.current?.click()}><Paperclip /> Attach</button>
+        <button type="button" className="tool-btn" onClick={() => fileInput.current?.click()}><Paperclip /> <span className="tool-label">Attach</span></button>
         <input ref={fileInput} type="file" multiple accept={ACCEPT} hidden
                onChange={(e) => { if (e.target.files) addFiles(e.target.files); e.target.value = ""; }} />
         <SkillsMenu skills={skills} onRun={onRunSkill} />

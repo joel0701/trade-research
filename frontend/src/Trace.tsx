@@ -85,8 +85,8 @@ function RunBody({ r }: { r: Run }) {
   );
 }
 
-export default function Trace({ runs, roleNames, focusRunId, onClose }:
-  { runs: Run[]; roleNames: Record<string, string>; focusRunId: number | null; onClose: () => void }) {
+export default function Trace({ runs, roleNames, focusRunId, onClose, width }:
+  { runs: Run[]; roleNames: Record<string, string>; focusRunId: number | null; onClose: () => void; width?: number }) {
   const focused = useRef<HTMLDetailsElement>(null);
   useEffect(() => { focused.current?.scrollIntoView({ block: "start", behavior: "smooth" }); }, [focusRunId]);
 
@@ -100,7 +100,7 @@ export default function Trace({ runs, roleNames, focusRunId, onClose }:
   const openId = focusRunId ?? turns[turns.length - 1]?.id;
 
   return (
-    <aside className="trace">
+    <aside className="trace" style={width ? { width } : undefined}>
       <div className="trace-head">
         <strong>Trace</strong>
         <span className="muted">{turns.length} turns · {runs.length - turns.length} consults · {totalLabel}</span>

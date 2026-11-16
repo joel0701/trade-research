@@ -10,6 +10,7 @@ import AnswerFooter from "../AnswerFooter";
 import SkillDraftDialog from "../SkillDraftDialog";
 import Timeline from "../Timeline";
 import ProfileCard from "../ProfileCard";
+import { ResizeHandle, usePanelWidth } from "../Resizable";
 import SessionList, { SessionRow } from "../SessionList";
 
 type ChatMsg = { id?: number; role: "user" | "assistant"; text: string; thinking?: string; run_id?: number | null;
@@ -31,6 +32,8 @@ export default function Research() {
   const [runs, setRuns] = useState<Run[]>([]);
   const [models, setModels] = useState<ModelTool[]>([]);
   const [draftingSkill, setDraftingSkill] = useState(false);
+  const left = usePanelWidth("panel.sidebar", 260, 180, 480);
+  const right = usePanelWidth("panel.trace", 420, 280, 820);
   const [skills, setSkills] = useState<Json[]>([]);
   const [defaultModelId, setDefaultModelId] = useState<number | null>(null); // the Lead role's model
   const [sessionModel, setSessionModel] = useState<number | null>(null);     // this session's override
@@ -257,7 +260,7 @@ export default function Research() {
 
   return (
     <div className="research">
-      <aside className="sidebar">
+      <aside className="sidebar" style={{ width: left.width }}>
         <button className="primary" style={{ width: "100%", marginBottom: 8 }} onClick={() => navigate("/research")}>
           + New research
         </button>
@@ -268,6 +271,7 @@ export default function Research() {
         </div>
         <ProfileCard />
       </aside>
+      <ResizeHandle side="left" panel={left} label="Resize session list" />
       <section className="chat">
         <div className="chat-head">
           <span className="title">{sessions.find((s) => s.id === sessionId)?.title ?? "New research"}</span>
@@ -333,7 +337,11 @@ export default function Research() {
         <SkillDraftDialog sessionId={sessionId} models={models} onClose={() => setDraftingSkill(false)} onSaved={reloadSkills} />
       )}
       {showTrace && sessionId != null && (
-        <Trace runs={runs} roleNames={roleNames} focusRunId={focusRunId} onClose={() => toggleTrace(false)} />
+        <>
+          <ResizeHandle side="right" panel={right} label="Resize trace panel" />
+          <Trace runs={runs} roleNames={roleNames} focusRunId={focusRunId} onClose={() => toggleTrace(false)}
+                 width={right.width} />
+        </>
       )}
     </div>
   );
