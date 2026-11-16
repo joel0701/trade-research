@@ -1,0 +1,158 @@
+"""Built-in Python tools. Each has a JSON schema and an async implementation.
+
+Market data here comes from Yahoo Finance (yfinance), which is free and fine for local
+research. For real-time and account data, add the IBKR MCP server in the Tools screen.
+Register new functions in PYTHON_TOOLS; then add a Tool row with kind=python.
+"""
+import asyncio
+import json
+from collections.abc import Awaitable, Callable
+from dataclasses import dataclass
+from typing import Any
+
+import pandas as pd
+
+from app.tools.indicators import snapshot
+
+
+@dataclass
+class PythonTool:
+    description: str
+    input_schema: dict[str, Any]
+    fn: Callable[..., Awaitable[str]]
+
+
+def _ticker_schema(extra: dict | None = None, required: list[str] | None = None) -> dict:
+    props = {"ticker": {"type": "string", "description": "Stock symbol, e.g. AAPL"}}
+    props.update(extra or {})
+    return {"type": "object", "properties": props, "required": ["ticker", *(required or [])]}
+
+
+def _yf():
+    import yfinance as yf  # imported lazily: slow import
+
+    return yf
+
+
+async def price_history(ticker: str, period: str = "6mo", interval: str = "1d") -> str:
+    def run() -> str:
+        df = _yf().Ticker(ticker).history(period=period, interval=interval, auto_adjust=True)
+        if df.empty:
+            return f"No price data for {ticker}."
+        df = df[["Open", "High", "Low", "Close", "Volume"]].round(4)
+        rows = df.tail(60)  # keep tool results compact
+        return (
+            f"{ticker} {interval} bars, last {len(rows)} of {len(df)} ({period}):\n"
+            + rows.to_csv(date_format="%Y-%m-%d")
+        )
+
+    return await asyncio.to_thread(run)
+
+
+async def technical_snapshot(ticker: str) -> str:
+    def run() -> str:
+        df = _yf().Ticker(ticker).history(period="2y", interval="1d", auto_adjust=True)
+        if len(df) < 30:
+            return f"Not enough price history for {ticker}."
+        return json.dumps({"ticker": ticker, **snapshot(df)})
+
+    return await asyncio.to_thread(run)
+
+
+_FUNDAMENTAL_KEYS = [
+    "longName", "sector", "industry", "marketCap", "enterpriseValue", "trailingPE", "forwardPE",
+    "pegRatio", "priceToBook", "priceToSalesTrailing12Months", "enterpriseToEbitda",
+    "profitMargins", "operatingMargins", "grossMargins", "returnOnEquity", "returnOnAssets",
+    "revenueGrowth", "earningsGrowth", "totalRevenue", "ebitda", "freeCashflow", "totalCash",
+    "totalDebt", "debtToEquity", "currentRatio", "dividendYield", "payoutRatio", "beta",
+    "sharesOutstanding", "shortPercentOfFloat", "heldPercentInstitutions",
+    "targetMeanPrice", "recommendationKey", "numberOfAnalystOpinions",
+]
+
+
+async def fundamentals(ticker: str) -> str:
+    def run() -> str:
+        info = _yf().Ticker(ticker).info or {}
+        data = {k: info.get(k) for k in _FUNDAMENTAL_KEYS if info.get(k) is not None}
+        return json.dumps({"ticker": ticker, **data}) if data else f"No fundamentals for {ticker}."
+
+    return await asyncio.to_thread(run)
+
+
+async def options_chain(ticker: str, expiry: str | None = None, strikes_around_spot: int = 10) -> str:
+    def run() -> str:
+        t = _yf().Ticker(ticker)
+        expiries = list(t.options or [])
+        if not expiries:
+            return f"No listed options for {ticker}."
+        exp = expiry if expiry in expiries else expiries[0]
+        spot = float(t.history(period="5d")["Close"].iloc[-1])
+        chain = t.option_chain(exp)
+        cols = ["strike", "lastPrice", "bid", "ask", "volume", "openInterest", "impliedVolatility"]
+
+        def near(df: pd.DataFrame) -> str:
+            df = df.assign(dist=(df["strike"] - spot).abs()).nsmallest(strikes_around_spot * 2, "dist")
+            return df.sort_values("strike")[cols].round(4).to_csv(index=False)
+
+        return (
+            f"{ticker} spot {spot:.2f}, expiry {exp}. Other expiries: {', '.join(expiries[:12])}\n"
+            f"CALLS:\n{near(chain.calls)}\nPUTS:\n{near(chain.puts)}"
+        )
+
+    return await asyncio.to_thread(run)
+
+
+async def ddg_search(query: str, max_results: int = 8, news: bool = False) -> str:
+    def run() -> str:
+        from ddgs import DDGS
+
+        with DDGS() as d:
+            hits = list(d.news(query, max_results=max_results) if news else d.text(query, max_results=max_results))
+        return json.dumps(hits, default=str) if hits else "No results."
+
+    return await asyncio.to_thread(run)
+
+
+PYTHON_TOOLS: dict[str, PythonTool] = {
+    "price_history": PythonTool(
+        "Daily or intraday OHLCV price bars for a stock (most recent 60 bars returned).",
+        _ticker_schema({
+            "period": {"type": "string", "description": "1mo, 3mo, 6mo, 1y, 2y, 5y, ytd, max"},
+            "interval": {"type": "string", "description": "1d, 1wk, 1h, 15m (intraday only for short periods)"},
+        }),
+        price_history,
+    ),
+    "technical_snapshot": PythonTool(
+        "Latest technical indicators for a stock: SMAs, RSI, MACD, ATR, relative volume, "
+        "% changes and distance from 52-week high.",
+        _ticker_schema(),
+        technical_snapshot,
+    ),
+    "fundamentals": PythonTool(
+        "Key fundamentals and valuation for a stock: sector, margins, growth, multiples, "
+        "balance sheet, analyst targets.",
+        _ticker_schema(),
+        fundamentals,
+    ),
+    "options_chain": PythonTool(
+        "Options chain near the money for one expiry: bid/ask, volume, open interest, implied volatility.",
+        _ticker_schema({
+            "expiry": {"type": "string", "description": "YYYY-MM-DD; defaults to the nearest expiry"},
+            "strikes_around_spot": {"type": "integer", "description": "Strikes each side of spot (default 10)"},
+        }),
+        options_chain,
+    ),
+    "ddg_search": PythonTool(
+        "DuckDuckGo web or news search. Returns titles, URLs and snippets.",
+        {
+            "type": "object",
+            "properties": {
+                "query": {"type": "string"},
+                "max_results": {"type": "integer"},
+                "news": {"type": "boolean", "description": "Search news instead of the web"},
+            },
+            "required": ["query"],
+        },
+        ddg_search,
+    ),
+}

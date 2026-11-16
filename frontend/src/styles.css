@@ -1,0 +1,64 @@
+:root {
+  --bg: #f7f7f5; --panel: #ffffff; --text: #1d1d1b; --muted: #6b6b66; --border: #e3e2dd;
+  --accent: #2f6fdb; --accent-soft: #e8f0fd; --error: #c0392b; --user: #eef3ea;
+  font-family: system-ui, -apple-system, "Segoe UI", sans-serif; font-size: 15px; color: var(--text);
+}
+@media (prefers-color-scheme: dark) {
+  :root { --bg: #161615; --panel: #1f1f1d; --text: #ecebe6; --muted: #9b9a94; --border: #33322f;
+          --accent: #6ea0f5; --accent-soft: #1f2a3d; --user: #232b22; }
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); }
+.app { display: flex; flex-direction: column; height: 100vh; }
+.topnav { display: flex; gap: 4px; align-items: center; padding: 8px 16px; border-bottom: 1px solid var(--border); background: var(--panel); }
+.topnav .brand { font-weight: 600; margin-right: 16px; }
+.topnav a { color: var(--muted); text-decoration: none; padding: 6px 10px; border-radius: 6px; }
+.topnav a.active { color: var(--text); background: var(--accent-soft); }
+main { flex: 1; min-height: 0; overflow: auto; }
+button { font: inherit; padding: 6px 12px; border-radius: 6px; border: 1px solid var(--border); background: var(--panel); color: var(--text); cursor: pointer; }
+button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+button:disabled { opacity: .5; cursor: default; }
+input, textarea, select { font: inherit; padding: 6px 8px; border-radius: 6px; border: 1px solid var(--border); background: var(--panel); color: var(--text); width: 100%; }
+textarea { resize: vertical; }
+label { display: block; font-size: 13px; color: var(--muted); margin: 10px 0 4px; }
+.error { color: var(--error); }
+.muted { color: var(--muted); font-size: 13px; }
+
+/* research */
+.research { display: flex; height: 100%; }
+.sidebar { width: 260px; border-right: 1px solid var(--border); background: var(--panel); overflow: auto; padding: 8px; flex-shrink: 0; }
+.sidebar .item { padding: 8px; border-radius: 6px; cursor: pointer; font-size: 14px; display: flex; justify-content: space-between; gap: 6px; }
+.sidebar .item:hover, .sidebar .item.active { background: var(--accent-soft); }
+.sidebar .item span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.chat { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+.messages { flex: 1; overflow: auto; padding: 16px 24px; }
+.msg { max-width: 900px; margin: 0 auto 16px; padding: 10px 14px; border-radius: 10px; }
+.msg.user { background: var(--user); }
+.msg.assistant { background: var(--panel); border: 1px solid var(--border); }
+.msg table { border-collapse: collapse; font-size: 13px; display: block; overflow-x: auto; }
+.msg th, .msg td { border: 1px solid var(--border); padding: 4px 8px; }
+.msg pre { overflow-x: auto; }
+.activity { max-width: 900px; margin: 0 auto 12px; font-size: 13px; color: var(--muted); }
+.activity div { padding: 2px 0; }
+details { font-size: 13px; color: var(--muted); margin-bottom: 8px; }
+.composer { display: flex; gap: 8px; padding: 12px 24px; border-top: 1px solid var(--border); background: var(--panel); }
+.composer textarea { min-height: 44px; max-height: 200px; }
+@media (max-width: 700px) { .sidebar { display: none; } .messages, .composer { padding-left: 16px; padding-right: 16px; } }
+
+/* admin pages */
+.page { max-width: 1100px; margin: 0 auto; padding: 16px; }
+.split { display: grid; grid-template-columns: 280px 1fr; gap: 16px; }
+@media (max-width: 800px) { .split { grid-template-columns: 1fr; } }
+.list { background: var(--panel); border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+.list .row { padding: 10px 12px; border-bottom: 1px solid var(--border); cursor: pointer; }
+.list .row:last-child { border-bottom: none; }
+.list .row.active { background: var(--accent-soft); }
+.card { background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 16px; }
+.cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 16px; }
+.checks { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 4px; }
+.checks label { display: flex; gap: 6px; align-items: center; color: var(--text); margin: 0; font-size: 14px; }
+.checks input, .inline input { width: auto; }
+.inline { display: flex; gap: 8px; align-items: center; }
+.actions { display: flex; gap: 8px; margin-top: 16px; }
+.badge { font-size: 11px; padding: 1px 6px; border-radius: 4px; background: var(--accent-soft); color: var(--accent); margin-left: 6px; }
+.off { opacity: .55; }
