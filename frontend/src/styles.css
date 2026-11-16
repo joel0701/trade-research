@@ -267,3 +267,14 @@ ul.plain li { padding: 3px 0; }
 .unavail-list { padding-left: 0; }
 .unavail-list ul { margin: 2px 0 0; padding-left: 18px; font-size: 13px; }
 .unavail-cause { font-weight: 600; font-size: 13px; }
+
+/* Category headers stand out; source names are regular, indented beneath. */
+.list-group, .role-group .list-group { font-size: 14px; font-weight: 650; text-transform: none; letter-spacing: 0;
+  color: var(--text); }
+.list-group .count { font-weight: 400; color: var(--muted); }
+.list.grouped .list-group { padding: 10px 12px 8px; background: var(--hover); border-top: 1px solid var(--border); }
+.list.grouped > div:first-child .list-group { border-top: none; }
+.list.grouped .row { padding: 7px 12px 7px 26px; font-size: 14px; font-weight: 400; }
+.list.grouped .row.empty { font-style: italic; }
+.role-group { margin-top: 6px; }
+.role-group .list-group { padding: 8px 0 4px; border-bottom: 1px solid var(--border); margin-bottom: 4px; }

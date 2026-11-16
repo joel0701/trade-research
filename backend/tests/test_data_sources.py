@@ -187,3 +187,17 @@ def test_older_database_is_migrated(tmp_path):
         role = db.exec(select(Role)).one()
         assert {tools["sec_filings"].id, tools["insider_trades"].id} <= set(role.tool_ids)
         assert len(db.exec(select(Connection)).all()) == len({c.slug for c in db.exec(select(Connection)).all()})
+
+
+def test_vendor_first_renames_respect_edits(tmp_path):
+    engine = create_engine(f"sqlite:///{tmp_path / 'names.db'}")
+    SQLModel.metadata.create_all(engine)
+    with Session(engine) as db:
+        db.add(Tool(slug="price_history", name="Price history (Yahoo)", kind="python", config={"function": "price_history"}))
+        db.add(Tool(slug="fundamentals", name="My fundamentals", kind="python", config={"function": "fundamentals"}))
+        db.commit()
+        ensure_data_sources(db)
+        names = {t.slug: t.name for t in db.exec(select(Tool)).all()}
+        assert names["price_history"] == "Yahoo price history"
+        assert names["fundamentals"] == "My fundamentals"  # edited by the user: left alone
+        assert names["sec_filings"] == "SEC EDGAR filings"

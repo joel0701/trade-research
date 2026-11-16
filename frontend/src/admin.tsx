@@ -94,13 +94,13 @@ export function MasterDetail({ title, crud, blank, children, filter, groups, row
       </div>
       {error && !draft && <p className="error">{error}</p>}
       <div className="split">
-        <div className="list">
+        <div className={`list ${groups ? "grouped" : ""}`}>
           {groups
             ? groups.map((g) => {
                 const members = items.filter(g.match);
                 return (
                   <div key={g.key}>
-                    <div className="list-group">{g.label} <span className="muted">{members.length || ""}</span></div>
+                    <div className="list-group">{g.label} <span className="count">({members.length})</span></div>
                     {members.length ? members.map(row) : <div className="row empty muted">No sources yet</div>}
                   </div>
                 );

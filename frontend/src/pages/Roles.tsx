@@ -43,7 +43,9 @@ export default function Roles() {
           <p className="muted small">● ready · ○ not set up yet (the role skips it until it is; see Tools)</p>
           {caps.filter((c) => usable.some((t) => primary(t) === c.slug)).map((c) => (
             <div key={c.slug} className="role-group">
-              <div className="list-group">{c.label}</div>
+              <div className="list-group">
+                {c.label} <span className="count">({usable.filter((t) => primary(t) === c.slug).length})</span>
+              </div>
               <div className="checks">
                 {usable.filter((t) => primary(t) === c.slug).map((t) => {
                   const st = status[t.id];

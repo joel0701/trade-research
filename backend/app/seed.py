@@ -22,11 +22,11 @@ TOOLS = [
          description="Fetch and read a URL found in the conversation (not available on Haiku).",
          config={"type": "web_fetch_20260209", "name": "web_fetch", "max_uses": 4}),
     Tool(slug="ddg_search", name="DuckDuckGo search", kind="python", config={"function": "ddg_search"}),
-    Tool(slug="price_history", name="Price history (Yahoo)", kind="python", config={"function": "price_history"}),
-    Tool(slug="technical_snapshot", name="Technical snapshot (Yahoo)", kind="python",
+    Tool(slug="price_history", name="Yahoo price history", kind="python", config={"function": "price_history"}),
+    Tool(slug="technical_snapshot", name="Yahoo technical snapshot", kind="python",
          config={"function": "technical_snapshot"}),
-    Tool(slug="fundamentals", name="Fundamentals (Yahoo)", kind="python", config={"function": "fundamentals"}),
-    Tool(slug="options_chain", name="Options chain (Yahoo)", kind="python", config={"function": "options_chain"}),
+    Tool(slug="fundamentals", name="Yahoo fundamentals", kind="python", config={"function": "fundamentals"}),
+    Tool(slug="options_chain", name="Yahoo option chain", kind="python", config={"function": "options_chain"}),
 ]
 
 # ── Connections and data sources ──────────────────────────────────────────────
@@ -61,11 +61,11 @@ CONNECTIONS = [
 
 # (slug, name, kind, connection, capabilities, config, description, add to these roles when first created)
 DATA_SOURCES = [
-    ("sec_filings", "SEC filings (EDGAR)", "python", "sec_edgar", ["sec_filings"], {"function": "sec_filings"}, "",
+    ("sec_filings", "SEC EDGAR filings", "python", "sec_edgar", ["sec_filings"], {"function": "sec_filings"}, "",
      ["finance_analyst", "research_agent"]),
-    ("sec_filing_text", "Read SEC filing (EDGAR)", "python", "sec_edgar", ["sec_filings"], {"function": "sec_filing_text"}, "",
+    ("sec_filing_text", "SEC EDGAR read filing", "python", "sec_edgar", ["sec_filings"], {"function": "sec_filing_text"}, "",
      ["finance_analyst", "research_agent"]),
-    ("insider_trades", "Insider trades (EDGAR Form 4)", "python", "sec_edgar", ["insider_trading"],
+    ("insider_trades", "SEC EDGAR insider trades (Form 4)", "python", "sec_edgar", ["insider_trading"],
      {"function": "insider_trades"}, "", ["finance_analyst", "news_analyst"]),
     ("ibkr_gw_quote", "IBKR quote (IB Gateway)", "python", "ib_gateway", ["realtime_quotes"],
      {"function": "ibkr_quote"}, "", ["technical_analyst", "strategy_optimizer"]),
@@ -114,6 +114,8 @@ DATA_SOURCES = [
                         "bigdata_edit_watchlist", "bigdata_upload_document"]},
      "News, filings, transcripts and tearsheets (read-only tools).", ["news_analyst"]),
 ]
+
+RENAMES = {"price_history": ("Price history (Yahoo)", "Yahoo price history"), "technical_snapshot": ("Technical snapshot (Yahoo)", "Yahoo technical snapshot"), "fundamentals": ("Fundamentals (Yahoo)", "Yahoo fundamentals"), "options_chain": ("Options chain (Yahoo)", "Yahoo option chain"), "sec_filings": ("SEC filings (EDGAR)", "SEC EDGAR filings"), "sec_filing_text": ("Read SEC filing (EDGAR)", "SEC EDGAR read filing"), "insider_trades": ("Insider trades (EDGAR Form 4)", "SEC EDGAR insider trades (Form 4)")}
 
 # Categories and connections for the built-in sources that already existed.
 EXISTING_TAGS = {
@@ -174,6 +176,13 @@ def ensure_data_sources(db: Session) -> None:
         mcp.description = ("Unused: IBKR is reached through IB Gateway instead. Only enable this if you run an "
                            "IBKR MCP server and set its address.")
         db.add(mcp)
+
+    # Vendor name first in source names (only names you haven't edited).
+    for slug, (old_name, new_name) in RENAMES.items():
+        tool = tools.get(slug)
+        if tool is not None and tool.name == old_name:
+            tool.name = new_name
+            db.add(tool)
 
     # Tell the Lead that the Technical Analyst now covers dark pool flow (only if you haven't edited it).
     tech = roles.get("technical_analyst")
