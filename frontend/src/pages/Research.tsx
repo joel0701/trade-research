@@ -245,10 +245,13 @@ export default function Research() {
             </div>
           ))}
           {busy && (
-            <div className="status-line">
-              <span className="spinner" />
-              {liveText ? "Writing the answer" : working.length ? `Consulting ${working.join(", ")}` : "Lead Analyst is working"}
-              <span className="muted"> · {clock(elapsed)}</span>
+            <div className="status-line" role="status" aria-live="polite">
+              <strong>Researching…</strong>
+              <span className="cylon" aria-hidden="true" />
+              <span className="muted">
+                {liveText ? "Writing the answer" : working.length ? `Consulting ${working.join(", ")}` : "Lead Analyst is planning"}
+                {" · "}{clock(elapsed)}
+              </span>
             </div>
           )}
           {error && <div className="msg error">{error}</div>}
