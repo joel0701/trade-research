@@ -32,6 +32,10 @@ export default function UnavailablePrompt({ question, report, onContinue, onCanc
 }) {
   const high = report.items.filter((i) => i.impact === "high");
   const low = report.items.filter((i) => i.impact === "low");
+  // Plain-text preview: first non-table line, without markdown markup (scanner prompts carry tables).
+  const firstLine = question.split("\n").map((l) => l.trim()).find((l) => l && !l.startsWith("|")) ?? "";
+  const plain = firstLine.replace(/[*_`#>]/g, "").replace(/\s*:\s*$/, "").trim();
+  const preview = plain.length > 140 ? plain.slice(0, 140) + "…" : plain;
 
   return (
     <div className="msg unavailable" role="alertdialog" aria-label="Some data sources are unavailable">
@@ -40,7 +44,7 @@ export default function UnavailablePrompt({ question, report, onContinue, onCanc
         <span className="muted small">{report.summary}</span>
       </div>
       <p className="small">
-        Your question hasn't been sent yet: <em>"{question.length > 140 ? question.slice(0, 140) + "…" : question}"</em>.
+        Your question hasn't been sent yet: <em>"{preview}"</em>.
         Decide whether the analysis still makes sense without these sources.
       </p>
 
