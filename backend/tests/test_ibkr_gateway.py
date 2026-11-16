@@ -204,3 +204,24 @@ def test_scanners_page_runs_ibkr_scanner(monkeypatch):
         monkeypatch.setattr(gw, "connection", down)
         bad = c.post(f"/api/screeners/{sc['id']}/run")
         assert bad.status_code == 503 and "IB Gateway isn't reachable" in bad.json()["detail"]
+
+
+def test_scanner_run_overrides_apply_to_this_run_only(monkeypatch):
+    ib = use_scan_ib(monkeypatch)
+    from app.screeners import engine
+    monkeypatch.setattr(engine, "fetch_snapshots", lambda tickers: {})
+    with TestClient(app) as c:
+        sc = next(s for s in c.get("/api/screeners").json() if s["slug"] == "ibkr_top_gainers")
+        haiku = next(t["id"] for t in c.get("/api/tools").json() if t["slug"] == "haiku")
+        r = c.post(f"/api/screeners/{sc['id']}/run",
+                   json={"params": {"rows": 10, "above_price": 20, "scan_code": "IGNORED"}, "lead_model_tool_id": haiku}).json()
+        assert ib.calls[-1][1:5] == ("TOP_PERC_GAIN", "STK.US.MAJOR", 10, 20.0)  # scan code can't be overridden
+        assert c.get(f"/api/sessions/{r['session_id']}").json()["lead_model_tool_id"] == haiku
+        saved = next(s for s in c.get("/api/screeners").json() if s["slug"] == "ibkr_top_gainers")
+        assert saved["params"] == sc["params"]  # saved scanner unchanged
+
+        rules = next(s for s in c.get("/api/screeners").json() if s["slug"] == "oversold_uptrend")
+        monkeypatch.setattr(engine, "fetch_snapshots", lambda tickers: {t: {"close": 1, "sma_200": 0, "rsi_14": 30} for t in tickers})
+        r = c.post(f"/api/screeners/{rules['id']}/run", json={"universe": ["aapl", " msft "]}).json()
+        assert [m["ticker"] for m in r["matches"]] == ["AAPL", "MSFT"] and "checked 2 tickers" in r["prompt"]
+        assert c.post(f"/api/screeners/{rules['id']}/run", json={"universe": []}).status_code == 422

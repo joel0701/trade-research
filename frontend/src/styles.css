@@ -285,3 +285,16 @@ ul.plain li { padding: 3px 0; }
   border-radius: 999px; font-size: 12px; white-space: nowrap; background: #3a2a12; color: #e0a24a; }
 :root[data-theme="light"] .scope-chip { background: #fbf0dd; color: #8a5a10; }
 .scope-chip .link { color: var(--accent); padding: 0; font-size: 12px; }
+
+/* two-pane pages (Skills, Scanners) */
+.twopane .pane-head { display: flex; justify-content: space-between; align-items: center; padding: 4px 4px 10px; }
+.twopane .pane-head strong { font-size: 16px; }
+.small-btn { padding: 4px 10px; font-size: 13px; }
+.twopane .sidebar .item { padding: 9px 8px; }
+.detail-pane { flex: 1; min-width: 320px; overflow: auto; padding: 20px 28px 32px; }
+.detail { max-width: 920px; margin: 0 auto; }
+.detail-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; margin-bottom: 14px; }
+.detail-head h2 { margin: 0 0 4px; display: flex; align-items: center; gap: 8px; }
+.detail-head p { margin: 0; }
+.run-btn { padding: 8px 18px; font-size: 15px; flex-shrink: 0; }
+@media (max-width: 700px) { .twopane .sidebar { display: flex; width: 100% !important; max-height: 40vh; } .twopane { flex-direction: column; } }

@@ -80,8 +80,8 @@ def screen(snapshots: dict[str, Snapshot], rules: dict[str, Any], sort_by: str |
 
 
 async def run_screener(universe: list[str], rules: dict[str, Any], sort_by: str | None, limit: int,
-                       fetch: Callable[[list[str]], dict[str, Snapshot]] = fetch_snapshots) -> list[dict[str, Any]]:
-    snaps = await asyncio.to_thread(fetch, universe)
+                       fetch: Callable[[list[str]], dict[str, Snapshot]] | None = None) -> list[dict[str, Any]]:
+    snaps = await asyncio.to_thread(fetch or fetch_snapshots, universe)  # looked up at call time
     return screen(snaps, rules, sort_by, limit)
 
 
