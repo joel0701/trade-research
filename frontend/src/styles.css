@@ -38,8 +38,6 @@ label { display: block; font-size: 13px; color: var(--muted); margin: 10px 0 4px
 .msg table { border-collapse: collapse; font-size: 13px; display: block; overflow-x: auto; }
 .msg th, .msg td { border: 1px solid var(--border); padding: 4px 8px; }
 .msg pre { overflow-x: auto; }
-.activity { max-width: 900px; margin: 0 auto 12px; font-size: 13px; color: var(--muted); }
-.activity div { padding: 2px 0; }
 details { font-size: 13px; color: var(--muted); margin-bottom: 8px; }
 .composer { display: flex; gap: 8px; padding: 12px 24px; border-top: 1px solid var(--border); background: var(--panel); }
 .composer textarea { min-height: 44px; max-height: 200px; }
@@ -98,3 +96,11 @@ button.link { border: none; background: none; color: var(--muted); padding: 2px 
 .context-menu button { border: none; background: none; text-align: left; padding: 7px 10px; border-radius: 5px; }
 .context-menu button:hover { background: var(--accent-soft); }
 .context-menu button.danger { color: var(--error); }
+
+/* turn status and summary */
+.status-line { max-width: 900px; margin: 0 auto 16px; display: flex; align-items: center; gap: 8px; font-size: 14px; color: var(--muted); }
+.spinner { width: 12px; height: 12px; border: 2px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin .8s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.turn-summary { display: flex; flex-wrap: wrap; gap: 4px 14px; align-items: center; margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--border); font-size: 12px; color: var(--muted); }
+.turn-summary button.link { color: var(--accent); padding: 0; }
+.msg { scroll-margin-top: 12px; }

@@ -1,10 +1,10 @@
 /** Trace log: every Lead and specialist run in a session, with tool calls, timing, tokens and cost. */
-import { useEffect, useState } from "react";
+import { useEffect, useRef } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { api, Json } from "./api";
+import { Json } from "./api";
 
-type Run = {
+export type Run = {
   id: number; role_slug: string; parent_run_id: number | null; model: string | null;
   input: string; output: string; status: "running" | "ok" | "error"; error: string | null;
   tool_calls: { name: string; input: Json; is_error: boolean; output_preview: string }[];
@@ -29,8 +29,8 @@ export function runCost(r: Run): number | null {
 }
 
 const k = (n?: number) => (!n ? "0" : n >= 1000 ? `${(n / 1000).toFixed(1)}k` : String(n));
-const parseTime = (s: string) => new Date(s.endsWith("Z") || s.includes("+") ? s : s + "Z").getTime();
-const secs = (r: Run) => ((r.finished_at ? parseTime(r.finished_at) : Date.now()) - parseTime(r.started_at)) / 1000;
+export const parseTime = (s: string) => new Date(s.endsWith("Z") || s.includes("+") ? s : s + "Z").getTime();
+export const secs = (r: Run) => ((r.finished_at ? parseTime(r.finished_at) : Date.now()) - parseTime(r.started_at)) / 1000;
 const shortModel = (m: string | null) => (m ?? "?").replace("claude-", "");
 
 function Stats({ r }: { r: Run }) {
@@ -82,24 +82,16 @@ function RunBody({ r }: { r: Run }) {
   );
 }
 
-export default function Trace({ sessionId, live, roleNames, onClose }:
-  { sessionId: number | null; live: boolean; roleNames: Record<string, string>; onClose: () => void }) {
-  const [runs, setRuns] = useState<Run[]>([]);
-
-  useEffect(() => {
-    if (sessionId == null) { setRuns([]); return; }
-    let stop = false;
-    const load = () => api.get<Run[]>(`/sessions/${sessionId}/runs`).then((r) => !stop && setRuns(r));
-    load();
-    // Poll while a turn is running so specialists appear as they start and finish.
-    const t = live ? setInterval(load, 1500) : undefined;
-    return () => { stop = true; if (t) clearInterval(t); };
-  }, [sessionId, live]);
+export default function Trace({ runs, roleNames, focusRunId, onClose }:
+  { runs: Run[]; roleNames: Record<string, string>; focusRunId: number | null; onClose: () => void }) {
+  const focused = useRef<HTMLDetailsElement>(null);
+  useEffect(() => { focused.current?.scrollIntoView({ block: "start", behavior: "smooth" }); }, [focusRunId]);
 
   const turns = runs.filter((r) => r.parent_run_id == null);
   const children = (id: number) => runs.filter((r) => r.parent_run_id === id);
   const total = runs.reduce((s, r) => s + (runCost(r) ?? 0), 0);
   const name = (slug: string) => roleNames[slug] ?? slug;
+  const openId = focusRunId ?? turns[turns.length - 1]?.id;
 
   return (
     <aside className="trace">
@@ -110,7 +102,8 @@ export default function Trace({ sessionId, live, roleNames, onClose }:
       </div>
       {turns.length === 0 && <p className="muted">No runs yet. Ask a question to see how the team works on it.</p>}
       {turns.map((t, i) => (
-        <details key={t.id} className="trace-turn" open={i === turns.length - 1}>
+        <details key={`${t.id}-${t.id === openId}`} className="trace-turn" open={t.id === openId}
+                 ref={t.id === focusRunId ? focused : undefined}>
           <summary>
             <span>Turn {i + 1}: {name(t.role_slug)} <Status r={t} /></span>
             <Stats r={t} />

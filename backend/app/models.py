@@ -72,6 +72,7 @@ class Message(SQLModel, table=True):
     role: str  # user | assistant
     content: list[dict[str, Any]] = Field(default_factory=list, sa_column=Column(JSON))
     visible: bool = True
+    run_id: int | None = None  # the Lead run that produced this message (links to the trace)
     model: str | None = None
     usage: dict[str, Any] | None = Field(default=None, sa_column=Column(JSON))
     created_at: datetime = Field(default_factory=now)

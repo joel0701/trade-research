@@ -29,10 +29,14 @@ def _visible_messages(db: Session, session_id: int) -> list[dict[str, Any]]:
                    .order_by(Message.id)).all()
     out = []
     for m in rows:
+        # An assistant message that calls tools is an interim note ("let me check..."),
+        # not the answer. It stays in the history and the trace, but not in the chat.
+        if m.role == "assistant" and any(b.get("type") == "tool_use" for b in m.content):
+            continue
         text = "".join(b.get("text", "") for b in m.content if b.get("type") == "text")
         thinking = "".join(b.get("thinking", "") for b in m.content if b.get("type") == "thinking")
         if text.strip() or m.role == "user":
-            out.append({"id": m.id, "role": m.role, "text": text, "thinking": thinking,
+            out.append({"id": m.id, "role": m.role, "text": text, "thinking": thinking, "run_id": m.run_id,
                         "created_at": m.created_at.isoformat()})
     return out
 

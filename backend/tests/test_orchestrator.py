@@ -91,13 +91,14 @@ def test_full_turn(monkeypatch):
 
         chat = c.get(f"/api/sessions/{sid}").json()
         assert chat["title"] == "How does NVDA look?"
-        assert [m["text"] for m in chat["messages"]] == [
-            "How does NVDA look?", "Checking the chart.", "NVDA is in an uptrend."]
+        # The interim "Checking the chart." note is hidden; only the final answer shows.
+        assert [m["text"] for m in chat["messages"]] == ["How does NVDA look?", "NVDA is in an uptrend."]
 
         runs = c.get(f"/api/sessions/{sid}/runs").json()
         spec = next(r for r in runs if r["role_slug"] == "technical_analyst")
         assert spec["status"] == "ok" and spec["tool_calls"][0]["name"] == "technical_snapshot"
         lead_run = next(r for r in runs if r["role_slug"] == "lead")
+        assert chat["messages"][-1]["run_id"] == lead_run["id"]
         assert spec["parent_run_id"] == lead_run["id"]
         assert lead_run["model"] == "claude-opus-5-5" and spec["model"] == "claude-sonnet-5-5"
         assert lead_run["usage"]["input_tokens"] > 0 and spec["finished_at"]

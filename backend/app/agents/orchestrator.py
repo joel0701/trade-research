@@ -134,14 +134,18 @@ async def run_turn(session_id: int, user_text: str) -> AsyncIterator[dict[str, A
 
     lead_model = _model_for(lead, tools)
 
+    current_run: dict[str, int | None] = {"id": None}
+
     def on_message(role: str, content: list, visible: bool, usage: dict | None) -> None:
         with Session(engine) as db:
             db.add(Message(session_id=session_id, role=role, content=content, visible=visible,
+                           run_id=current_run["id"],
                            model=lead_model.model_id if role == "assistant" else None, usage=usage))
             db.commit()
 
     async def work() -> None:
         run_id = _start_run(session_id, lead, user_text, None, lead_model.model_id)
+        current_run["id"] = run_id
         result = None
         try:
             async with Toolbox([tools[i] for i in lead.tool_ids if i in tools]) as toolbox:
