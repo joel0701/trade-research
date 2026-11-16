@@ -92,7 +92,7 @@ export default function SessionList({ sessions, activeId, onOpen, onChanged, onD
                    }} />
           ) : (
             <>
-              <span title={s.title}>{s.running && <span className="cylon mini" title="Researching…" />}{s.title}</span>
+              <span title={s.title}>{s.running && <span className="spinner small" title="Researching…" />}{s.title}</span>
               <button className="link more" title="More actions" aria-label="More actions"
                       onClick={(e) => openMenu(e, s)}>⋯</button>
             </>

@@ -56,6 +56,7 @@ export default function Research() {
   const scroller = useRef<HTMLDivElement>(null);
   const answerRef = useRef<HTMLDivElement>(null);
   const autoSent = useRef<number | null>(null);
+  const streaming = useRef<number | null>(null); // session this page is currently streaming
   const [showTrace, setShowTrace] = useState(() => {
     try { return localStorage.getItem("showTrace") !== "0"; } catch { return true; } // open by default
   });
@@ -86,7 +87,7 @@ export default function Research() {
       if (++checks % 2) return; // check the session itself every 2s
       try {
         const s = await api.get(`/sessions/${sid}`);
-        if (!s.running && viewing.current === sid) {
+        if (!s.running && viewing.current === sid && streaming.current !== sid) {
           setMessages(s.messages);
           setBusy(false);
           setLiveText(false);
@@ -120,8 +121,12 @@ export default function Research() {
     if (sessionId == null) { setMessages([]); return; }
     try { localStorage.setItem("lastSession", String(sessionId)); } catch { /* storage unavailable */ }
     loadRuns(sessionId);
+    // Only the latest load may update the screen. React runs this effect twice in
+    // development, and a slow, stale load used to wipe a prompt that had just been sent.
+    let cancelled = false;
     api.get(`/sessions/${sessionId}`).then((s) => {
-      if (viewing.current !== sessionId) return;
+      if (cancelled || viewing.current !== sessionId) return;
+      if (streaming.current === sessionId) return; // this page is streaming it: don't overwrite
       setMessages(s.messages);
       setBusy(!!s.running); // a turn started earlier is still going: show its status
       showLatestAnswer();
@@ -132,7 +137,8 @@ export default function Research() {
         navigate(location.pathname, { replace: true, state: null });
         send(auto, sessionId);
       }
-    }).catch((e) => setError(e.message));
+    }).catch((e) => { if (!cancelled) setError(e.message); });
+    return () => { cancelled = true; };
   }, [sessionId]);
 
   async function send(text: string, sid: number | null = sessionId) {
@@ -145,6 +151,7 @@ export default function Research() {
         return; // the effect for the new session sends it
       }
       const target = sid;
+      streaming.current = target;
       setBusy(true); setNow(Date.now());
       setMessages((m) => [...m, { role: "user", text }]);
       requestAnimationFrame(() => scroller.current?.scrollTo({ top: scroller.current.scrollHeight, behavior: "smooth" }));
@@ -180,6 +187,7 @@ export default function Research() {
           setError(e.message);
         }
       });
+      if (streaming.current === target) streaming.current = null;
       loadSessions();
       if (viewing.current === target) {
         // Reload from the server so the view matches exactly what was saved.
@@ -192,6 +200,7 @@ export default function Research() {
         }
       }
     } catch (err: any) {
+      if (streaming.current === sid) streaming.current = null;
       if (viewing.current === sid) { setError(String(err.message ?? err)); setBusy(false); setLiveText(false); }
     }
   }
@@ -246,8 +255,8 @@ export default function Research() {
           ))}
           {busy && (
             <div className="status-line" role="status" aria-live="polite">
+              <span className="spinner" aria-hidden="true" />
               <strong>Researching…</strong>
-              <span className="cylon" aria-hidden="true" />
               <span className="muted">
                 {liveText ? "Writing the answer" : working.length ? `Consulting ${working.join(", ")}` : "Lead Analyst is planning"}
                 {" · "}{clock(elapsed)}

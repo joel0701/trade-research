@@ -99,24 +99,12 @@ button.link { border: none; background: none; color: var(--muted); padding: 2px 
 
 /* turn status and summary */
 .status-line { max-width: 900px; margin: 0 auto 16px; display: flex; align-items: center; gap: 8px; font-size: 14px; color: var(--muted); }
-.spinner { width: 12px; height: 12px; border: 2px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin .8s linear infinite; }
+.spinner { display: inline-block; width: 16px; height: 16px; flex-shrink: 0; border: 2.5px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin .8s linear infinite; }
+.spinner.small { width: 10px; height: 10px; border-width: 2px; margin-right: 6px; vertical-align: -1px; }
+@media (prefers-reduced-motion: reduce) { .spinner { animation-duration: 2.4s; } }
 @keyframes spin { to { transform: rotate(360deg); } }
 .turn-summary { display: flex; flex-wrap: wrap; gap: 4px 14px; align-items: center; margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--border); font-size: 12px; color: var(--muted); }
 .turn-summary button.link { color: var(--accent); padding: 0; }
 .msg { scroll-margin-top: 12px; }
 
-/* Cylon scanner: a red eye sweeping back and forth */
-.cylon { position: relative; display: inline-block; width: 96px; height: 8px; border-radius: 4px; background: #1b0606; overflow: hidden; flex-shrink: 0; box-shadow: inset 0 0 3px rgba(0,0,0,.8); }
-.cylon::before, .cylon::after { content: ""; position: absolute; top: 0; height: 100%; border-radius: 4px; animation: cylon-sweep 1.4s ease-in-out infinite alternate; }
-.cylon::after { width: 22%; background: radial-gradient(ellipse at center, #ffd0d0 0%, #ff2a2a 35%, rgba(255,0,0,0) 75%); box-shadow: 0 0 10px 3px rgba(255,30,30,.75); }
-.cylon::before { width: 40%; background: linear-gradient(90deg, rgba(255,0,0,0), rgba(255,0,0,.35), rgba(255,0,0,0)); animation-delay: -0.12s; } /* trailing glow */
-@keyframes cylon-sweep { from { left: 0; } to { left: 78%; } }
-.cylon::before { animation-name: cylon-sweep-trail; }
-@keyframes cylon-sweep-trail { from { left: -9%; } to { left: 69%; } }
-.cylon.mini { width: 26px; height: 5px; margin-right: 6px; vertical-align: 1px; }
-@media (prefers-reduced-motion: reduce) {
-  .cylon::before { display: none; }
-  .cylon::after { animation: cylon-pulse 1.4s ease-in-out infinite alternate; left: 39%; }
-  @keyframes cylon-pulse { from { opacity: .35; } to { opacity: 1; } }
-}
 .status-line strong { color: var(--text); }
