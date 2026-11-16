@@ -12,13 +12,16 @@ export type Run = {
   started_at: string; finished_at: string | null;
 };
 
-// USD per million tokens: [input, output, cache read]. Estimates only; check current pricing.
-const PRICES: Record<string, [number, number, number]> = {
-  "claude-fable-5-2": [8, 40, 0.2],
-  "claude-opus-5-5": [4, 20, 0.2],
-  "claude-sonnet-5-5": [2, 10, 0.1],
-  "claude-haiku-5-5": [0.1, 0.5, 0.01],
-};
+// USD per million tokens: [input, output, cache read], keyed by model id. Filled from each
+// model's settings in Tools (price_input / price_output / price_cache_read).
+let PRICES: Record<string, [number, number, number]> = {};
+
+export function setPriceTable(models: Json[]) {
+  PRICES = Object.fromEntries(models
+    .filter((m) => m.config?.price_input != null && m.config?.price_output != null)
+    .map((m) => [m.config.model_id, [Number(m.config.price_input), Number(m.config.price_output),
+                                     Number(m.config.price_cache_read ?? m.config.price_input)]]));
+}
 
 export function runCost(r: Run): number | null {
   const p = r.model ? PRICES[r.model] : undefined;
@@ -40,7 +43,7 @@ function Stats({ r }: { r: Run }) {
     <span className="muted">
       {shortModel(r.model)} · {secs(r).toFixed(1)}s
       {r.status !== "running" && <> · {k((u.input_tokens ?? 0) + (u.cache_read_input_tokens ?? 0) + (u.cache_creation_input_tokens ?? 0))} in / {k(u.output_tokens)} out</>}
-      {cost != null && r.status !== "running" && <> · ${cost.toFixed(4)}</>}
+      {r.status !== "running" && (cost != null ? <> · ${cost.toFixed(4)}</> : <> · cost n/a</>)}
     </span>
   );
 }
@@ -89,7 +92,10 @@ export default function Trace({ runs, roleNames, focusRunId, onClose }:
 
   const turns = runs.filter((r) => r.parent_run_id == null);
   const children = (id: number) => runs.filter((r) => r.parent_run_id === id);
-  const total = runs.reduce((s, r) => s + (runCost(r) ?? 0), 0);
+  const costs = runs.map(runCost);
+  const total = costs.reduce<number>((s, c) => s + (c ?? 0), 0);
+  const priced = costs.some((c) => c != null);
+  const totalLabel = priced ? `est. $${total.toFixed(3)}${costs.some((c) => c == null) ? "+" : ""}` : "cost n/a";
   const name = (slug: string) => roleNames[slug] ?? slug;
   const openId = focusRunId ?? turns[turns.length - 1]?.id;
 
@@ -97,7 +103,7 @@ export default function Trace({ runs, roleNames, focusRunId, onClose }:
     <aside className="trace">
       <div className="trace-head">
         <strong>Trace</strong>
-        <span className="muted">{turns.length} turns · {runs.length - turns.length} consults · est. ${total.toFixed(3)}</span>
+        <span className="muted">{turns.length} turns · {runs.length - turns.length} consults · {totalLabel}</span>
         <button className="link" onClick={onClose}>✕</button>
       </div>
       {turns.length === 0 && <p className="muted">No runs yet. Ask a question to see how the team works on it.</p>}

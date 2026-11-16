@@ -10,6 +10,7 @@ from sqlmodel import Session, delete, select
 from app.agents.orchestrator import ACTIVE_SESSIONS, run_turn
 from app.db import get_session
 from app.attachments import UnsupportedFile, delete_files, save_upload
+from app.llm.providers import model_available, provider_of
 from app.models import Attachment, ChatSession, Message, Run, Tool
 
 router = APIRouter(prefix="/sessions", tags=["sessions"])
@@ -34,11 +35,21 @@ class SendMessage(BaseModel):
 
 
 def _check_model(db: Session, tool_id: int | None) -> None:
+    check_model(db, tool_id)
+
+
+def check_model(db: Session, tool_id: int | None) -> None:
+    """A selectable Lead model must be a model whose vendor API key is configured."""
     if tool_id is None:
         return
     t = db.get(Tool, tool_id)
     if t is None or t.kind != "model":
         raise HTTPException(422, "lead_model_tool_id must refer to a model in Tools")
+    if not t.enabled:
+        raise HTTPException(422, f"{t.name} is disabled in Tools")
+    if not model_available(t.config):
+        p = provider_of(t.config)
+        raise HTTPException(422, f"{t.name} needs an API key: set {p.key_env} in .env and restart the backend")
 
 
 def _attachment_info(a: Attachment) -> dict[str, Any]:

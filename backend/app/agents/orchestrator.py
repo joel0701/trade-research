@@ -15,6 +15,7 @@ from sqlmodel import Session, select
 from app.agents.loop import Emit, ModelConfig, run_agent
 from app.db import engine
 from app.attachments import expand_refs
+from app.llm.providers import model_available
 from app.models import Attachment, ChatSession, Message, Role, Run, Tool, now
 from app.tools.registry import Toolbox, safe_name
 
@@ -146,8 +147,9 @@ async def run_turn(session_id: int, user_text: str,
 def _lead_model_for(chat: ChatSession, lead: Role, tools: dict[int, Tool]) -> ModelConfig:
     """The session's chosen Lead model if set and usable, else the Lead role's default."""
     t = tools.get(chat.lead_model_tool_id) if chat.lead_model_tool_id else None
-    if t is not None and t.kind == "model" and t.enabled:
+    if t is not None and t.kind == "model" and t.enabled and model_available(t.config):
         return ModelConfig.from_tool_config(t.config)
+    # The chosen model is gone or its vendor key was removed: use the Lead role's model.
     return _model_for(lead, tools)
 
 

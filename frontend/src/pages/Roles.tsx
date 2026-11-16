@@ -5,8 +5,8 @@ import { Field, MasterDetail, Toggle, useCrud } from "../admin";
 export default function Roles() {
   const crud = useCrud("/roles");
   const [tools, setTools] = useState<Json[]>([]);
-  useEffect(() => { api.get("/tools").then(setTools); }, []);
-  const models = tools.filter((t) => t.kind === "model");
+  const [models, setModels] = useState<Json[]>([]);
+  useEffect(() => { api.get("/tools").then(setTools); api.get("/models").then(setModels); }, []);
   const usable = tools.filter((t) => t.kind !== "model");
   return (
     <MasterDetail title="Roles" crud={crud}
@@ -20,8 +20,15 @@ export default function Roles() {
                  onChange={(description) => set({ description })} multiline rows={2} />
           <label>Model</label>
           <select value={r.model_tool_id ?? ""} onChange={(e) => set({ model_tool_id: Number(e.target.value) })}>
-            {models.map((m) => <option key={m.id} value={m.id}>{m.name} ({m.config.model_id}, effort {m.config.effort})</option>)}
+            {models.map((m) => (
+              <option key={m.id} value={m.id}>
+                {m.provider_name}: {m.name} ({m.config.model_id}){m.available ? "" : ` — no API key (${m.key_env})`}
+              </option>
+            ))}
           </select>
+          {models.find((m) => m.id === r.model_tool_id && !m.available) && (
+            <p className="error small">This model's vendor has no API key in .env, so this role will fail until one is added.</p>
+          )}
           <Field label="System prompt" value={r.system_prompt} onChange={(system_prompt) => set({ system_prompt })} multiline rows={8} />
           <label>Tools this role can use</label>
           <div className="checks">

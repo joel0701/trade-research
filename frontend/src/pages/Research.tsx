@@ -5,7 +5,7 @@ import remarkGfm from "remark-gfm";
 import { api, AttachmentInfo, Json, sendMessage, StreamEvent } from "../api";
 import Composer, { ModelTool } from "../Composer";
 import { FileIcon } from "../icons";
-import Trace, { parseTime, Run, runCost } from "../Trace";
+import Trace, { parseTime, Run, runCost, setPriceTable } from "../Trace";
 import SessionList, { SessionRow } from "../SessionList";
 
 type ChatMsg = { id?: number; role: "user" | "assistant"; text: string; thinking?: string; run_id?: number | null;
@@ -23,7 +23,9 @@ function TurnSummary({ runId, runs, roleNames, onView }:
   const lead = runs.find((r) => r.id === runId);
   if (!lead) return null;
   const kids = runs.filter((r) => r.parent_run_id === runId);
-  const cost = [lead, ...kids].reduce((s, r) => s + (runCost(r) ?? 0), 0);
+  const costs = [lead, ...kids].map(runCost);
+  const cost = costs.reduce<number>((s, c) => s + (c ?? 0), 0);
+  const partial = costs.some((c) => c == null);
   const took = lead.finished_at ? (parseTime(lead.finished_at) - parseTime(lead.started_at)) / 1000 : null;
   const names = [...new Set(kids.map((k) => roleNames[k.role_slug] ?? k.role_slug))];
   const failed = [lead, ...kids].some((r) => r.status === "error");
@@ -31,7 +33,7 @@ function TurnSummary({ runId, runs, roleNames, onView }:
     <div className="turn-summary">
       {took != null && <span>Answered in {clock(took)}</span>}
       <span>{names.length ? names.join(", ") : "No specialists consulted"}</span>
-      <span>est. ${cost.toFixed(3)}</span>
+      <span>{partial && cost === 0 ? "cost n/a" : `est. $${cost.toFixed(3)}${partial ? "+" : ""}`}</span>
       {failed && <span className="error">some steps failed</span>}
       <button className="link" onClick={onView}>View in trace</button>
     </div>
@@ -73,7 +75,7 @@ export default function Research() {
       setRoleNames(Object.fromEntries(rs.map((r: any) => [r.slug, r.name])));
       setDefaultModelId(rs.find((r: any) => r.is_lead)?.model_tool_id ?? null);
     }).catch(() => { /* names fall back to slugs */ });
-    api.get("/tools").then((ts) => setModels(ts.filter((t: any) => t.kind === "model"))).catch(() => {});
+    api.get("/models").then((ms) => { setPriceTable(ms); setModels(ms); }).catch(() => {});
     api.get("/skills").then((ss) => setSkills(ss.filter((x: any) => x.enabled))).catch(() => {});
   }, []);
   function toggleTrace(v: boolean) {

@@ -77,6 +77,22 @@ Default models: Lead and Strategy Optimizer on Claude Opus 5.5; most specialists
 Sector Mapper on Haiku 5.5. Opus, Sonnet and Fable use server-side refusal fallbacks
 (`"fallbacks": "default"` in the model config); remove it to opt out.
 
+### LLM vendors
+
+Keys for each vendor go in `.env`, organized by vendor in `.env.example`: Anthropic, OpenAI,
+Google (Gemini), Meta (Llama API), xAI (Grok), Mistral and DeepSeek. **Only models whose vendor
+key is set appear in the model picker**; Roles and Tools flag models without a key.
+
+Claude models use the Anthropic SDK. All other vendors are called through their
+OpenAI-compatible endpoints with the OpenAI SDK (`backend/app/llm/`). Sessions are stored in one
+format, so a session can switch vendors between questions. On non-Claude models:
+
+- Claude-only features are skipped: web search/fetch server tools, thinking display, refusal fallbacks.
+- Attached PDFs are sent as extracted text (Claude reads the PDF itself, including charts).
+
+Default model names for other vendors change often: check them under Tools and fill in
+`price_input` / `price_output` (USD per million tokens) to get cost estimates.
+
 ### Connecting IBKR or Bigdata.com (MCP)
 
 Edit the tool in **Tools**: set `url` to the server's MCP endpoint, put the token in `.env` under the

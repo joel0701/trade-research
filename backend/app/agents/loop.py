@@ -14,6 +14,8 @@ from typing import Any
 import anthropic
 
 from app.config import MAX_LOOP_ITERATIONS
+from app.llm.openai_loop import run_agent_openai
+from app.llm.providers import provider_of
 from app.tools.registry import Toolbox
 
 log = logging.getLogger(__name__)
@@ -34,10 +36,12 @@ def client() -> anthropic.AsyncAnthropic:
 @dataclass
 class ModelConfig:
     model_id: str = "claude-opus-5-5"
-    effort: str | None = "high"
+    provider: str = "anthropic"  # see app.llm.providers
+    effort: str | None = "high"  # Claude only
     max_tokens: int = 32000
-    fallbacks: Any = None  # e.g. "default" -> server-side refusal fallback
-    show_thinking: bool = False
+    fallbacks: Any = None  # Claude only: "default" -> server-side refusal fallback
+    show_thinking: bool = False  # Claude only
+    params: dict[str, Any] = field(default_factory=dict)  # extra request params (other vendors)
 
     @classmethod
     def from_tool_config(cls, cfg: dict[str, Any]) -> "ModelConfig":
@@ -73,6 +77,14 @@ async def run_agent(
 ) -> LoopResult:
     """Run the loop, mutating `messages` in place. Calls on_message for each new message."""
     result = LoopResult()
+    provider = provider_of({"provider": model.provider})
+    if not provider.available():
+        raise RuntimeError(f"No API key for {provider.name}: set {provider.key_env} in .env "
+                           f"to use {model.model_id}.")
+    if provider.api != "anthropic":
+        return await run_agent_openai(provider=provider, model=model, system=system, messages=messages,
+                                      toolbox=toolbox, emit=emit, on_message=on_message, stream_text=stream_text,
+                                      max_iterations=max_iterations, source=source, result=result)
     params: dict[str, Any] = {
         "model": model.model_id,
         "max_tokens": model.max_tokens,

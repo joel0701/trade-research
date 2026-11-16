@@ -2,8 +2,9 @@
 import { useEffect, useRef, useState } from "react";
 import { AttachmentInfo, Json, uploadAttachment } from "./api";
 import { ArrowUp, Check, Chevron, Close, FileIcon, ModelMark, Paperclip, Sparkles } from "./icons";
+import { byVendor, ModelInfo, VENDOR_COLORS } from "./models";
 
-export type ModelTool = { id: number; name: string; description: string; config: Json; enabled: boolean };
+export type ModelTool = ModelInfo;
 
 type Pending = { key: string; name: string; info?: AttachmentInfo; error?: string };
 
@@ -103,6 +104,7 @@ export default function Composer({ placeholder, busy, models, modelId, defaultMo
   const box = useRef<HTMLTextAreaElement>(null);
   const modelPop = usePopover();
 
+  const usable = models.filter((m) => m.available);
   const effective = models.find((m) => m.id === (modelId ?? defaultModelId));
   const uploading = files.some((f) => !f.info && !f.error);
   const ready = files.filter((f) => f.info);
@@ -175,27 +177,39 @@ export default function Composer({ placeholder, busy, models, modelId, defaultMo
         <div className="pop-anchor" ref={modelPop.ref}>
           <button type="button" className="tool-btn model-btn" onClick={() => modelPop.setOpen(!modelPop.open)}
                   title="Model the Lead Analyst uses for this session">
-            <ModelMark /> <strong>{effective?.name.replace(/^Claude /, "") ?? "Model"}</strong> <Chevron />
+            <ModelMark color={VENDOR_COLORS[effective?.provider ?? ""]} />
+            <strong>{effective?.name.replace(/^Claude /, "") ?? "Model"}</strong>
+            {effective && !effective.available && <span className="error small">no API key</span>}
+            <Chevron />
           </button>
           {modelPop.open && (
             <div className="popover up">
               <div className="pop-title">Lead Analyst model <span className="muted">· this session</span></div>
-              {models.filter((m) => m.enabled).map((m) => {
-                const selected = m.id === (modelId ?? defaultModelId);
-                return (
-                  <button key={m.id} className="pop-item row" onClick={() => {
-                    onModelChange(m.id === defaultModelId ? null : m.id);
-                    modelPop.setOpen(false);
-                  }}>
-                    <span>
-                      <strong>{m.name}</strong>{m.id === defaultModelId && <span className="badge">default</span>}
-                      <span className="muted block">{m.description || m.config.model_id} · effort {m.config.effort ?? "default"}</span>
-                    </span>
-                    {selected && <Check />}
-                  </button>
-                );
-              })}
-              <div className="muted small pop-foot">Specialists keep the models set in Roles.</div>
+              {usable.length === 0 && <div className="pop-item muted">No models have an API key. Add one to .env.</div>}
+              {byVendor(usable).map(([vendor, list]) => (
+                <div key={vendor}>
+                  <div className="pop-group">{vendor}</div>
+                  {list.map((m) => {
+                    const selected = m.id === (modelId ?? defaultModelId);
+                    return (
+                      <button key={m.id} className="pop-item row" onClick={() => {
+                        onModelChange(m.id === defaultModelId ? null : m.id);
+                        modelPop.setOpen(false);
+                      }}>
+                        <span className="inline-start">
+                          <ModelMark color={VENDOR_COLORS[m.provider]} />
+                          <span>
+                            <strong>{m.name}</strong>{m.id === defaultModelId && <span className="badge">default</span>}
+                            <span className="muted block">{m.description || m.config.model_id}</span>
+                          </span>
+                        </span>
+                        {selected && <Check />}
+                      </button>
+                    );
+                  })}
+                </div>
+              ))}
+              <div className="muted small pop-foot">Only vendors with an API key in .env are listed. Specialists keep the models set in Roles.</div>
             </div>
           )}
         </div>

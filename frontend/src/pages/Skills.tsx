@@ -8,7 +8,7 @@ function ModelSelect({ models, value, onChange, defaultLabel }:
   return (
     <select value={value ?? ""} onChange={(e) => onChange(e.target.value ? Number(e.target.value) : null)}>
       <option value="">{defaultLabel}</option>
-      {models.filter((m) => m.enabled).map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
+      {models.filter((m) => m.available).map((m) => <option key={m.id} value={m.id}>{m.provider_name}: {m.name}</option>)}
     </select>
   );
 }
@@ -17,7 +17,7 @@ function useModels() {
   const [models, setModels] = useState<Json[]>([]);
   const [leadDefault, setLeadDefault] = useState<string>("");
   useEffect(() => {
-    api.get("/tools").then((ts) => setModels(ts.filter((t: Json) => t.kind === "model")));
+    api.get("/models").then(setModels);
     api.get("/roles").then((rs) => setLeadDefault(rs.find((r: Json) => r.is_lead)?.model_tool_id ?? ""));
   }, []);
   return { models, leadDefault };

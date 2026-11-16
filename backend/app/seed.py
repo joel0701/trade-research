@@ -13,16 +13,6 @@ IBKR_BLOCKED = [  # anything that can place orders or change account state stays
 ]
 
 TOOLS = [
-    Tool(slug="opus", name="Claude Opus 5.5", kind="model", description="Strongest reasoning at a moderate price.",
-         config={"model_id": "claude-opus-5-5", "effort": "high", "max_tokens": 32000,
-                 "fallbacks": "default", "show_thinking": True}),
-    Tool(slug="fable", name="Claude Fable 5.2", kind="model", description="Most capable model; highest cost.",
-         config={"model_id": "claude-fable-5-2", "effort": "high", "max_tokens": 32000,
-                 "fallbacks": "default", "show_thinking": True}),
-    Tool(slug="sonnet", name="Claude Sonnet 5.5", kind="model", description="Fast, capable workhorse for specialists.",
-         config={"model_id": "claude-sonnet-5-5", "effort": "medium", "max_tokens": 16000, "fallbacks": "default"}),
-    Tool(slug="haiku", name="Claude Haiku 5.5", kind="model", description="Cheapest; simple lookups and summaries.",
-         config={"model_id": "claude-haiku-5-5", "effort": "low", "max_tokens": 8000}),
     Tool(slug="web_search", name="Claude web search", kind="claude_server_tool",
          description="Anthropic-hosted web search (not available on Haiku).",
          config={"type": "web_search_20260209", "name": "web_search", "max_uses": 6}),
@@ -116,8 +106,63 @@ SCREENERS = [
 ]
 
 
+# Prices are USD per million tokens, used for cost estimates in the trace. Claude prices are
+# current Anthropic list prices; fill in other vendors' prices from their pricing pages.
+# Non-Claude model names change often: check each vendor's model list and edit in Tools.
+MODELS = [
+    dict(slug="opus", name="Claude Opus 5.5", description="Strongest reasoning at a moderate price.",
+         config={"provider": "anthropic", "model_id": "claude-opus-5-5", "effort": "high", "max_tokens": 32000,
+                 "fallbacks": "default", "show_thinking": True,
+                 "price_input": 4, "price_output": 20, "price_cache_read": 0.2}),
+    dict(slug="fable", name="Claude Fable 5.2", description="Most capable model; highest cost.",
+         config={"provider": "anthropic", "model_id": "claude-fable-5-2", "effort": "high", "max_tokens": 32000,
+                 "fallbacks": "default", "show_thinking": True,
+                 "price_input": 8, "price_output": 40, "price_cache_read": 0.2}),
+    dict(slug="sonnet", name="Claude Sonnet 5.5", description="Fast, capable workhorse for specialists.",
+         config={"provider": "anthropic", "model_id": "claude-sonnet-5-5", "effort": "medium", "max_tokens": 16000,
+                 "fallbacks": "default", "price_input": 2, "price_output": 10, "price_cache_read": 0.1}),
+    dict(slug="haiku", name="Claude Haiku 5.5", description="Cheapest; simple lookups and summaries.",
+         config={"provider": "anthropic", "model_id": "claude-haiku-5-5", "effort": "low", "max_tokens": 8000,
+                 "price_input": 0.1, "price_output": 0.5, "price_cache_read": 0.01}),
+    dict(slug="gpt", name="OpenAI GPT-5", description="OpenAI's flagship model.",
+         config={"provider": "openai", "model_id": "gpt-5", "max_tokens": 32000, "params": {}}),
+    dict(slug="gpt_mini", name="OpenAI GPT-5 mini", description="Faster, cheaper OpenAI model.",
+         config={"provider": "openai", "model_id": "gpt-5-mini", "max_tokens": 16000, "params": {}}),
+    dict(slug="gemini_pro", name="Gemini 2.5 Pro", description="Google's most capable Gemini model.",
+         config={"provider": "google", "model_id": "gemini-2.5-pro", "max_tokens": 32000, "params": {}}),
+    dict(slug="gemini_flash", name="Gemini 2.5 Flash", description="Fast, low-cost Gemini model.",
+         config={"provider": "google", "model_id": "gemini-2.5-flash", "max_tokens": 16000, "params": {}}),
+    dict(slug="grok", name="Grok 4", description="xAI's flagship model.",
+         config={"provider": "xai", "model_id": "grok-4", "max_tokens": 32000, "params": {}}),
+    dict(slug="llama", name="Llama 4 Maverick", description="Meta's Llama via the Llama API.",
+         config={"provider": "meta", "model_id": "Llama-4-Maverick-17B-128E-Instruct-FP8", "max_tokens": 8000,
+                 "params": {}}),
+    dict(slug="mistral_large", name="Mistral Large", description="Mistral's flagship model.",
+         config={"provider": "mistral", "model_id": "mistral-large-latest", "max_tokens": 16000, "params": {}}),
+    dict(slug="deepseek", name="DeepSeek Chat", description="DeepSeek's general model.",
+         config={"provider": "deepseek", "model_id": "deepseek-chat", "max_tokens": 8000, "params": {}}),
+]
+
+
+def ensure_models(db: Session) -> None:
+    """Add default models missing from the database, and fill in config keys that older
+    databases lack (provider, prices). Never overwrites values you have edited."""
+    existing = {t.slug: t for t in db.exec(select(Tool).where(Tool.kind == "model")).all()}
+    for m in MODELS:
+        tool = existing.get(m["slug"])
+        if tool is None:
+            db.add(Tool(kind="model", **m))
+            continue
+        missing = {k: v for k, v in m["config"].items() if k not in tool.config}
+        if missing:
+            tool.config = {**tool.config, **missing}
+            db.add(tool)
+    db.commit()
+
+
 def seed(db: Session) -> None:
-    if db.exec(select(Tool)).first() is not None:
+    ensure_models(db)
+    if db.exec(select(Tool).where(Tool.kind != "model")).first() is not None:
         return
     db.add_all(TOOLS)
     db.commit()
