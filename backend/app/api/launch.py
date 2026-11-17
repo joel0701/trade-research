@@ -30,7 +30,29 @@ def render(template: str, params: dict[str, str], defaults: list[dict[str, Any]]
     missing = [f for _, f, _, _ in Formatter().parse(template) if f and not values.get(f)]
     if missing:
         raise HTTPException(422, f"Missing parameters: {', '.join(missing)}")
-    return template.format(**values)
+    # Your entries are shown in bold in the session's first message.
+    return template.format(**{k: f"**{str(v).replace('*', '').strip()}**" for k, v in values.items()})
+
+
+def describe_rules(rule: dict[str, Any]) -> str:
+    """Scanner rules in words, e.g. 'close > sma_200 AND rsi_14 < 40'."""
+    if not rule:
+        return ""
+    if "all" in rule:
+        parts = [describe_rules(r) for r in rule["all"] if r]
+        return " AND ".join(f"({p})" if " OR " in p else p for p in parts)
+    if "any" in rule:
+        return " OR ".join(describe_rules(r) for r in rule["any"] if r)
+    if "not" in rule:
+        return f"NOT ({describe_rules(rule['not'])})"
+    right = rule.get("field2") if "field2" in rule else rule.get("value")
+    if rule.get("op") == "between" and isinstance(right, list) and len(right) == 2:
+        return f"{rule.get('field')} between {right[0]} and {right[1]}"
+    return f"{rule.get('field')} {rule.get('op')} {right}"
+
+
+def _money(x: Any) -> str:
+    return f"${float(x):,.0f}" if float(x) >= 100 else f"${float(x):,.2f}"
 
 
 @router.post("/skills/{skill_id}/run")
@@ -91,14 +113,26 @@ async def run_screen(screener_id: int, body: ScannerRun | None = None,
         except Exception as e:  # e.g. an invalid scan code
             raise HTTPException(502, f"IBKR scanner error: {e}") from e
         code = str(params.get("scan_code", ""))
-        what = (f"IBKR scanner **{scr.name}** ({SCAN_CODES.get(code, code)}, "
-                f"{LOCATIONS.get(params.get('location', 'STK.US.MAJOR'), 'US stocks')})"
-                f"{' filtered by your rules' if scr.rules else ''} returned {len(rows)} stocks")
+        settings = [f"Scan: **{SCAN_CODES.get(code, code)}**",
+                    f"Market: **{LOCATIONS.get(params.get('location', 'STK.US.MAJOR'), 'US stocks')}**",
+                    f"Results requested: **{params.get('rows', 25)}**"]
+        if params.get("above_price"):
+            settings.append(f"Min price: **{_money(params['above_price'])}**")
+        if params.get("above_volume"):
+            settings.append(f"Min volume: **{int(params['above_volume']):,}**")
+        if params.get("market_cap_above"):
+            settings.append(f"Min market cap: **{_money(params['market_cap_above'])}M**")
+        if scr.rules:
+            settings.append(f"Extra rules: **{describe_rules(scr.rules)}**")
+        outcome = f"IBKR returned {len(rows)} stocks{' after your rules' if scr.rules else ''}"
     else:
         if not universe:
             raise HTTPException(422, "Add at least one ticker to scan.")
         rows = await run_screener(universe, scr.rules, scr.sort_by, scr.limit)
-        what = f"Scanner **{scr.name}** ({scr.description}) checked {len(universe)} tickers and found {len(rows)} matches"
+        settings = [f"Tickers ({len(universe)}): **{', '.join(universe)}**"]
+        if scr.rules:
+            settings.append(f"Rules: **{describe_rules(scr.rules)}**")
+        outcome = f"Found {len(rows)} matches out of {len(universe)} tickers"
     table = results_to_markdown(rows)
     chat = ChatSession(title=f"Scanner: {scr.name} ({len(rows)} results)", origin=f"screener:{scr.id}",
                        tool_scope=list(scr.tool_ids) or None,  # follow-up uses the scanner's sources
@@ -106,6 +140,12 @@ async def run_screen(screener_id: int, body: ScannerRun | None = None,
     db.add(chat)
     db.commit()
     db.refresh(chat)
-    # Results go in the first user prompt so the Lead sees exactly what the user sees.
-    prompt = f"{what}:\n\n{table}\n\n{scr.follow_up_prompt}"
+    if scr.sort_by:
+        settings.append(f"Sorted by: **{scr.sort_by}**")
+    if body.lead_model_tool_id:
+        settings.append(f"Lead model: **{db.get(Tool, body.lead_model_tool_id).name}**")
+    # The session's first message says what was run and how; the results follow, then the task.
+    # (It goes to the Lead exactly as the user sees it.)
+    prompt = (f"Run scanner **{scr.name}**\n\n" + "\n".join(f"- {s}" for s in settings)
+              + f"\n\n{outcome}:\n\n{table}\n\n{scr.follow_up_prompt}")
     return {"session_id": chat.id, "prompt": prompt, "matches": rows}

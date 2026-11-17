@@ -217,3 +217,12 @@ class UserProfile(SQLModel, table=True):
     timezone: str = "auto"  # IANA name like "America/New_York", or "auto" = the browser's zone
     hour12: bool = False
     updated_at: datetime = Field(default_factory=now, sa_type=UTCDateTime)
+
+
+class DismissedDefault(SQLModel, table=True):
+    """A built-in default the user deleted (e.g. a connection or data source). Startup never
+    recreates these. kind is the table name: tool, connection, screener, skill."""
+
+    id: int | None = Field(default=None, primary_key=True)
+    kind: str = Field(index=True)
+    slug: str

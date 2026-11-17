@@ -238,3 +238,39 @@ def test_settings_email_version_is_undone(tmp_path):
         ensure_data_sources(db)
         sec = db.exec(select(Connection).where(Connection.slug == "sec_edgar")).one()
         assert sec.config == {} and sec.secret_env == "SEC_USER_AGENT"
+
+
+def test_deleted_defaults_stay_deleted_and_disabled_stay_disabled():
+    from fastapi.testclient import TestClient
+    from app.db import engine as app_engine
+    from app.main import app
+    with TestClient(app) as c:
+        conns = {x["slug"]: x for x in c.get("/api/connections").json()}
+        tools = {t["slug"]: t for t in c.get("/api/tools").json()}
+        # Disable one connection, delete another connection and its source, and a scanner and a model.
+        c.put(f"/api/connections/{conns['duckduckgo']['id']}", json={"enabled": False})
+        c.delete(f"/api/tools/{tools['bigdata_research']['id']}")
+        c.delete(f"/api/connections/{conns['bigdata']['id']}")
+        scanner = next(s for s in c.get("/api/screeners").json() if s["slug"] == "ibkr_iv_rich")
+        c.delete(f"/api/screeners/{scanner['id']}")
+        c.delete(f"/api/tools/{tools['deepseek']['id']}")
+    with TestClient(app) as c:  # a restart runs the startup upgrade again
+        conns = {x["slug"]: x for x in c.get("/api/connections").json()}
+        tools = {t["slug"] for t in c.get("/api/tools").json()}
+        assert "bigdata" not in conns and "bigdata_research" not in tools and "deepseek" not in tools
+        assert conns["duckduckgo"]["enabled"] is False
+        assert "ibkr_iv_rich" not in {s["slug"] for s in c.get("/api/screeners").json()}
+        news = next(r for r in c.get("/api/roles").json() if r["slug"] == "news_analyst")
+        all_ids = {t["id"] for t in c.get("/api/tools").json()}
+        assert all(i in all_ids for i in news["tool_ids"])  # no dangling references
+        # Tidy up so other tests see the defaults: forget the deletions and re-run the startup upgrade.
+        c.put(f"/api/connections/{conns['duckduckgo']['id']}", json={"enabled": True})
+        from app.models import DismissedDefault
+        from app.seed import ensure_data_sources, ensure_models, ensure_scanners
+        with Session(app_engine) as db:
+            for d in db.exec(select(DismissedDefault)).all():
+                db.delete(d)
+            db.commit()
+            ensure_models(db)
+            ensure_data_sources(db)
+            ensure_scanners(db)

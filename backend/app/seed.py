@@ -6,7 +6,7 @@ import json
 
 from sqlmodel import Session, select
 
-from app.models import Connection, Role, Screener, Skill, Tool
+from app.models import Connection, DismissedDefault, Role, Screener, Skill, Tool
 
 IBKR_BLOCKED = [  # anything that can place orders or change account state stays off by default
     "create_order_instruction", "delete_order_instruction", "create_alert", "update_alert",
@@ -110,8 +110,9 @@ def ensure_data_sources(db: Session) -> None:
     """Create connections and sources that don't exist yet, move older MCP tool settings onto
     connections, and tag categories. Idempotent; never overwrites values you've edited."""
     conns = {c.slug: c for c in db.exec(select(Connection)).all()}
+    gone_conns, gone_tools = dismissed(db, "connection"), dismissed(db, "tool")
     for c in CONNECTIONS:
-        if c["slug"] not in conns:
+        if c["slug"] not in conns and c["slug"] not in gone_conns:
             conn = Connection(**c)
             db.add(conn)
             db.flush()
@@ -142,6 +143,8 @@ def ensure_data_sources(db: Session) -> None:
                 conns["ibkr"] = Connection(slug="ibkr", name="Interactive Brokers (MCP)", kind="mcp")
                 db.add(conns["ibkr"])
                 db.flush()
+        if slug not in conns:
+            continue
         conn = conns[slug]
         server = {k: v for k, v in old.config.items() if k not in ("allowed_tools", "blocked_tools")}
         if server.get("url") and "REPLACE" not in server.get("url", ""):
@@ -154,8 +157,8 @@ def ensure_data_sources(db: Session) -> None:
         db.add_all([conn, old])
 
     for slug, name, kind, conn_slug, caps, config, desc, role_slugs in DATA_SOURCES:
-        if slug in tools:
-            continue
+        if slug in tools or slug in gone_tools or conn_slug not in conns:
+            continue  # exists, was deleted by you, or its connection was deleted
         tool = Tool(slug=slug, name=name, kind=kind, connection_id=conns[conn_slug].id, capabilities=caps,
                     config=config, description=desc)
         db.add(tool)
@@ -202,7 +205,7 @@ def ensure_data_sources(db: Session) -> None:
 
     for slug, (conn_slug, caps) in EXISTING_TAGS.items():
         tool = tools.get(slug)
-        if tool is None:
+        if tool is None or conn_slug not in conns:
             continue
         if not tool.capabilities:
             tool.capabilities = caps
@@ -324,14 +327,21 @@ MODELS = [
 ]
 
 
+def dismissed(db: Session, kind: str) -> set[str]:
+    """Slugs of built-in defaults the user deleted; never recreate these."""
+    return {d.slug for d in db.exec(select(DismissedDefault).where(DismissedDefault.kind == kind)).all()}
+
+
 def ensure_models(db: Session) -> None:
     """Add default models missing from the database, and fill in config keys that older
     databases lack (provider, prices). Never overwrites values you have edited."""
     existing = {t.slug: t for t in db.exec(select(Tool).where(Tool.kind == "model")).all()}
+    gone = dismissed(db, "tool")
     for m in MODELS:
         tool = existing.get(m["slug"])
         if tool is None:
-            db.add(Tool(kind="model", **m))
+            if m["slug"] not in gone:
+                db.add(Tool(kind="model", **m))
             continue
         missing = {k: v for k, v in m["config"].items() if k not in tool.config}
         if missing:
@@ -380,8 +390,9 @@ def ensure_scanners(db: Session) -> None:
     """Add the default IBKR scanners if missing, and give built-in scanners their default data
     sources if they have none yet (never changes scanners you've edited)."""
     existing = {s.slug: s for s in db.exec(select(Screener)).all()}
+    gone = dismissed(db, "screener")
     for spec in IBKR_SCANNERS:
-        if spec["slug"] not in existing:
+        if spec["slug"] not in existing and spec["slug"] not in gone:
             sc = Screener(universe=[], rules={}, **spec)
             db.add(sc)
             existing[sc.slug] = sc

@@ -49,6 +49,16 @@ def crud_router(model: type[SQLModel], prefix: str) -> APIRouter:
         item = db.get(model, item_id)
         if item is None:
             raise HTTPException(404)
+        from app.models import DismissedDefault, Role, Screener, Tool
+
+        if getattr(item, "slug", None):
+            # Remember the deletion so built-in defaults aren't recreated on the next start.
+            db.add(DismissedDefault(kind=model.__tablename__, slug=item.slug))
+        if model is Tool:  # don't leave the deleted source in roles' or scanners' lists
+            for owner in [*db.exec(select(Role)).all(), *db.exec(select(Screener)).all()]:
+                if item.id in (owner.tool_ids or []):
+                    owner.tool_ids = [i for i in owner.tool_ids if i != item.id]
+                    db.add(owner)
         db.delete(item)
         db.commit()
         return {"ok": True}

@@ -63,7 +63,7 @@ def test_skill_draft_is_normalized_and_saveable(monkeypatch):
 
         saved = c.post("/api/skills", json={k: v for k, v in draft.items() if k != "drafted_with"}).json()
         run = c.post(f"/api/skills/{saved['id']}/run", json={"params": {"ticker_symbol": "AAPL", "horizon": "1y"}}).json()
-        assert run["prompt"].startswith("Analyse AAPL over 1y.")
+        assert run["prompt"].startswith("Analyse **AAPL** over **1y**.")  # your entries in bold
         # Drafting again can't collide with the saved skill's slug.
         assert c.post(f"/api/sessions/{sid}/skill-draft").json()["slug"] == "full_stock_analysis_2"
 

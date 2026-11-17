@@ -187,14 +187,18 @@ def test_scanners_page_runs_ibkr_scanner(monkeypatch):
 
         r = c.post(f"/api/screeners/{sc['id']}/run").json()
         assert [m["ticker"] for m in r["matches"]] == ["CRWV", "NVDA", "AMD"]  # IBKR rank order
-        assert r["matches"][0]["rsi_14"] == 72.0 and "rank" in r["prompt"] and "IBKR scanner" in r["prompt"]
+        assert r["matches"][0]["rsi_14"] == 72.0 and "| rank |" in r["prompt"]
+        assert r["prompt"].startswith("Run scanner **IBKR: unusual option volume**\n\n- Scan: **Unusual option volume**")
+        assert "- Min price: **$5.00**" in r["prompt"] and "- Min market cap: **$1,000M**" in r["prompt"]
+        assert "IBKR returned 3 stocks:" in r["prompt"]
         chat = c.get(f"/api/sessions/{r['session_id']}").json()
         assert chat["title"].startswith("Scanner: IBKR: unusual option volume (3 results)")
 
         # Your rules filter IBKR's results; AMD has no indicator data so it can't pass.
         c.put(f"/api/screeners/{sc['id']}", json={"rules": {"field": "rsi_14", "op": "<", "value": 70}})
         r = c.post(f"/api/screeners/{sc['id']}/run").json()
-        assert [m["ticker"] for m in r["matches"]] == ["NVDA"] and "filtered by your rules" in r["prompt"]
+        assert [m["ticker"] for m in r["matches"]] == ["NVDA"] and "- Extra rules: **rsi_14 < 70**" in r["prompt"]
+        assert "IBKR returned 1 stocks after your rules" in r["prompt"]
 
         opts = c.get("/api/scanner-options").json()
         assert {"code": "TOP_PERC_GAIN", "label": "Top % gainers"} in opts["scan_codes"]
@@ -217,11 +221,16 @@ def test_scanner_run_overrides_apply_to_this_run_only(monkeypatch):
                    json={"params": {"rows": 10, "above_price": 20, "scan_code": "IGNORED"}, "lead_model_tool_id": haiku}).json()
         assert ib.calls[-1][1:5] == ("TOP_PERC_GAIN", "STK.US.MAJOR", 10, 20.0)  # scan code can't be overridden
         assert c.get(f"/api/sessions/{r['session_id']}").json()["lead_model_tool_id"] == haiku
+        assert "- Results requested: **10**" in r["prompt"] and "- Min price: **$20.00**" in r["prompt"]
+        assert "- Lead model: **Claude Haiku 5.5**" in r["prompt"]
         saved = next(s for s in c.get("/api/screeners").json() if s["slug"] == "ibkr_top_gainers")
         assert saved["params"] == sc["params"]  # saved scanner unchanged
 
         rules = next(s for s in c.get("/api/screeners").json() if s["slug"] == "oversold_uptrend")
         monkeypatch.setattr(engine, "fetch_snapshots", lambda tickers: {t: {"close": 1, "sma_200": 0, "rsi_14": 30} for t in tickers})
         r = c.post(f"/api/screeners/{rules['id']}/run", json={"universe": ["aapl", " msft "]}).json()
-        assert [m["ticker"] for m in r["matches"]] == ["AAPL", "MSFT"] and "checked 2 tickers" in r["prompt"]
+        assert [m["ticker"] for m in r["matches"]] == ["AAPL", "MSFT"]
+        assert r["prompt"].startswith("Run scanner **Oversold in an uptrend**\n\n- Tickers (2): **AAPL, MSFT**\n"
+                                      "- Rules: **close > sma_200 AND rsi_14 < 40**\n- Sorted by: **rsi_14**")
+        assert "Found 2 matches out of 2 tickers:" in r["prompt"]
         assert c.post(f"/api/screeners/{rules['id']}/run", json={"universe": []}).status_code == 422

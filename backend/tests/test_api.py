@@ -31,7 +31,7 @@ def test_skill_run_creates_session():
         r = c.post(f"/api/skills/{skill['id']}/run", json={"params": {"ticker": "NVDA"}})
         assert r.status_code == 200
         body = r.json()
-        assert "NVDA" in body["prompt"] and "bullish" in body["prompt"]  # default filled in
+        assert "**NVDA**" in body["prompt"] and "**bullish**" in body["prompt"]  # entries (and defaults) in bold
         chat = c.get(f"/api/sessions/{body['session_id']}").json()
         assert chat["origin"] == f"skill:{skill['id']}"
         missing = c.post(f"/api/skills/{skill['id']}/run", json={"params": {}})
@@ -53,3 +53,13 @@ def test_rename_rejects_blank_title():
     with TestClient(app) as c:
         sid = c.post("/api/sessions", json={}).json()["id"]
         assert c.patch(f"/api/sessions/{sid}", json={"title": "   "}).status_code == 422
+
+
+def test_describe_rules_in_words():
+    from app.api.launch import describe_rules
+    assert describe_rules({}) == ""
+    assert describe_rules({"all": [{"field": "close", "op": ">", "field2": "sma_200"},
+                                   {"any": [{"field": "rsi_14", "op": "<", "value": 30},
+                                            {"field": "close", "op": "between", "value": [10, 20]}]}]}) == \
+        "close > sma_200 AND (rsi_14 < 30 OR close between 10 and 20)"
+    assert describe_rules({"not": {"field": "rel_volume", "op": ">=", "value": 2}}) == "NOT (rel_volume >= 2)"
