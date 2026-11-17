@@ -2,9 +2,9 @@
 
 A multi-agent research assistant for stocks and options. You chat with a **Lead Analyst**,
 which consults a team of specialists (Sector Mapper, Finance Analyst, Technical Analyst,
-News Analyst, Strategy Optimizer, Research Agent), each with its own Claude model, prompt and tools.
+News Analyst, Strategy Optimizer, Research Agent), each with its own LLM model (specific to the task), prompt and tools.
 Every chat session is saved and can be reopened and continued. **Skills** (pre-built analyses) and
-**Scanners** (rule-based scans, or IBKR market scanners via IB Gateway) each start a new session with their results.
+**Scanners** (rule-based scans, or vendor specific (IBKR market scanners) each start a new session with their results.
 
 Roles, tools, skills and scanners are all data, editable in the app; no code change is needed to
 add a role or connect a tool.
