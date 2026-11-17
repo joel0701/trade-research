@@ -59,7 +59,8 @@ export default function AnswerFooter({ sessionId, message, models, runs, roleNam
       <div className="answer-meta">
         {message.model && (
           <span className="model-tag" title={message.model}>
-            <ModelMark color={VENDOR_COLORS[model?.provider ?? "anthropic"]} /> {modelName}
+            {model ? <ModelMark color={VENDOR_COLORS[model.provider]} /> : <span className="scan-mark" aria-hidden="true">⌖</span>}
+            {" "}{modelName}
           </span>
         )}
         {message.created_at && <span>{fmt(message.created_at)}</span>}

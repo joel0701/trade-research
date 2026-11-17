@@ -28,7 +28,8 @@ def test_scanner_session_preflight_only_checks_its_sources(monkeypatch):
         return [{"rank": 1, "ticker": "CRWV", "name": "CoreWeave"}]
     monkeypatch.setattr(ibkr_gateway, "run_scan", fake_scan)
     monkeypatch.setattr(engine, "fetch_snapshots", lambda t: {})
-    monkeypatch.setattr(loop, "client", lambda: FakeClient())
+    fake = FakeClient()
+    monkeypatch.setattr(loop, "client", lambda: fake)
     with TestClient(app) as c:
         t = ids(c)
         sc = next(s for s in c.get("/api/screeners").json() if s["slug"] == "ibkr_top_gainers")
@@ -37,8 +38,17 @@ def test_scanner_session_preflight_only_checks_its_sources(monkeypatch):
         chat = c.get(f"/api/sessions/{r['session_id']}").json()
         assert chat["tool_scope"] == sc["tool_ids"]
         # EDGAR isn't set up, but it isn't one of this scanner's sources: no prompt, the run goes ahead.
-        ev = events(c, r["session_id"], {"text": r["prompt"]})
+        ev = events(c, r["session_id"], {"text": r["prompt"], "hidden": True})
         assert ev[0]["type"] != "confirm_needed" and ev[-1]["type"] == "done"
+        # Reads as an exchange: instructions, scan results, then the Lead's analysis (the task prompt is hidden).
+        msgs = c.get(f"/api/sessions/{r['session_id']}").json()["messages"]
+        assert [m["role"] for m in msgs] == ["user", "assistant", "assistant"]
+        assert msgs[0]["text"].startswith("Run scanner **IBKR: top % gainers**") and msgs[1]["model"] == "IBKR scanner"
+        assert "| rank |" in msgs[1]["text"]
+        # The Lead saw the whole exchange in order, ending with the task.
+        lead = next(k for k in fake.calls if "Your team" in k["system"])
+        roles = [m["role"] for m in lead["messages"]]
+        assert roles[:3] == ["user", "assistant", "user"] and "| rank |" in lead["messages"][1]["content"][0]["text"]
 
         # Lifting the limit (Use full team) brings the full check back.
         c.patch(f"/api/sessions/{r['session_id']}", json={"tool_scope": None})

@@ -68,7 +68,8 @@ export async function uploadAttachment(sessionId: number, file: File): Promise<A
 }
 
 export async function sendMessage(sessionId: number, text: string, onEvent: (e: StreamEvent) => void,
-                                  attachmentIds: number[] = [], confirm: { proceed?: string; remember?: boolean } = {}) {
+                                  attachmentIds: number[] = [],
+                                  confirm: { proceed?: string; remember?: boolean; hidden?: boolean } = {}) {
   const r = await fetch(`/api/sessions/${sessionId}/messages`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },

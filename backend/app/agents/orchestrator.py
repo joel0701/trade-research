@@ -126,7 +126,7 @@ async def consult(specialist: Role, question: str, session_id: int, tools: dict[
 
 
 async def run_turn(session_id: int, user_text: str, attachment_ids: list[int] | None = None,
-                   excluded: list[str] | None = None) -> AsyncIterator[dict[str, Any]]:
+                   excluded: list[str] | None = None, hidden: bool = False) -> AsyncIterator[dict[str, Any]]:
     """Persist the user message, run the Lead, and stream events to the caller.
 
     The turn runs as a background task: if the caller disconnects (the user leaves the
@@ -136,7 +136,7 @@ async def run_turn(session_id: int, user_text: str, attachment_ids: list[int] | 
         raise TurnInProgress(f"Session {session_id} is already working on a question.")
     ACTIVE_SESSIONS.add(session_id)
     try:
-        prepared = _prepare_turn(session_id, user_text, attachment_ids)
+        prepared = _prepare_turn(session_id, user_text, attachment_ids, hidden)
     except Exception:
         ACTIVE_SESSIONS.discard(session_id)
         raise
@@ -177,7 +177,7 @@ def apply_scope(scope: list[int] | None, lead: Role, specialists: list[Role],
     return lead, specialists
 
 
-def _prepare_turn(session_id: int, user_text: str, attachment_ids: list[int] | None = None):
+def _prepare_turn(session_id: int, user_text: str, attachment_ids: list[int] | None = None, hidden: bool = False):
     # expire_on_commit=False: roles/tools are used after this block closes.
     with Session(engine, expire_on_commit=False) as db:
         chat = db.get(ChatSession, session_id)
@@ -204,7 +204,7 @@ def _prepare_turn(session_id: int, user_text: str, attachment_ids: list[int] | N
         # so files stay on disk instead of being copied into every saved message.
         user_content = [{"type": "attachment_ref", "attachment_id": a.id, "filename": a.filename} for a in atts]
         user_content.append({"type": "text", "text": user_text})
-        msg = Message(session_id=session_id, role="user", content=user_content)
+        msg = Message(session_id=session_id, role="user", content=user_content, visible=not hidden)
         db.add(msg)
         db.flush()
         for a in atts:

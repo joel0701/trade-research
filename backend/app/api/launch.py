@@ -13,7 +13,7 @@ from sqlmodel import Session
 from app.db import get_session
 from app.api.sessions import check_model
 from app.llm.providers import model_available
-from app.models import ChatSession, Screener, Skill, Tool
+from app.models import ChatSession, Message, Screener, Skill, Tool
 from app.screeners.engine import results_to_markdown, run_ibkr_scanner, run_screener
 from app.tools.ibkr_gateway import LOCATIONS, SCAN_CODES, GatewayError
 
@@ -144,8 +144,17 @@ async def run_screen(screener_id: int, body: ScannerRun | None = None,
         settings.append(f"Sorted by: **{scr.sort_by}**")
     if body.lead_model_tool_id:
         settings.append(f"Lead model: **{db.get(Tool, body.lead_model_tool_id).name}**")
-    # The session's first message says what was run and how; the results follow, then the task.
-    # (It goes to the Lead exactly as the user sees it.)
-    prompt = (f"Run scanner **{scr.name}**\n\n" + "\n".join(f"- {s}" for s in settings)
-              + f"\n\n{outcome}:\n\n{table}\n\n{scr.follow_up_prompt}")
-    return {"session_id": chat.id, "prompt": prompt, "matches": rows}
+    # The conversation reads like a normal exchange: the run instructions (settings + task) as the
+    # user's message, then the scan results as a response. The Lead then answers the task.
+    instructions = (f"Run scanner **{scr.name}**\n\n" + "\n".join(f"- {s}" for s in settings)
+                    + f"\n\n**Task:** {scr.follow_up_prompt}")
+    results = f"{outcome}:\n\n{table}"
+    label = "IBKR scanner" if scr.source == "ibkr" else "Scanner"
+    db.add(Message(session_id=chat.id, role="user", content=[{"type": "text", "text": instructions}]))
+    db.add(Message(session_id=chat.id, role="assistant", model=label, content=[{"type": "text", "text": results}]))
+    db.commit()
+    # The UI sends this hidden prompt to start the Lead's analysis (no extra bubble is shown).
+    return {"session_id": chat.id, "prompt": SCANNER_FOLLOW_UP, "hidden": True, "matches": rows}
+
+
+SCANNER_FOLLOW_UP = "Analyse the scanner results above and complete the task."

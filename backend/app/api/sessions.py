@@ -48,6 +48,7 @@ class SendMessage(BaseModel):
     # and whether to stop asking about that same set for the rest of the session.
     proceed: str | None = None
     remember: bool = False
+    hidden: bool = False  # sent by the app (e.g. to start a scanner's analysis); not shown in the chat
 
 
 def _check_model(db: Session, tool_id: int | None) -> None:
@@ -289,11 +290,12 @@ def cancel_pending(session_id: int, db: Session = Depends(get_session)) -> dict[
         raise HTTPException(404)
     pending = chat.pending_confirm
     if pending:
-        record_notice(db, session_id, "cancelled", pending["report"], pending["text"])
+        record_notice(db, session_id, "cancelled", pending["report"],
+                      "(scanner analysis)" if pending.get("hidden") else pending["text"])
         chat.pending_confirm = None
         db.add(chat)
         db.commit()
-    return {"text": (pending or {}).get("text", "")}
+    return {"text": "" if (pending or {}).get("hidden") else (pending or {}).get("text", "")}
 
 
 @router.get("/{session_id}/runs")
@@ -324,7 +326,7 @@ async def send(session_id: int, body: SendMessage, db: Session = Depends(get_ses
         if not (explicit or remembered):
             atts = db.exec(select(Attachment).where(Attachment.id.in_(body.attachment_ids))).all() if body.attachment_ids else []
             chat.pending_confirm = {"text": body.text, "attachments": [_attachment_info(a) for a in atts],
-                                    "report": report, "at": now().isoformat()}
+                                    "report": report, "hidden": body.hidden, "at": now().isoformat()}
             db.add(chat)
             db.commit()
             event = {"type": "confirm_needed", **report}
@@ -332,7 +334,7 @@ async def send(session_id: int, body: SendMessage, db: Session = Depends(get_ses
         decision = "continued_remember" if (explicit and body.remember) else "continued" if explicit else "remembered"
         if body.remember:
             chat.ack_unavailable = fp
-        record_notice(db, session_id, decision, report, text)
+        record_notice(db, session_id, decision, report, "(scanner analysis)" if body.hidden else text)
         chat.pending_confirm = None
         db.add(chat)
         db.commit()
@@ -340,7 +342,7 @@ async def send(session_id: int, body: SendMessage, db: Session = Depends(get_ses
 
     async def events():
         try:
-            async for event in run_turn(session_id, text, body.attachment_ids, excluded):
+            async for event in run_turn(session_id, text, body.attachment_ids, excluded, hidden=body.hidden):
                 yield f"data: {json.dumps(event, default=str)}\n\n"
         except Exception as e:
             yield f"data: {json.dumps({'type': 'error', 'message': str(e)})}\n\n"

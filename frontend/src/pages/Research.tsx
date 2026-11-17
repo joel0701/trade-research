@@ -36,7 +36,7 @@ export default function Research() {
   const [draftingSkill, setDraftingSkill] = useState(false);
   // A question held back because some data sources are unavailable (see UnavailablePrompt).
   const [pendingConfirm, setPendingConfirm] = useState<
-    { text: string; attachments: AttachmentInfo[]; report: UnavailableReport } | null>(null);
+    { text: string; attachments: AttachmentInfo[]; report: UnavailableReport; hidden?: boolean } | null>(null);
   const [restore, setRestore] = useState<{ text: string; nonce: number } | undefined>();
   const left = usePanelWidth("panel.sidebar", 260, 180, 480);
   const right = usePanelWidth("panel.trace", 420, 280, 820);
@@ -136,22 +136,25 @@ export default function Research() {
       setSessionModel(s.lead_model_tool_id ?? null);
       setToolScope(s.tool_scope ?? null);
       const held = s.pending_confirm;  // a question awaiting the unavailable-sources decision
-      setPendingConfirm(held ? { text: held.text, attachments: held.attachments ?? [], report: held.report } : null);
+      setPendingConfirm(held ? { text: held.text, attachments: held.attachments ?? [], report: held.report,
+                                 hidden: !!held.hidden } : null);
       setBusy(!!s.running); // a turn started earlier is still going: show its status
       showLatestAnswer();
-      // Skills and screeners open a new session with a prompt to send right away.
+      // Skills and scanners open a new session with a prompt to send right away. Scanner sessions
+      // already show the run and its results; their prompt is hidden and starts the Lead's analysis.
       const auto = (location.state as any)?.autoSend as string | undefined;
-      if (auto && s.messages.length === 0 && autoSent.current !== sessionId) {
+      const hidden = !!(location.state as any)?.hidden;
+      if (auto && (s.messages.length === 0 || hidden) && !s.running && autoSent.current !== sessionId) {
         autoSent.current = sessionId;
         navigate(location.pathname, { replace: true, state: null });
-        send(auto, sessionId);
+        send(auto, sessionId, [], { hidden });
       }
     }).catch((e) => { if (!cancelled) setError(e.message); });
     return () => { cancelled = true; };
   }, [sessionId]);
 
   async function send(text: string, sid: number | null = sessionId, attachments: AttachmentInfo[] = [],
-                      confirm: { proceed?: string; remember?: boolean } = {}) {
+                      confirm: { proceed?: string; remember?: boolean; hidden?: boolean } = {}) {
     if ((!text.trim() && !attachments.length) || busy) return;
     setError(""); setFocusRunId(null); setPendingConfirm(null);
     try {
@@ -163,7 +166,7 @@ export default function Research() {
       const target = sid;
       streaming.current = target;
       setBusy(true); setNow(Date.now());
-      setMessages((m) => [...m, { role: "user", text, attachments }]);
+      if (!confirm.hidden) setMessages((m) => [...m, { role: "user", text, attachments }]);
       requestAnimationFrame(() => scroller.current?.scrollTo({ top: scroller.current.scrollHeight, behavior: "smooth" }));
 
       let startNewAnswer = true; // the Lead's text before a tool call is an interim note: replace it
@@ -177,8 +180,8 @@ export default function Research() {
           // Some data sources are down: the question wasn't run. Ask the user first.
           needsConfirm = true;
           const { type: _t, ...report } = e;
-          setPendingConfirm({ text, attachments, report });
-          setMessages((m) => (m[m.length - 1]?.role === "user" ? m.slice(0, -1) : m));
+          setPendingConfirm({ text, attachments, report, hidden: confirm.hidden });
+          if (!confirm.hidden) setMessages((m) => (m[m.length - 1]?.role === "user" ? m.slice(0, -1) : m));
           return;
         }
         if ((e.type === "text" || e.type === "thinking") && e.source === "lead") {
@@ -255,7 +258,7 @@ export default function Research() {
   async function runSkill(skill: Json, params: Record<string, string>) {
     // An explicit choice in the composer wins; otherwise the skill's own default applies.
     const r = await api.post(`/skills/${skill.id}/run`, { params, lead_model_tool_id: sessionModel });
-    navigate(`/research/${r.session_id}`, { state: { autoSend: r.prompt } });
+    navigate(`/research/${r.session_id}`, { state: { autoSend: r.prompt, hidden: !!r.hidden } });
   }
 
   async function forkAt(messageId: number) {
@@ -354,14 +357,15 @@ export default function Research() {
           )}
           {pendingConfirm && sessionId != null && (
             <UnavailablePrompt
-              question={pendingConfirm.text}
+              question={pendingConfirm.hidden ? "Analyse the scanner results above" : pendingConfirm.text}
               report={pendingConfirm.report}
               onContinue={(remember) => send(pendingConfirm.text, sessionId, pendingConfirm.attachments,
-                                             { proceed: pendingConfirm.report.fingerprint, remember })}
+                                             { proceed: pendingConfirm.report.fingerprint, remember,
+                                               hidden: pendingConfirm.hidden })}
               onCancel={async () => {
-                const text = pendingConfirm.text;
+                const { text, hidden } = pendingConfirm;
                 setPendingConfirm(null);
-                setRestore({ text, nonce: Date.now() });
+                if (!hidden) setRestore({ text, nonce: Date.now() });  // nothing to restore for a scanner's analysis
                 try {
                   await api.post(`/sessions/${sessionId}/pending/cancel`);
                   const s = await api.get(`/sessions/${sessionId}`);

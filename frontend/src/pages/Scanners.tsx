@@ -49,7 +49,7 @@ function RunScannerDialog({ scanner, models, leadDefault, codes, locations, onCl
             lead_model_tool_id: model }
         : { universe: tickers, lead_model_tool_id: model };
       const r = await api.post(`/screeners/${scanner.id}/run`, body);
-      navigate(`/research/${r.session_id}`, { state: { autoSend: r.prompt } });
+      navigate(`/research/${r.session_id}`, { state: { autoSend: r.prompt, hidden: !!r.hidden } });
     } catch (e: any) { setError(errorText(e)); setRunning(false); }
   }
 
