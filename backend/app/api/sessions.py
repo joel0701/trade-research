@@ -13,7 +13,7 @@ from app.attachments import UnsupportedFile, copy_attachment, delete_files, save
 from app.llm.providers import model_available, provider_of
 from app.preflight import unavailable_report
 from app.skill_draft import DraftError, draft_skill
-from app.models import Attachment, ChatSession, Message, Run, Tool
+from app.models import Attachment, ChatSession, Message, Run, Tool, now
 
 router = APIRouter(prefix="/sessions", tags=["sessions"])
 
@@ -72,12 +72,25 @@ def _attachment_info(a: Attachment) -> dict[str, Any]:
     return {"id": a.id, "filename": a.filename, "kind": a.kind, "size": a.size}
 
 
+def record_notice(db: Session, session_id: int, decision: str, report: dict[str, Any], question: str) -> None:
+    """Add a record to the conversation of what was unavailable and what the user decided.
+    Shown in the chat; never sent to the model."""
+    items = [{k: i.get(k) for k in ("role", "tool", "reason", "impact", "gaps", "covered_by")} for i in report["items"]]
+    db.add(Message(session_id=session_id, role="notice", visible=True, content=[{
+        "type": "notice", "kind": "unavailable_sources", "decision": decision, "summary": report["summary"],
+        "items": items, "question": question[:300]}]))
+
+
 def _visible_messages(db: Session, session_id: int) -> list[dict[str, Any]]:
     """Messages as the UI shows them: user text and assistant text, no tool plumbing."""
     rows = db.exec(select(Message).where(Message.session_id == session_id, Message.visible == True)  # noqa: E712
                    .order_by(Message.id)).all()
     out = []
     for m in rows:
+        if m.role == "notice":
+            out.append({"id": m.id, "role": "notice", "text": "", "notice": m.content[0] if m.content else {},
+                        "created_at": m.created_at.isoformat()})
+            continue
         # An assistant message that calls tools is an interim note ("let me check..."),
         # not the answer. It stays in the history and the trace, but not in the chat.
         if m.role == "assistant" and any(b.get("type") == "tool_use" for b in m.content):
@@ -268,6 +281,21 @@ async def skill_draft(session_id: int, db: Session = Depends(get_session)) -> di
         raise HTTPException(422, str(e)) from e
 
 
+@router.post("/{session_id}/pending/cancel")
+def cancel_pending(session_id: int, db: Session = Depends(get_session)) -> dict[str, Any]:
+    """The user cancelled a question held back by the unavailable-sources prompt: record it."""
+    chat = db.get(ChatSession, session_id)
+    if chat is None:
+        raise HTTPException(404)
+    pending = chat.pending_confirm
+    if pending:
+        record_notice(db, session_id, "cancelled", pending["report"], pending["text"])
+        chat.pending_confirm = None
+        db.add(chat)
+        db.commit()
+    return {"text": (pending or {}).get("text", "")}
+
+
 @router.get("/{session_id}/runs")
 def runs(session_id: int, db: Session = Depends(get_session)) -> list[dict[str, Any]]:
     """Trace of every Lead and specialist run in this session."""
@@ -286,21 +314,33 @@ async def send(session_id: int, body: SendMessage, db: Session = Depends(get_ses
         raise HTTPException(422, "Type a question or attach a file.")
     text = body.text.strip() or "Please analyse the attached document(s)."
 
-    # Some assigned data sources are down: ask the user before running (nothing is saved yet).
+    # Some assigned data sources are down: ask the user before running. The held question is kept
+    # on the session (so the prompt survives switching screens) and the decision is recorded.
     report = unavailable_report(db, chat.tool_scope)
+    excluded: list[str] = []
     if report:
-        agreed = report["fingerprint"] in (body.proceed, chat.ack_unavailable)
-        if not agreed:
-            event = {"type": "confirm_needed", **report}
-            return StreamingResponse(iter([f"data: {json.dumps(event)}\n\n"]), media_type="text/event-stream")
-        if body.remember and chat.ack_unavailable != report["fingerprint"]:
-            chat.ack_unavailable = report["fingerprint"]
+        fp = report["fingerprint"]
+        explicit, remembered = body.proceed == fp, chat.ack_unavailable == fp
+        if not (explicit or remembered):
+            atts = db.exec(select(Attachment).where(Attachment.id.in_(body.attachment_ids))).all() if body.attachment_ids else []
+            chat.pending_confirm = {"text": body.text, "attachments": [_attachment_info(a) for a in atts],
+                                    "report": report, "at": now().isoformat()}
             db.add(chat)
             db.commit()
+            event = {"type": "confirm_needed", **report}
+            return StreamingResponse(iter([f"data: {json.dumps(event)}\n\n"]), media_type="text/event-stream")
+        decision = "continued_remember" if (explicit and body.remember) else "continued" if explicit else "remembered"
+        if body.remember:
+            chat.ack_unavailable = fp
+        record_notice(db, session_id, decision, report, text)
+        chat.pending_confirm = None
+        db.add(chat)
+        db.commit()
+        excluded = [f"{i['tool']} ({i['role']}: {i['reason']})" for i in report["items"]]
 
     async def events():
         try:
-            async for event in run_turn(session_id, text, body.attachment_ids):
+            async for event in run_turn(session_id, text, body.attachment_ids, excluded):
                 yield f"data: {json.dumps(event, default=str)}\n\n"
         except Exception as e:
             yield f"data: {json.dumps({'type': 'error', 'message': str(e)})}\n\n"

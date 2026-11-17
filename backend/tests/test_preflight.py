@@ -80,3 +80,41 @@ def test_preflight_nothing_to_report(monkeypatch):
     with TestClient(app) as c:
         sid = c.post("/api/sessions", json={}).json()["id"]
         assert events(c, sid, {"text": "q"})[-1]["type"] == "done"
+
+
+def test_preflight_pending_prompt_and_decisions_are_recorded(monkeypatch):
+    setup(monkeypatch)
+    fake = FakeClient()
+    monkeypatch.setattr(loop, "client", lambda: fake)
+    with TestClient(app) as c:
+        sid = c.post("/api/sessions", json={}).json()["id"]
+        fp = events(c, sid, {"text": "How does NVDA look?"})[0]["fingerprint"]
+        # The held question survives leaving and coming back.
+        pending = c.get(f"/api/sessions/{sid}").json()["pending_confirm"]
+        assert pending["text"] == "How does NVDA look?" and pending["report"]["fingerprint"] == fp
+
+        # Cancel: recorded in the conversation, prompt cleared, text handed back.
+        assert c.post(f"/api/sessions/{sid}/pending/cancel").json() == {"text": "How does NVDA look?"}
+        chat = c.get(f"/api/sessions/{sid}").json()
+        assert chat["pending_confirm"] is None
+        [note] = chat["messages"]
+        assert note["role"] == "notice" and note["notice"]["decision"] == "cancelled"
+        assert any(i["tool"] == "SEC EDGAR filings" and i["impact"] == "high" for i in note["notice"]["items"])
+
+        # Continue and remember: a note precedes the question; the Lead is told what's missing.
+        events(c, sid, {"text": "How does NVDA look?"})
+        assert events(c, sid, {"text": "How does NVDA look?", "proceed": fp, "remember": True})[-1]["type"] == "done"
+        msgs = c.get(f"/api/sessions/{sid}").json()["messages"]
+        assert [m["role"] for m in msgs] == ["notice", "notice", "user", "assistant"]
+        assert msgs[1]["notice"]["decision"] == "continued_remember"
+        lead_call = next(k for k in fake.calls if "Your team" in k["system"])
+        assert "unavailable for this question" in lead_call["system"] and "SEC EDGAR filings" in lead_call["system"]
+        # Notices are never sent to the model.
+        assert all(m["role"] in ("user", "assistant") for m in lead_call["messages"])
+
+        # Later questions under "don't ask again" still get a note.
+        fake.calls.clear()
+        assert events(c, sid, {"text": "And AMD?"})[-1]["type"] == "done"
+        msgs = c.get(f"/api/sessions/{sid}").json()["messages"]
+        assert msgs[-3]["role"] == "notice" and msgs[-3]["notice"]["decision"] == "remembered"
+        assert all(m["role"] in ("user", "assistant") for m in next(k for k in fake.calls if "Your team" in k["system"])["messages"])

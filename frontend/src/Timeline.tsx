@@ -33,22 +33,23 @@ export default function Timeline({ items, scroller }: { items: TimelineItem[]; s
     if (!el) return;
     const update = () => {
       const top = el.getBoundingClientRect().top + 80;
-      const nodes = Array.from(el.querySelectorAll<HTMLElement>("[data-msg-index]"));
+      const index = new Map(items.map((it, i) => [it.key, i]));
+      const nodes = Array.from(el.querySelectorAll<HTMLElement>("[data-msg-key]"));
       let current = 0;
       for (const n of nodes) {
-        if (n.getBoundingClientRect().top <= top) current = Number(n.dataset.msgIndex);
+        if (n.getBoundingClientRect().top <= top) current = index.get(n.dataset.msgKey ?? "") ?? current;
       }
       // At the very bottom, the last message is the one being read.
-      if (el.scrollTop + el.clientHeight >= el.scrollHeight - 4 && nodes.length) current = nodes.length - 1;
+      if (el.scrollTop + el.clientHeight >= el.scrollHeight - 4 && items.length) current = items.length - 1;
       setActive(current);
     };
     update();
     el.addEventListener("scroll", update, { passive: true });
     return () => el.removeEventListener("scroll", update);
-  }, [scroller, items.length]);
+  }, [scroller, items]);
 
   function jump(i: number) {
-    scroller.current?.querySelector<HTMLElement>(`[data-msg-index="${i}"]`)
+    scroller.current?.querySelector<HTMLElement>(`[data-msg-key="${items[i]?.key}"]`)
       ?.scrollIntoView({ block: "start", behavior: "smooth" });
   }
 

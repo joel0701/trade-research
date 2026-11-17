@@ -125,8 +125,8 @@ async def consult(specialist: Role, question: str, session_id: int, tools: dict[
     return answer
 
 
-async def run_turn(session_id: int, user_text: str,
-                   attachment_ids: list[int] | None = None) -> AsyncIterator[dict[str, Any]]:
+async def run_turn(session_id: int, user_text: str, attachment_ids: list[int] | None = None,
+                   excluded: list[str] | None = None) -> AsyncIterator[dict[str, Any]]:
     """Persist the user message, run the Lead, and stream events to the caller.
 
     The turn runs as a background task: if the caller disconnects (the user leaves the
@@ -140,7 +140,7 @@ async def run_turn(session_id: int, user_text: str,
     except Exception:
         ACTIVE_SESSIONS.discard(session_id)
         raise
-    async for event in _run_prepared(session_id, user_text, *prepared):
+    async for event in _run_prepared(session_id, user_text, *prepared, excluded=excluded or []):
         yield event
 
 
@@ -191,7 +191,8 @@ def _prepare_turn(session_id: int, user_text: str, attachment_ids: list[int] | N
         specialists = [r for r in roles if not r.is_lead]
         lead, specialists = apply_scope(chat.tool_scope, lead, specialists, tools)
         history = [{"role": m.role, "content": expand_refs(db, m.content)} for m in
-                   db.exec(select(Message).where(Message.session_id == session_id).order_by(Message.id)).all()]
+                   db.exec(select(Message).where(Message.session_id == session_id, Message.role != "notice")
+                           .order_by(Message.id)).all()]
 
         atts = []
         if attachment_ids:
@@ -224,7 +225,7 @@ def _prepare_turn(session_id: int, user_text: str, attachment_ids: list[int] | N
 
 async def _run_prepared(session_id: int, user_text: str, tools: dict[int, Tool], lead: Role,
                         specialists: list[Role], messages: list[dict[str, Any]],
-                        lead_model: ModelConfig) -> AsyncIterator[dict[str, Any]]:
+                        lead_model: ModelConfig, excluded: list[str] | None = None) -> AsyncIterator[dict[str, Any]]:
     queue: asyncio.Queue[dict[str, Any] | None] = asyncio.Queue()
 
     async def emit(event: dict[str, Any]) -> None:
@@ -267,6 +268,9 @@ async def _run_prepared(session_id: int, user_text: str, tools: dict[int, Tool],
                     }, run_spec)
                 team = "\n".join(f"- consult_{s.slug}: {s.name}. {s.description}" for s in specialists) or "(none)"
                 system = lead.system_prompt + LEAD_SUFFIX.format(today=date.today().isoformat(), team=team)
+                if excluded:
+                    system += ("\n\nThese data sources are unavailable for this question; the user chose to continue "
+                               "without them: " + "; ".join(excluded) + ". Where that limits the answer, say so briefly.")
                 result = await run_agent(model=lead_model, system=system, messages=messages, toolbox=toolbox,
                                          emit=emit, on_message=on_message, max_iterations=lead.max_iterations)
             _finish_run(run_id, result)

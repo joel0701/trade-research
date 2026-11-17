@@ -106,6 +106,9 @@ class ChatSession(SQLModel, table=True):
     # When set (e.g. a session started from a scanner), only these data sources are used: each role
     # keeps just the ones it has, and roles left with none aren't offered to the Lead.
     tool_scope: list[int] | None = Field(default=None, sa_column=Column(JSON))
+    # A question held back by the unavailable-sources prompt, awaiting the user's decision
+    # (kept here so the prompt survives switching sessions): text, attachments, report.
+    pending_confirm: dict[str, Any] | None = Field(default=None, sa_column=Column(JSON))
     created_at: datetime = Field(default_factory=now, sa_type=UTCDateTime)
     updated_at: datetime = Field(default_factory=now, sa_type=UTCDateTime)
 
@@ -120,7 +123,7 @@ class Message(SQLModel, table=True):
 
     id: int | None = Field(default=None, primary_key=True)
     session_id: int = Field(foreign_key="chatsession.id", index=True)
-    role: str  # user | assistant
+    role: str  # user | assistant | notice (a record shown in the chat, never sent to the model)
     content: list[dict[str, Any]] = Field(default_factory=list, sa_column=Column(JSON))
     visible: bool = True
     run_id: int | None = None  # the Lead run that produced this message (links to the trace)

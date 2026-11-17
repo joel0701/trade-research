@@ -4,6 +4,7 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { api, AttachmentInfo, Json, sendMessage, StreamEvent, UnavailableReport } from "../api";
 import UnavailablePrompt from "../UnavailablePrompt";
+import SourcesNotice from "../SourcesNotice";
 import Composer, { ModelTool } from "../Composer";
 import { FileIcon } from "../icons";
 import Trace, { parseTime, Run, setPriceTable } from "../Trace";
@@ -14,7 +15,7 @@ import ProfileCard from "../ProfileCard";
 import { ResizeHandle, usePanelWidth } from "../Resizable";
 import SessionList, { SessionRow } from "../SessionList";
 
-type ChatMsg = { id?: number; role: "user" | "assistant"; text: string; thinking?: string; run_id?: number | null;
+type ChatMsg = { id?: number; role: "user" | "assistant" | "notice"; text: string; notice?: Json; thinking?: string; run_id?: number | null;
                 attachments?: AttachmentInfo[]; model?: string | null; feedback?: string | null; created_at?: string };
 
 function Markdown({ text }: { text: string }) {
@@ -134,6 +135,8 @@ export default function Research() {
       setMessages(s.messages);
       setSessionModel(s.lead_model_tool_id ?? null);
       setToolScope(s.tool_scope ?? null);
+      const held = s.pending_confirm;  // a question awaiting the unavailable-sources decision
+      setPendingConfirm(held ? { text: held.text, attachments: held.attachments ?? [], report: held.report } : null);
       setBusy(!!s.running); // a turn started earlier is still going: show its status
       showLatestAnswer();
       // Skills and screeners open a new session with a prompt to send right away.
@@ -308,17 +311,19 @@ export default function Research() {
           )}
           <button onClick={() => toggleTrace(!showTrace)}>{showTrace ? "Hide trace" : "Show trace"}</button>
         </div>
-        <Timeline scroller={scroller} items={messages.map((m, i) => ({
-          key: String(m.id ?? `live-${i}`), role: m.role, text: m.text, created_at: m.created_at,
+        <Timeline scroller={scroller} items={messages.filter((m) => m.role !== "notice").map((m, i) => ({
+          key: String(m.id ?? `live-${messages.indexOf(m)}`), role: m.role as "user" | "assistant", text: m.text, created_at: m.created_at,
           label: models.find((x) => x.config?.model_id === m.model)?.name ?? m.model ?? undefined,
         }))} />
         <div className="messages" ref={scroller}>
           {messages.length === 0 && !busy && (
             <div className="msg muted">Ask about the market, a sector or a stock. The Lead Analyst will consult the team as needed.</div>
           )}
-          {messages.map((m, i) => (
+          {messages.map((m, i) => m.role === "notice" ? (
+            <SourcesNotice key={m.id ?? `notice-${i}`} notice={m.notice ?? {}} />
+          ) : (
             <div key={m.id ?? `live-${i}`} ref={i === lastAssistant ? answerRef : undefined} className={`msg ${m.role}`}
-                 data-msg-index={i}>
+                 data-msg-key={String(m.id ?? `live-${i}`)}>
               {m.attachments && m.attachments.length > 0 && (
                 <div className="chips">
                   {m.attachments.map((a) => (
@@ -353,9 +358,15 @@ export default function Research() {
               report={pendingConfirm.report}
               onContinue={(remember) => send(pendingConfirm.text, sessionId, pendingConfirm.attachments,
                                              { proceed: pendingConfirm.report.fingerprint, remember })}
-              onCancel={() => {
-                setRestore({ text: pendingConfirm.text, nonce: Date.now() });
+              onCancel={async () => {
+                const text = pendingConfirm.text;
                 setPendingConfirm(null);
+                setRestore({ text, nonce: Date.now() });
+                try {
+                  await api.post(`/sessions/${sessionId}/pending/cancel`);
+                  const s = await api.get(`/sessions/${sessionId}`);
+                  setMessages(s.messages);
+                } catch (e: any) { setError(e.message); }
               }} />
           )}
           {error && <div className="msg error">{error}</div>}
