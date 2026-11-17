@@ -13,7 +13,7 @@ class Provider:
     slug: str
     name: str
     key_env: str
-    api: str  # "anthropic" | "openai_compat"
+    api: str  # "anthropic" | "openai_compat" | "mock"
     base_url: str | None = None
     base_url_env: str | None = None
     max_tokens_param: str = "max_tokens"
@@ -27,7 +27,7 @@ class Provider:
         return None
 
     def available(self) -> bool:
-        return bool(self.key())
+        return self.api == "mock" or bool(self.key())  # the mock needs no key
 
     def url(self) -> str | None:
         return (os.getenv(self.base_url_env) if self.base_url_env else None) or self.base_url
@@ -47,6 +47,7 @@ PROVIDERS: dict[str, Provider] = {p.slug: p for p in [
              stream_usage=False),
     Provider("deepseek", "DeepSeek", "DEEPSEEK_API_KEY", "openai_compat", "https://api.deepseek.com/v1",
              "DEEPSEEK_BASE_URL"),
+    Provider("mock", "Mock (no cost)", "", "mock"),
 ]}
 
 

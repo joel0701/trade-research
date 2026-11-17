@@ -15,6 +15,7 @@ from sqlmodel import Session, select
 from app.agents.loop import Emit, ModelConfig, run_agent
 from app.db import engine
 from app.attachments import expand_refs
+from app.llm.mock_loop import mock_mode
 from app.llm.providers import model_available
 from app.models import Attachment, ChatSession, Message, Role, Run, Tool, now
 from app.tools.registry import Toolbox, safe_name
@@ -57,7 +58,12 @@ put the relevant figures or excerpts in the consult context.
 This is research and education, not personalised financial advice."""
 
 
+MOCK_MODEL = ModelConfig(model_id="mock", provider="mock", effort=None, max_tokens=1000)
+
+
 def _model_for(role: Role, tools: dict[int, Tool]) -> ModelConfig:
+    if mock_mode():  # MOCK_LLM=1: every role uses the free mock
+        return MOCK_MODEL
     t = tools.get(role.model_tool_id) if role.model_tool_id else None
     return ModelConfig.from_tool_config(t.config) if t else ModelConfig()
 
@@ -146,6 +152,8 @@ async def run_turn(session_id: int, user_text: str, attachment_ids: list[int] | 
 
 def _lead_model_for(chat: ChatSession, lead: Role, tools: dict[int, Tool]) -> ModelConfig:
     """The session's chosen Lead model if set and usable, else the Lead role's default."""
+    if mock_mode():
+        return MOCK_MODEL
     t = tools.get(chat.lead_model_tool_id) if chat.lead_model_tool_id else None
     if t is not None and t.kind == "model" and t.enabled and model_available(t.config):
         return ModelConfig.from_tool_config(t.config)

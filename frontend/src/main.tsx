@@ -1,4 +1,5 @@
-import React from "react";
+import React, { useEffect, useState } from "react";
+import { api } from "./api";
 import { Moon, Sun } from "./icons";
 import ReactDOM from "react-dom/client";
 import { BrowserRouter, NavLink, Navigate, Route, Routes, useNavigate } from "react-router-dom";
@@ -22,6 +23,8 @@ function lastSessionPath(): string {
 function App() {
   const navigate = useNavigate();
   const { theme, toggleTheme, profile } = useSettings();
+  const [mock, setMock] = useState(false);
+  useEffect(() => { api.get("/health").then((h) => setMock(!!h.mock_llm)).catch(() => {}); }, []);
   const links = [["/research", "Research"], ["/skills", "Skills"], ["/scanners", "Scanners"],
                  ["/roles", "Roles"], ["/tools", "Tools"]];
   return (
@@ -35,6 +38,11 @@ function App() {
             navigate(lastSessionPath());
           }}>{label}</NavLink>
         ))}
+        {mock && (
+          <span className="mock-badge" title="MOCK_LLM=1 in .env: answers are canned and free; data tools still run">
+            MOCK LLM
+          </span>
+        )}
         <button className="theme-btn" onClick={toggleTheme} title={theme === "dark" ? "Light mode" : "Dark mode"}
                 aria-label="Toggle light and dark mode">{theme === "dark" ? <Sun /> : <Moon />}</button>
         <NavLink to="/settings" className="nav-avatar" title={profile.name ? `${profile.name}: settings` : "Profile and settings"}

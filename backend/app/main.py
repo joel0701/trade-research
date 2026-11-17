@@ -1,4 +1,5 @@
 import logging
+from typing import Any
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
@@ -88,5 +89,7 @@ def python_functions() -> list[dict[str, str]]:
 
 
 @app.get("/api/health")
-def health() -> dict[str, str]:
-    return {"status": "ok"}
+def health() -> dict[str, Any]:
+    from app.llm.mock_loop import mock_mode
+
+    return {"status": "ok", "mock_llm": mock_mode()}

@@ -11,6 +11,7 @@ from typing import Any
 from sqlmodel import Session, select
 
 from app.agents.loop import ModelConfig, client
+from app.llm.mock_loop import mock_mode, mock_skill_draft
 from app.llm.providers import model_available, provider_of
 from app.models import Skill, Tool
 
@@ -51,6 +52,8 @@ class DraftError(Exception):
 
 
 def pick_model(db: Session) -> ModelConfig:
+    if mock_mode():
+        return ModelConfig(model_id="mock", provider="mock", effort=None)
     models = {t.slug: t for t in db.exec(select(Tool).where(Tool.kind == "model", Tool.enabled == True)).all()}  # noqa: E712
     ordered = [models[s] for s in PREFERRED if s in models] + [t for s, t in models.items() if s not in PREFERRED]
     for t in ordered:
@@ -75,6 +78,8 @@ def transcript(convo: list[dict[str, Any]]) -> str:
 async def complete_json(model: ModelConfig, system: str, user: str) -> dict[str, Any]:
     """Ask a model for a JSON object matching SCHEMA."""
     provider = provider_of({"provider": model.provider})
+    if provider.api == "mock":
+        return mock_skill_draft(user)
     if provider.api == "anthropic":
         resp = await client().messages.create(
             model=model.model_id, max_tokens=4000, system=system,

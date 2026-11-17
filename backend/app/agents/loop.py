@@ -14,6 +14,7 @@ from typing import Any
 import anthropic
 
 from app.config import MAX_LOOP_ITERATIONS
+from app.llm.mock_loop import mock_mode, run_agent_mock
 from app.llm.openai_loop import run_agent_openai
 from app.llm.providers import provider_of
 from app.tools.registry import Toolbox
@@ -78,6 +79,10 @@ async def run_agent(
     """Run the loop, mutating `messages` in place. Calls on_message for each new message."""
     result = LoopResult()
     provider = provider_of({"provider": model.provider})
+    if mock_mode() or provider.api == "mock":
+        return await run_agent_mock(model=model, system=system, messages=messages, toolbox=toolbox, emit=emit,
+                                    on_message=on_message, stream_text=stream_text, max_iterations=max_iterations,
+                                    source=source, result=result)
     if not provider.available():
         raise RuntimeError(f"No API key for {provider.name}: set {provider.key_env} in .env "
                            f"to use {model.model_id}.")

@@ -307,6 +307,10 @@ MODELS = [
     dict(slug="haiku", name="Claude Haiku 5.5", description="Cheapest; simple lookups and summaries.",
          config={"provider": "anthropic", "model_id": "claude-haiku-5-5", "effort": "low", "max_tokens": 8000,
                  "price_input": 0.1, "price_output": 0.5, "price_cache_read": 0.01}),
+    dict(slug="mock", name="Mock LLM (no cost)",
+         description="Canned responses for testing the app; consults specialists and calls real data tools, "
+                     "but makes no LLM calls.",
+         config={"provider": "mock", "model_id": "mock", "max_tokens": 1000, "price_input": 0, "price_output": 0}),
     dict(slug="gpt", name="OpenAI GPT-5", description="OpenAI's flagship model.",
          config={"provider": "openai", "model_id": "gpt-5", "max_tokens": 32000, "params": {}}),
     dict(slug="gpt_mini", name="OpenAI GPT-5 mini", description="Faster, cheaper OpenAI model.",
