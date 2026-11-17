@@ -9,6 +9,7 @@ import Roles from "./pages/Roles";
 import Tools from "./pages/Tools";
 import Settings from "./pages/Settings";
 import { Avatar, SettingsProvider, useSettings } from "./settings";
+import { ConfirmProvider } from "./confirm";
 import "./styles.css";
 
 function lastSessionPath(): string {
@@ -57,5 +58,5 @@ function App() {
 }
 
 ReactDOM.createRoot(document.getElementById("root")!).render(
-  <React.StrictMode><BrowserRouter><SettingsProvider><App /></SettingsProvider></BrowserRouter></React.StrictMode>,
+  <React.StrictMode><BrowserRouter><SettingsProvider><ConfirmProvider><App /></ConfirmProvider></SettingsProvider></BrowserRouter></React.StrictMode>,
 );

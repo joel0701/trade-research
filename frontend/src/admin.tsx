@@ -1,8 +1,10 @@
 /** Shared bits for the configuration pages. */
 import { useEffect, useState } from "react";
 import { api, Json } from "./api";
+import { useConfirm } from "./confirm";
 
 export function useCrud(path: string) {
+  const confirm = useConfirm();
   const [items, setItems] = useState<Json[]>([]);
   const [selected, setSelected] = useState<Json | null>(null);
   const [error, setError] = useState("");
@@ -19,7 +21,10 @@ export function useCrud(path: string) {
     } catch (e: any) { setError(e.message); }
   }
   async function remove(item: Json) {
-    if (!item.id || !confirm(`Delete ${item.name}?`)) return;
+    if (!item.id) return;
+    const ok = await confirm({ title: `Delete ${item.name}?`, confirmLabel: "Delete", danger: true,
+                               message: "This can't be undone." });
+    if (!ok) return;
     await api.del(`${path}/${item.id}`);
     setSelected(null);
     reload();

@@ -1,6 +1,7 @@
 /** Research session list with a right-click menu (Rename, Delete) and inline renaming. */
 import { useEffect, useRef, useState } from "react";
 import { api } from "./api";
+import { useConfirm } from "./confirm";
 
 export type SessionRow = { id: number; title: string; origin: string; updated_at: string; running?: boolean };
 
@@ -14,6 +15,7 @@ export default function SessionList({ sessions, activeId, onOpen, onChanged, onD
   onDeleted: (id: number) => void;
   onError: (message: string) => void;
 }) {
+  const confirm = useConfirm();
   const [menu, setMenu] = useState<Menu | null>(null);
   const [renamingId, setRenamingId] = useState<number | null>(null);
   const [draft, setDraft] = useState("");
@@ -66,7 +68,9 @@ export default function SessionList({ sessions, activeId, onOpen, onChanged, onD
 
   async function remove(s: SessionRow) {
     setMenu(null);
-    if (!confirm(`Delete "${s.title}"? This permanently removes the conversation and its trace.`)) return;
+    const ok = await confirm({ title: "Delete this session?", confirmLabel: "Delete", danger: true,
+                               message: `"${s.title}" and its trace will be permanently removed.` });
+    if (!ok) return;
     try {
       await api.del(`/sessions/${s.id}`);
       onDeleted(s.id);

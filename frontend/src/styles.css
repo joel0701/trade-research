@@ -298,3 +298,7 @@ ul.plain li { padding: 3px 0; }
 .detail-head p { margin: 0; }
 .run-btn { padding: 8px 18px; font-size: 15px; flex-shrink: 0; }
 @media (max-width: 700px) { .twopane .sidebar { display: flex; width: 100% !important; max-height: 40vh; } .twopane { flex-direction: column; } }
+.confirm-modal { width: min(420px, 100%); }
+.confirm-actions { justify-content: flex-end; }
+button.danger-btn { background: #c0392b; border-color: #c0392b; color: #fff; font-weight: 500; }
+button.danger-btn:hover { background: #a93226; }
