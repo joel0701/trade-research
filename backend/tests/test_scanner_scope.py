@@ -94,6 +94,6 @@ def test_edgar_is_configured_in_env_only(monkeypatch):
         assert conn["secret_env"] == "SEC_USER_AGENT" and "needs_contact_email" not in conn["config"]
         sec_id = ids(c)["sec_filings"]
         status = lambda: {s["id"]: s for s in c.get("/api/tools-status").json()}[sec_id]  # noqa: E731
-        assert status() == {"id": sec_id, "available": False, "reason": "set SEC_USER_AGENT in .env"}
+        assert status() == {"id": sec_id, "available": False, "reason": "set SEC_USER_AGENT in .env", "pricing": "free"}
         monkeypatch.setenv("SEC_USER_AGENT", "TradeResearch joe@example.com")
         assert status()["available"]

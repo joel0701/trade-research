@@ -3,9 +3,10 @@ import { useNavigate } from "react-router-dom";
 import { api, Json } from "../api";
 import { Field, JsonField, Toggle, useCrud } from "../admin";
 import { Dialog, errorText, LeadModelSelect, TwoPane, useDraft } from "../TwoPane";
+import SourcePicker, { DataNotes } from "../SourcePicker";
 
 const BLANK = { slug: "", name: "New skill", description: "", prompt_template: "", lead_model_tool_id: null,
-                params: [{ name: "ticker", label: "Ticker", default: "" }], enabled: true };
+                params: [{ name: "ticker", label: "Ticker", default: "" }], tool_ids: [], enabled: true };
 
 function RunSkillDialog({ skill, models, leadDefault, onClose }: {
   skill: Json; models: Json[]; leadDefault: string; onClose: () => void;
@@ -39,6 +40,7 @@ function RunSkillDialog({ skill, models, leadDefault, onClose }: {
         ))}
         <LeadModelSelect models={models} value={model} onChange={setModel}
                          defaultLabel={`${leadDefault || "Lead role default"} (default)`} />
+        <DataNotes ids={skill.tool_ids ?? []} />
         {error && <p className="error">{error}</p>}
         <div className="actions">
           <button className="primary" disabled={running || missing.length > 0}>
@@ -94,6 +96,13 @@ export default function Skills() {
             <LeadModelSelect models={models} value={draft.lead_model_tool_id ?? null}
                              onChange={(lead_model_tool_id) => set({ lead_model_tool_id })}
                              defaultLabel="Lead role default" />
+            <label>Data sources this skill uses</label>
+            <p className="muted small">
+              The session uses only these sources, and their notes (limits such as a fixed lookback) are added to the
+              prompt as a callout. Don't add fields for things a source fixes.
+              {(draft.tool_ids ?? []).length === 0 && <strong> None chosen: the full team's sources are used.</strong>}
+            </p>
+            <SourcePicker value={draft.tool_ids ?? []} onChange={(tool_ids) => set({ tool_ids })} />
             <Toggle label="Enabled" value={draft.enabled} onChange={(enabled) => set({ enabled })} />
             {crud.error && <p className="error">{crud.error}</p>}
             <div className="actions">

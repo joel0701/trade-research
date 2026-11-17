@@ -8,7 +8,7 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
-from sqlmodel import Session
+from sqlmodel import Session, select
 
 from app.db import get_session
 from app.api.sessions import check_model
@@ -32,6 +32,16 @@ def render(template: str, params: dict[str, str], defaults: list[dict[str, Any]]
         raise HTTPException(422, f"Missing parameters: {', '.join(missing)}")
     # Your entries are shown in bold in the session's first message.
     return template.format(**{k: f"**{str(v).replace('*', '').strip()}**" for k, v in values.items()})
+
+
+def data_notes(db: Session, tool_ids: list[int]) -> str:
+    """A 'Data notes' callout listing what the referenced sources support and their limits."""
+    if not tool_ids:
+        return ""
+    tools = db.exec(select(Tool).where(Tool.id.in_(tool_ids))).all()
+    lines = [f"> - **{t.name}:** {t.notes.strip()}" for t in sorted(tools, key=lambda t: tool_ids.index(t.id))
+             if t.notes.strip()]
+    return ("\n\n> **Data notes**\n" + "\n".join(lines)) if lines else ""
 
 
 def describe_rules(rule: dict[str, Any]) -> str:
@@ -70,11 +80,12 @@ def run_skill(skill_id: int, body: SkillRun, db: Session = Depends(get_session))
     if default is None or default.kind != "model" or not model_available(default.config):
         model_id = None
     chat = ChatSession(title=f"{skill.name}: {label}".strip(": "), origin=f"skill:{skill.id}",
-                       lead_model_tool_id=model_id)
+                       lead_model_tool_id=model_id,
+                       tool_scope=list(skill.tool_ids) or None)  # the skill's data sources, if it names any
     db.add(chat)
     db.commit()
     db.refresh(chat)
-    return {"session_id": chat.id, "prompt": prompt}
+    return {"session_id": chat.id, "prompt": prompt + data_notes(db, skill.tool_ids)}
 
 
 @router.get("/scanner-options")
@@ -147,7 +158,7 @@ async def run_screen(screener_id: int, body: ScannerRun | None = None,
     # The conversation reads like a normal exchange: the run instructions (settings + task) as the
     # user's message, then the scan results as a response. The Lead then answers the task.
     instructions = (f"Run scanner **{scr.name}**\n\n" + "\n".join(f"- {s}" for s in settings)
-                    + f"\n\n**Task:** {scr.follow_up_prompt}")
+                    + f"\n\n**Task:** {scr.follow_up_prompt}" + data_notes(db, scr.tool_ids))
     results = f"{outcome}:\n\n{table}"
     label = "IBKR scanner" if scr.source == "ibkr" else "Scanner"
     db.add(Message(session_id=chat.id, role="user", content=[{"type": "text", "text": instructions}]))

@@ -1,6 +1,7 @@
 /** Checklist of data sources grouped by category, with ready / not-set-up dots. */
 import { useEffect, useState } from "react";
 import { api, Json } from "./api";
+import { PricingIcon, PricingLegend } from "./Pricing";
 
 export function useSources() {
   const [tools, setTools] = useState<Json[]>([]);
@@ -23,7 +24,8 @@ export default function SourcePicker({ value, onChange, hint }: {
   const toggle = (id: number, on: boolean) => onChange(on ? [...value, id] : value.filter((x) => x !== id));
   return (
     <>
-      <p className="muted small">● ready · ○ not set up yet{hint ? ` · ${hint}` : ""}</p>
+      <p className="muted small">● ready · ○ not set up yet · hover a source for its notes{hint ? ` · ${hint}` : ""}</p>
+      <PricingLegend />
       {caps.filter((c) => tools.some((t) => primary(t) === c.slug)).map((c) => {
         const list = tools.filter((t) => primary(t) === c.slug);
         return (
@@ -35,9 +37,10 @@ export default function SourcePicker({ value, onChange, hint }: {
               {list.map((t) => {
                 const st = status[t.id];
                 return (
-                  <label key={t.id} className={st && !st.available ? "off" : ""} title={st?.reason ?? ""}>
+                  <label key={t.id} className={st && !st.available ? "off" : ""}
+                         title={[st?.reason, t.notes].filter(Boolean).join("\n\n")}>
                     <input type="checkbox" checked={value.includes(t.id)} onChange={(e) => toggle(t.id, e.target.checked)} />
-                    <span className={`dot ${st?.available ? "ok" : "off"}`} />{t.name}
+                    <span className={`dot ${st?.available ? "ok" : "off"}`} /><PricingIcon pricing={st?.pricing} />{t.name}
                   </label>
                 );
               })}
@@ -46,5 +49,22 @@ export default function SourcePicker({ value, onChange, hint }: {
         );
       })}
     </>
+  );
+}
+
+/** The notes of the chosen sources, as they'll be added to the prompt (shown in run dialogs). */
+export function DataNotes({ ids }: { ids: number[] }) {
+  const { tools, status } = useSources();
+  const noted = ids.map((id) => tools.find((t) => t.id === id)).filter((t): t is Json => !!t && !!t.notes?.trim());
+  if (!noted.length) return null;
+  return (
+    <div className="data-notes">
+      <strong>Data notes</strong> <span className="muted small">(added to the prompt)</span>
+      <ul>
+        {noted.map((t) => (
+          <li key={t.id}><PricingIcon pricing={status[t.id]?.pricing} /><strong>{t.name}:</strong> {t.notes}</li>
+        ))}
+      </ul>
+    </div>
   );
 }

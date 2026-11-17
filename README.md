@@ -123,6 +123,15 @@ Built in: Yahoo Finance (free, delayed), DuckDuckGo, Claude web search/fetch, an
 with IV and Greeks, news with sentiment, and off-exchange prints (trades reported to FINRA TRFs,
 i.e. dark pool and internalized volume). What each returns depends on your Massive plan.
 
+Each connection has a **Cost** setting (free, free with an account, or paid plan), shown as an
+icon on the connection and on every data source it serves.
+
+Each data source has **Notes**: what it supports and its limits (e.g. FINRA short volume's fixed
+60-trading-day lookback). Agents see the notes with the tool, and skills and scanners that use a
+source get its notes as a **Data notes** callout in their prompt. A skill can name the data sources
+it uses (Skills → *Data sources this skill uses*); its sessions then use only those. Don't add a
+skill field for something a source fixes; put it in the source's notes instead.
+
 Sources that aren't set up are marked in Tools and Roles. **Before a question runs**, the app
 checks every source assigned to the active roles; if any are unavailable it holds the question and
 asks in the chat whether to continue, grouped by cause, with the impact: *high* when a role has no

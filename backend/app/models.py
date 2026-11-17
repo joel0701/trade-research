@@ -52,6 +52,9 @@ class Connection(SQLModel, table=True):
     description: str = ""
     config: dict[str, Any] = Field(default_factory=dict, sa_column=Column(JSON))
     secret_env: str | None = None
+    # Cost to use: "free" (no account), "account" (free, but needs an account, e.g. a brokerage),
+    # "paid" (needs a paid plan or usage billing), "" (not set). Its data sources show the same icon.
+    pricing: str = ""
     enabled: bool = True
 
 
@@ -75,6 +78,9 @@ class Tool(SQLModel, table=True):
     description: str = ""
     connection_id: int | None = Field(default=None, foreign_key="connection.id")
     capabilities: list[str] = Field(default_factory=list, sa_column=Column(JSON))
+    # What the source supports and its limits (e.g. a fixed lookback). Shown to the agents with the
+    # tool, and added as "Data notes" to skill and scanner prompts that use the source.
+    notes: str = ""
     config: dict[str, Any] = Field(default_factory=dict, sa_column=Column(JSON))
     secret_env: str | None = None
     enabled: bool = True
@@ -161,6 +167,8 @@ class Skill(SQLModel, table=True):
     prompt_template: str
     params: list[dict[str, Any]] = Field(default_factory=list, sa_column=Column(JSON))
     lead_model_tool_id: int | None = None  # default Lead model for sessions this skill starts
+    # Data sources sessions from this skill use (empty = the full team's sources).
+    tool_ids: list[int] = Field(default_factory=list, sa_column=Column(JSON))
     enabled: bool = True
 
 

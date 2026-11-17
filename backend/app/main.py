@@ -71,7 +71,8 @@ def tools_status() -> list[dict]:
         out = []
         for t in db.exec(select(Tool).where(Tool.kind != "model").order_by(Tool.id)).all():
             ok, why = availability(t, conns.get(t.connection_id) if t.connection_id else None)
-            out.append({"id": t.id, "available": ok, "reason": why})
+            conn = conns.get(t.connection_id) if t.connection_id else None
+            out.append({"id": t.id, "available": ok, "reason": why, "pricing": conn.pricing if conn else ""})
         return out
 
 

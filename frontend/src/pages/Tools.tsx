@@ -1,10 +1,11 @@
 import { useEffect, useState } from "react";
 import { api, Json } from "../api";
 import { Field, JsonField, MasterDetail, Toggle, useCrud } from "../admin";
+import { PRICING, PricingIcon, PricingLegend } from "../Pricing";
 
 type Tab = "sources" | "connections" | "models";
 type Capability = { slug: string; label: string; hint: string };
-type Status = { id: number; available: boolean; reason: string | null };
+type Status = { id: number; available: boolean; reason: string | null; pricing?: string };
 
 const SOURCE_KIND_HELP: Record<string, string> = {
   python: 'Built-in Python function. Config: {"function": "<name>"}.',
@@ -67,13 +68,16 @@ export default function Tools() {
   useEffect(refreshStatus, [tools.items, connections.items]);
 
   const connName = (id: number | null) => connections.items.find((c) => c.id === id)?.name ?? "—";
-  const header = <Tabs tab={tab} setTab={changeTab} />;
+  const connPricing = (id: number | null) => connections.items.find((c) => c.id === id)?.pricing ?? "";
+  const tabs = <Tabs tab={tab} setTab={changeTab} />;
+  const header = tab === "models" ? tabs : <>{tabs}<PricingLegend /></>;
 
   if (tab === "connections") {
     const usedBy = (id: number) => tools.items.filter((t) => t.connection_id === id);
     return (
       <MasterDetail title="Connections" crud={connections} header={header}
-        blank={{ slug: "", name: "", kind: "mcp", description: "", config: { transport: "http", url: "" }, secret_env: null, enabled: true }}
+        blank={{ slug: "", name: "", kind: "mcp", description: "", config: { transport: "http", url: "" }, secret_env: null, pricing: "", enabled: true }}
+        rowIcon={(c) => <PricingIcon pricing={c.pricing} />}
         rowExtra={(c) => {
           const n = usedBy(c.id).length;
           return <span className="muted small nowrap">{n} {n === 1 ? "source" : "sources"}</span>;
@@ -87,6 +91,14 @@ export default function Tools() {
               {Object.keys(CONNECTION_KIND_HELP).map((k) => <option key={k}>{k}</option>)}
             </select>
             <p className="muted small">{CONNECTION_KIND_HELP[c.kind]}</p>
+            <label>Cost</label>
+            <select value={c.pricing ?? ""} onChange={(e) => set({ pricing: e.target.value })}>
+              <option value="">Not set</option>
+              {PRICING.map((p) => <option key={p.value} value={p.value}>{p.label}</option>)}
+            </select>
+            <p className="muted small">
+              {PRICING.find((p) => p.value === c.pricing)?.hint ?? "Shown as an icon on this connection and its data sources."}
+            </p>
             <Field label="Description" value={c.description} onChange={(description) => set({ description })} multiline rows={2} />
             {c.kind !== "none" && <JsonField label="Config" value={c.config} onChange={(config) => set({ config })} rows={6} />}
             <Field label="Environment variable that holds the key (set its value in .env, never here)"
@@ -97,7 +109,7 @@ export default function Tools() {
                 <label>Data sources using this connection</label>
                 <ul className="plain">
                   {usedBy(c.id).map((t) => (
-                    <li key={t.id}><StatusBadge s={status[t.id]} /> {t.name}
+                    <li key={t.id}><StatusBadge s={status[t.id]} /> <PricingIcon pricing={c.pricing} />{t.name}
                       {status[t.id] && !status[t.id].available && <span className="muted small"> — {status[t.id].reason}</span>}</li>
                   ))}
                   {usedBy(c.id).length === 0 && <li className="muted">None yet. Add one under Data sources.</li>}
@@ -139,7 +151,8 @@ export default function Tools() {
   }));
   return (
     <MasterDetail title="Data sources" crud={tools} header={header} filter={(t) => t.kind !== "model"} groups={groups}
-      blank={{ slug: "", name: "", kind: "mcp_server", description: "", connection_id: null, capabilities: [], config: {}, enabled: true }}
+      blank={{ slug: "", name: "", kind: "mcp_server", description: "", connection_id: null, capabilities: [], config: {}, notes: "", enabled: true }}
+      rowIcon={(t) => <PricingIcon pricing={connPricing(t.connection_id)} />}
       rowExtra={(t) => <StatusBadge s={status[t.id]} />}>
       {(t, set) => (
         <>
@@ -171,6 +184,12 @@ export default function Tools() {
           <Field label="Description (shown to the model; optional for built-ins)" value={t.description}
                  onChange={(description) => set({ description })} multiline rows={2} />
           <JsonField label="Config" value={t.config} onChange={(config) => set({ config })} />
+          <Field label="Notes: what it supports and its limits (e.g. a fixed lookback). Shown to the agents, and added as a callout to skill and scanner prompts that use this source."
+                 value={t.notes ?? ""} onChange={(notes) => set({ notes })} multiline rows={3} />
+          {t.connection_id && (
+            <p className="muted small"><PricingIcon pricing={connPricing(t.connection_id)} />
+              {" "}{PRICING.find((p) => p.value === connPricing(t.connection_id))?.label ?? "Cost not set"} (set on connection {connName(t.connection_id)})</p>
+          )}
           <Toggle label="Enabled" value={t.enabled} onChange={(enabled) => set({ enabled })} />
           {t.id && status[t.id] && (status[t.id].available
             ? <p className="small" style={{ color: "var(--ok-fg)" }}>✓ Ready{t.connection_id ? ` (via ${connName(t.connection_id)})` : ""}</p>

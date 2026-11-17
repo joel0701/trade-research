@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { api, Json } from "../api";
 import { Field, JsonField, Toggle, useCrud } from "../admin";
 import { Dialog, errorText, LeadModelSelect, TwoPane, useDraft } from "../TwoPane";
-import SourcePicker from "../SourcePicker";
+import SourcePicker, { DataNotes } from "../SourcePicker";
 
 type Option = { code: string; label: string };
 
@@ -59,6 +59,7 @@ function RunScannerDialog({ scanner, models, leadDefault, codes, locations, onCl
         {ibkr ? <>IBKR scan <strong>{code}</strong> over <strong>{market}</strong>.</> : <>Rule-based scan of your ticker list.</>}
         {" "}Changes here apply to this run only.
       </p>
+      <DataNotes ids={scanner.tool_ids ?? []} />
       <form onSubmit={(e) => { e.preventDefault(); run(); }}>
         {ibkr ? (
           <div className="grid-3">

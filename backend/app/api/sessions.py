@@ -277,9 +277,15 @@ async def skill_draft(session_id: int, db: Session = Depends(get_session)) -> di
     if not any(m["role"] == "user" for m in convo):
         raise HTTPException(422, "Ask at least one question before saving the conversation as a skill.")
     try:
-        return await draft_skill(db, convo)
+        draft = await draft_skill(db, convo)
     except DraftError as e:
         raise HTTPException(422, str(e)) from e
+    # Pre-select the data sources this conversation actually used (their notes come with them).
+    used = {tc["name"] for r in db.exec(select(Run).where(Run.session_id == session_id)).all()
+            for tc in (r.tool_calls or [])}
+    tools = db.exec(select(Tool).where(Tool.kind != "model")).all()
+    draft["tool_ids"] = [t.id for t in tools if t.slug in used]
+    return draft
 
 
 @router.post("/{session_id}/pending/cancel")

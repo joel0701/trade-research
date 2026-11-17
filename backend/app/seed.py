@@ -33,25 +33,25 @@ TOOLS = [
 # One connection can serve several sources (IBKR: quotes, options, account, screeners).
 # IBKR tool names below are those of IBKR's MCP server; edit allowed_tools if yours differ.
 CONNECTIONS = [
-    dict(slug="yahoo", name="Yahoo Finance", kind="none",
+    dict(slug="yahoo", name="Yahoo Finance", kind="none", pricing="free",
          description="Free, delayed market data and fundamentals via yfinance. No setup needed."),
-    dict(slug="sec_edgar", name="SEC EDGAR", kind="http", secret_env="SEC_USER_AGENT",
+    dict(slug="sec_edgar", name="SEC EDGAR", kind="http", pricing="free", secret_env="SEC_USER_AGENT",
          description="Free SEC filings and insider (Form 4) data. The SEC requires SEC_USER_AGENT in .env "
                      "with your app name and contact email."),
-    dict(slug="anthropic_tools", name="Anthropic server tools", kind="none",
+    dict(slug="anthropic_tools", name="Anthropic server tools", kind="none", pricing="paid",
          description="Web search and fetch run by Anthropic; work with Claude models only."),
-    dict(slug="duckduckgo", name="DuckDuckGo", kind="none", description="Free web and news search."),
-    dict(slug="ib_gateway", name="Interactive Brokers (IB Gateway)", kind="tws",
+    dict(slug="duckduckgo", name="DuckDuckGo", kind="none", pricing="free", description="Free web and news search."),
+    dict(slug="ib_gateway", name="Interactive Brokers (IB Gateway)", kind="tws", pricing="account",
          description="IB Gateway or TWS running on this computer, via the TWS API. No key: log in to IB Gateway and "
                      "enable API access. Read-only. Settings: IBKR_HOST, IBKR_PORT (4002 paper, 4001 live), IBKR_CLIENT_ID."),
-    dict(slug="finra", name="FINRA (free)", kind="http",
+    dict(slug="finra", name="FINRA", kind="http", pricing="free",
          description="FINRA's free off-exchange data: daily short sale volume (dark pool short ratio) and weekly "
                      "dark pool (ATS) volume by venue. No key needed."),
-    dict(slug="massive", name="Massive.com", kind="http", secret_env="MASSIVE_API_KEY",
+    dict(slug="massive", name="Massive.com", kind="http", pricing="paid", secret_env="MASSIVE_API_KEY",
          description="Massive.com (formerly Polygon.io) REST API: quotes, bars, option chains with Greeks, news "
                      "and trades (off-exchange / dark pool prints). Data access depends on your Massive plan. "
                      "Set MASSIVE_BASE_URL in .env to change the host."),
-    dict(slug="bigdata", name="Bigdata.com", kind="mcp", secret_env="BIGDATA_API_KEY",
+    dict(slug="bigdata", name="Bigdata.com", kind="mcp", pricing="paid", secret_env="BIGDATA_API_KEY",
          description="Bigdata.com MCP server: news, filings, transcripts and company tearsheets.",
          config={"transport": "http", "url": "https://REPLACE-WITH-BIGDATA-MCP-URL/mcp"}),
 ]
@@ -96,6 +96,39 @@ DATA_SOURCES = [
 ]
 
 RENAMES = {"price_history": ("Price history (Yahoo)", "Yahoo price history"), "technical_snapshot": ("Technical snapshot (Yahoo)", "Yahoo technical snapshot"), "fundamentals": ("Fundamentals (Yahoo)", "Yahoo fundamentals"), "options_chain": ("Options chain (Yahoo)", "Yahoo option chain"), "sec_filings": ("SEC filings (EDGAR)", "SEC EDGAR filings"), "sec_filing_text": ("Read SEC filing (EDGAR)", "SEC EDGAR read filing"), "insider_trades": ("Insider trades (EDGAR Form 4)", "SEC EDGAR insider trades (Form 4)")}
+
+# What each built-in source supports and its limits. Filled in only where notes are empty.
+NOTES = {
+    "price_history": "Yahoo data, delayed about 15 minutes. Returns the most recent 60 bars for the chosen period and "
+                     "interval; intraday intervals only for short periods.",
+    "technical_snapshot": "Computed from up to 2 years of daily Yahoo bars (delayed): SMA 20/50/200, RSI 14, MACD, ATR 14, "
+                          "relative volume, % changes, distance from 52-week high.",
+    "fundamentals": "Current snapshot only (no history). Fields can be missing, especially for small caps.",
+    "options_chain": "Yahoo, delayed. One expiry per call, strikes near the money. Implied volatility only, no Greeks.",
+    "ddg_search": "Search result titles and snippets only, not full articles.",
+    "web_search": "Claude models only. Up to 6 searches per run.",
+    "web_fetch": "Claude models only. Fetches pages whose URLs already appear in the conversation.",
+    "sec_filings": "Up to the 50 most recent filings from EDGAR's recent-filings list.",
+    "sec_filing_text": "Returns up to 60,000 characters of a filing per call (default 20,000); can start at a section.",
+    "insider_trades": "Reads up to the 40 most recent Form 4 filings (default 15). Non-derivative transactions only; totals "
+                      "count open-market buys (P) and sales (S).",
+    "finra_short_volume": "Daily, posted by 6 pm ET. Lookback is fixed: up to 60 trading days (default 20). Covers "
+                          "off-exchange (FINRA TRF) volume only, not total market volume.",
+    "finra_ats_weekly": "Weekly, published about 2 weeks (Tier 1) to 4 weeks (Tier 2) after each week. Lookback up to "
+                        "52 weeks (default 12).",
+    "massive_quote": "Real-time or 15-minute delayed depending on your Massive plan.",
+    "massive_bars": "Returns the most recent 120 bars; history depth depends on your Massive plan.",
+    "massive_option_chain": "One expiry per call, strikes near the money. Needs a Massive plan that includes options.",
+    "massive_news": "Up to 50 articles per call. Sentiment only where Massive provides insights.",
+    "massive_offexchange": "Needs a Massive plan that includes trades. Analyses only the most recent trades (up to about "
+                           "150,000), which may not cover a full day for heavily traded stocks.",
+    "ibkr_gw_quote": "Live with IBKR market data subscriptions, otherwise delayed (the result says which). Needs IB Gateway.",
+    "ibkr_gw_bars": "Returns the most recent 120 bars; duration such as 5 D to 1 Y. Needs IB Gateway.",
+    "ibkr_gw_options": "One expiry per call, strikes near the money, IBKR model Greeks. No open interest. Needs IB Gateway.",
+    "ibkr_gw_scanner": "Up to 50 results per scan, ranked by IBKR (formulas not published). US stocks. Needs IB Gateway.",
+    "ibkr_gw_account": "Read-only: balances, positions, open orders. Never places, changes or cancels orders.",
+    "bigdata_research": "Needs a Bigdata.com API key and the MCP server address on its connection.",
+}
 
 # Categories and connections for the built-in sources that already existed.
 EXISTING_TAGS = {
@@ -189,6 +222,22 @@ def ensure_data_sources(db: Session) -> None:
         sec.secret_env = "SEC_USER_AGENT"
         sec.description = next(c["description"] for c in CONNECTIONS if c["slug"] == "sec_edgar")
         db.add(sec)
+
+    # Pricing type for built-in connections (only where you haven't set one), and drop "(free)"
+    # from the FINRA name now that the icon shows it.
+    for c in CONNECTIONS:
+        conn = conns.get(c["slug"])
+        if conn is not None and not conn.pricing:
+            conn.pricing = c["pricing"]
+            if conn.name == "FINRA (free)":
+                conn.name = "FINRA"
+            db.add(conn)
+
+    # Notes on what each built-in source supports (only where you haven't written your own).
+    for tool in db.exec(select(Tool)).all():
+        if not tool.notes and tool.slug in NOTES:
+            tool.notes = NOTES[tool.slug]
+            db.add(tool)
 
     # Vendor name first in source names (only names you haven't edited).
     for slug, (old_name, new_name) in RENAMES.items():

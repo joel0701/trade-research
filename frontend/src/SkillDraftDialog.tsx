@@ -1,6 +1,7 @@
 /** Drafts a skill from the conversation, lets the user edit it, and saves it. */
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
+import SourcePicker from "./SourcePicker";
 import { api, Json } from "./api";
 import { Field, JsonField } from "./admin";
 import { ModelInfo } from "./models";
@@ -65,6 +66,10 @@ export default function SkillDraftDialog({ sessionId, models, onClose, onSaved }
                    onChange={(prompt_template) => set({ prompt_template })} multiline rows={7} />
             <JsonField label='Fields: [{"name", "label", "default"}]' value={draft.params}
                        onChange={(params) => set({ params })} rows={5} />
+            <label>Data sources this skill uses</label>
+            <p className="muted small">Pre-selected from the sources this conversation used. Their notes are added to the
+              prompt when it runs. None = the full team's sources.</p>
+            <SourcePicker value={draft.tool_ids ?? []} onChange={(tool_ids) => set({ tool_ids })} />
             <label>Default Lead Analyst model</label>
             <select value={draft.lead_model_tool_id ?? ""}
                     onChange={(e) => set({ lead_model_tool_id: e.target.value ? Number(e.target.value) : null })}>

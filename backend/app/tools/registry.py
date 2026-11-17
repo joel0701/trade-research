@@ -148,11 +148,10 @@ class Toolbox:
         async def run(args: dict[str, Any], _fn=spec.fn) -> str:
             return await _fn(**args)
 
-        self.add(
-            {"name": safe_name(tool.slug), "description": tool.description or spec.description,
-             "input_schema": spec.input_schema},
-            run,
-        )
+        description = tool.description or spec.description
+        if tool.notes:  # limits the agent should know about (e.g. a fixed lookback)
+            description += f" Notes: {tool.notes}"
+        self.add({"name": safe_name(tool.slug), "description": description[:1024], "input_schema": spec.input_schema}, run)
 
     async def open_mcp(self, cfg: dict[str, Any], secret_env: str | None):
         """Open an MCP client session (kept open until the toolbox closes)."""

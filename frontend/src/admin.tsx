@@ -69,12 +69,13 @@ export function Toggle({ label, value, onChange }: { label: string; value: boole
 }
 
 /** Left list + right editor layout. */
-export function MasterDetail({ title, crud, blank, children, filter, groups, rowExtra, header }: {
+export function MasterDetail({ title, crud, blank, children, filter, groups, rowExtra, rowIcon, header }: {
   title: string; crud: ReturnType<typeof useCrud>; blank: Json;
   children: (item: Json, set: (patch: Json) => void) => React.ReactNode;
   filter?: (item: Json) => boolean;                       // which items this view lists
   groups?: { key: string; label: string; match: (item: Json) => boolean }[]; // optional headed groups
   rowExtra?: (item: Json) => React.ReactNode;             // e.g. a status badge
+  rowIcon?: (item: Json) => React.ReactNode;              // shown before the name (e.g. a cost icon)
   header?: React.ReactNode;                               // e.g. tabs above the list
 }) {
   const { selected, setSelected, save, remove, error } = crud;
@@ -85,7 +86,7 @@ export function MasterDetail({ title, crud, blank, children, filter, groups, row
   const row = (it: Json) => (
     <div key={it.id} className={`row ${selected?.id === it.id ? "active" : ""} ${it.enabled === false ? "off" : ""}`}
          onClick={() => setSelected(it)}>
-      <span>{it.name}{!groups && it.kind && <span className="badge">{it.kind}</span>}{it.is_lead && <span className="badge">lead</span>}</span>
+      <span>{rowIcon?.(it)}{it.name}{!groups && it.kind && <span className="badge">{it.kind}</span>}{it.is_lead && <span className="badge">lead</span>}</span>
       {rowExtra?.(it)}
     </div>
   );
