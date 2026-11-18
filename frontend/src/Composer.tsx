@@ -85,7 +85,7 @@ function SkillsMenu({ skills, onRun }: { skills: Json[]; onRun: (skill: Json, pa
 }
 
 export default function Composer({ placeholder, busy, models, modelId, defaultModelId, onModelChange,
-                                   ensureSession, onSend, skills, onRunSkill, restore }: {
+                                   ensureSession, onSend, skills, onRunSkill, restore, suggestion }: {
   placeholder: string;
   busy: boolean;
   models: ModelTool[];
@@ -97,6 +97,7 @@ export default function Composer({ placeholder, busy, models, modelId, defaultMo
   skills: Json[];
   onRunSkill: (skill: Json, params: Record<string, string>) => Promise<void>;
   restore?: { text: string; nonce: number }; // put text back in the box (e.g. after Cancel)
+  suggestion?: string;  // shown as grey text in the empty box; Tab fills it in, typing replaces it
 }) {
   const [text, setText] = useState("");
   useEffect(() => { if (restore) { setText(restore.text); box.current?.focus(); } }, [restore?.nonce]);
@@ -106,6 +107,7 @@ export default function Composer({ placeholder, busy, models, modelId, defaultMo
   const box = useRef<HTMLTextAreaElement>(null);
   const modelPop = usePopover();
 
+  const ghost = !text && suggestion && !busy ? suggestion : "";  // the suggestion shows only while the box is empty
   const usable = models.filter((m) => m.available);
   const effective = models.find((m) => m.id === (modelId ?? defaultModelId));
   const uploading = files.some((f) => !f.info && !f.error);
@@ -171,10 +173,19 @@ export default function Composer({ placeholder, busy, models, modelId, defaultMo
           ))}
         </div>
       )}
-      <textarea ref={box} rows={1} value={text} placeholder={placeholder}
-                onChange={(e) => setText(e.target.value)}
-                onPaste={(e) => { if (e.clipboardData.files.length) { e.preventDefault(); addFiles(e.clipboardData.files); } }}
-                onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); submit(); } }} />
+      <div className="ghost-wrap" onClick={() => box.current?.focus()}>
+        <textarea ref={box} rows={1} value={text} placeholder={ghost ? "" : placeholder}
+                  aria-label={ghost ? `Message. Suggested: ${ghost}. Press Tab to use it.` : placeholder}
+                  onChange={(e) => setText(e.target.value)}
+                  onPaste={(e) => { if (e.clipboardData.files.length) { e.preventDefault(); addFiles(e.clipboardData.files); } }}
+                  onKeyDown={(e) => {
+                    if (e.key === "Tab" && !e.shiftKey && ghost) { e.preventDefault(); setText(ghost); return; }
+                    if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); submit(); }
+                  }} />
+        {ghost && (
+          <div className="ghost" aria-hidden="true">{ghost} <kbd>Tab</kbd></div>
+        )}
+      </div>
       <div className="composer-bar">
         <div className="pop-anchor" ref={modelPop.ref}>
           <button type="button" className="tool-btn model-btn" onClick={() => modelPop.setOpen(!modelPop.open)}

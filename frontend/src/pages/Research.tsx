@@ -283,6 +283,10 @@ export default function Research() {
 
   // Skill and scanner sessions start with a generated prompt: shown as a run card, not as your message.
   const runPromptIndex = runKind ? messages.findIndex((m) => m.role === "user") : -1;
+  // The first suggested next step of the latest answer, if nothing has been asked since: shown as
+  // grey text in the empty box (Tab fills it in).
+  const latest = messages.filter((m) => m.role !== "notice").at(-1);
+  const suggestion = latest?.role === "assistant" && !pendingConfirm ? splitNextSteps(latest.text).steps[0] : undefined;
   const lastAssistant = messages.map((m) => m.role).lastIndexOf("assistant");
   // Status comes from the trace, so it is right even after leaving and coming back.
   const leadRun = [...runs].reverse().find((r) => r.parent_run_id == null && r.status === "running");
@@ -404,6 +408,7 @@ export default function Research() {
             skills={skills}
             onRunSkill={runSkill}
             restore={restore}
+            suggestion={suggestion}
           />
         </div>
       </section>
