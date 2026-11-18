@@ -3,7 +3,8 @@ import { useNavigate } from "react-router-dom";
 import { api, Json } from "../api";
 import { Field, JsonField, Toggle, useCrud } from "../admin";
 import { Dialog, errorText, LeadModelSelect, TwoPane, useDraft } from "../TwoPane";
-import SourcePicker, { DataNotes } from "../SourcePicker";
+import { useSources } from "../SourcePicker";
+import { PricingIcon } from "../Pricing";
 
 type Option = { code: string; label: string };
 
@@ -23,8 +24,39 @@ function NumberField({ label, value, onChange, hint }:
 }
 
 const BLANK = { slug: "", name: "New scanner", description: "", source: "rules", params: {}, universe: [], rules: { all: [] },
-                tool_ids: [], sort_by: null, limit: 25, enabled: true,
+                sort_by: null, limit: 25, enabled: true,
                 follow_up_prompt: "Review these results and pick the most promising candidates." };
+
+/** What the scan itself uses. After the results, the Lead analyses them like any research question. */
+function ScanData({ source }: { source: string }) {
+  const { tools, status } = useSources();
+  const bySlug = (slug: string) => tools.find((t) => t.slug === slug);
+  const item = (slug: string, role: string) => {
+    const t = bySlug(slug);
+    if (!t) return null;
+    const st = status[t.id];
+    return (
+      <li key={slug} title={t.notes ?? ""}>
+        <span className={`dot ${st?.available ? "ok" : "off"}`} /><PricingIcon pricing={st?.pricing} />
+        <strong>{t.name}</strong> <span className="muted small">· {role}{st && !st.available ? ` · ${st.reason}` : ""}</span>
+      </li>
+    );
+  };
+  return (
+    <>
+      <label>Scan data</label>
+      <ul className="plain scan-data">
+        {source === "ibkr"
+          ? [item("ibkr_gw_scanner", "runs the scan"), item("technical_snapshot", "adds indicator columns (RSI, moving averages…) used by rules and sorting")]
+          : [item("technical_snapshot", "daily bars for each ticker; indicators computed here")]}
+      </ul>
+      <p className="muted small">
+        This page configures only the scan. After the results come in, the Lead analyses them, and answers any
+        follow-up questions, like any research question: with the full team and all available data sources.
+      </p>
+    </>
+  );
+}
 
 /** Asks for this run's settings (pre-filled from the scanner; not saved), then runs it into a new session. */
 function RunScannerDialog({ scanner, models, leadDefault, codes, locations, onClose }: {
@@ -59,7 +91,6 @@ function RunScannerDialog({ scanner, models, leadDefault, codes, locations, onCl
         {ibkr ? <>IBKR scan <strong>{code}</strong> over <strong>{market}</strong>.</> : <>Rule-based scan of your ticker list.</>}
         {" "}Changes here apply to this run only.
       </p>
-      <DataNotes ids={scanner.tool_ids ?? []} />
       <form onSubmit={(e) => { e.preventDefault(); run(); }}>
         {ibkr ? (
           <div className="grid-3">
@@ -167,13 +198,8 @@ export default function Scanners() {
                    value={s.sort_by ?? ""} onChange={(v) => set({ sort_by: v || null })} />
             <label>Max results</label>
             <input type="number" value={s.limit} onChange={(e) => set({ limit: Number(e.target.value) })} />
-            <label>Data sources for the follow-up analysis</label>
-            <p className="muted small">
-              The session this scanner opens uses only these sources, and only these are checked before it runs.
-              {(s.tool_ids ?? []).length === 0 && <strong> None chosen: the full team's sources are used.</strong>}
-            </p>
-            <SourcePicker value={s.tool_ids ?? []} onChange={(tool_ids) => set({ tool_ids })} />
-            <Field label="Follow-up prompt for the Lead" value={s.follow_up_prompt}
+            <ScanData source={s.source} />
+            <Field label="Task for the Lead after the scan (it can use the full team)" value={s.follow_up_prompt}
                    onChange={(follow_up_prompt) => set({ follow_up_prompt })} multiline rows={3} />
             <Toggle label="Enabled" value={s.enabled} onChange={(enabled) => set({ enabled })} />
             {crud.error && <p className="error">{crud.error}</p>}

@@ -6,7 +6,7 @@ import json
 
 from sqlmodel import Session, select
 
-from app.models import Connection, DismissedDefault, Role, Screener, Skill, Tool
+from app.models import ChatSession, Connection, DismissedDefault, Role, Screener, Skill, Tool
 
 IBKR_BLOCKED = [  # anything that can place orders or change account state stays off by default
     "create_order_instruction", "delete_order_instruction", "create_alert", "update_alert",
@@ -425,23 +425,9 @@ IBKR_SCANNERS = [
 ]
 
 
-# Data sources each built-in scanner's follow-up analysis uses (by source slug).
-TECHNICALS = ["ibkr_gw_quote", "ibkr_gw_bars", "technical_snapshot", "price_history", "massive_quote"]
-NEWS = ["massive_news", "web_search", "ddg_search"]
-OPTIONS = ["ibkr_gw_options", "massive_option_chain", "options_chain"]
-SCANNER_SOURCES = {
-    "oversold_uptrend": TECHNICALS + NEWS,
-    "momentum_breakout": TECHNICALS + NEWS + ["finra_short_volume"],
-    "ibkr_top_gainers": TECHNICALS + NEWS + ["finra_short_volume"],
-    "ibkr_unusual_options": OPTIONS + ["ibkr_gw_quote", "massive_quote", "technical_snapshot"] + NEWS
-                            + ["finra_short_volume"],
-    "ibkr_iv_rich": OPTIONS + ["ibkr_gw_quote", "massive_quote", "technical_snapshot", "fundamentals"] + NEWS,
-}
-
-
 def ensure_scanners(db: Session) -> None:
-    """Add the default IBKR scanners if missing, and give built-in scanners their default data
-    sources if they have none yet (never changes scanners you've edited)."""
+    """Add the default IBKR scanners if missing. Sessions started by scanners used to be limited to
+    the scanner's data sources; lift that so they work like any research session."""
     existing = {s.slug: s for s in db.exec(select(Screener)).all()}
     gone = dismissed(db, "screener")
     for spec in IBKR_SCANNERS:
@@ -449,12 +435,10 @@ def ensure_scanners(db: Session) -> None:
             sc = Screener(universe=[], rules={}, **spec)
             db.add(sc)
             existing[sc.slug] = sc
-    tool_ids = {t.slug: t.id for t in db.exec(select(Tool)).all()}
-    for slug, sources in SCANNER_SOURCES.items():
-        sc = existing.get(slug)
-        if sc is not None and not sc.tool_ids:
-            sc.tool_ids = [tool_ids[s] for s in sources if s in tool_ids]
-            db.add(sc)
+    for chat in db.exec(select(ChatSession).where(ChatSession.origin.startswith("screener:"))).all():
+        if chat.tool_scope:  # (JSON null and SQL NULL both read as None)
+            chat.tool_scope = None
+            db.add(chat)
     db.commit()
 
 

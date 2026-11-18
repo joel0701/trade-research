@@ -145,8 +145,8 @@ async def run_screen(screener_id: int, body: ScannerRun | None = None,
             settings.append(f"Rules: **{describe_rules(scr.rules)}**")
         outcome = f"Found {len(rows)} matches out of {len(universe)} tickers"
     table = results_to_markdown(rows)
+    # The scanner's settings only drive the scan; the analysis uses the full team, like any research question.
     chat = ChatSession(title=f"Scanner: {scr.name} ({len(rows)} results)", origin=f"screener:{scr.id}",
-                       tool_scope=list(scr.tool_ids) or None,  # follow-up uses the scanner's sources
                        lead_model_tool_id=body.lead_model_tool_id)
     db.add(chat)
     db.commit()
@@ -158,7 +158,7 @@ async def run_screen(screener_id: int, body: ScannerRun | None = None,
     # The conversation reads like a normal exchange: the run instructions (settings + task) as the
     # user's message, then the scan results as a response. The Lead then answers the task.
     instructions = (f"Run scanner **{scr.name}**\n\n" + "\n".join(f"- {s}" for s in settings)
-                    + f"\n\n**Task:** {scr.follow_up_prompt}" + data_notes(db, scr.tool_ids))
+                    + f"\n\n**Task:** {scr.follow_up_prompt}")
     results = f"{outcome}:\n\n{table}"
     label = "IBKR scanner" if scr.source == "ibkr" else "Scanner"
     db.add(Message(session_id=chat.id, role="user", content=[{"type": "text", "text": instructions}]))

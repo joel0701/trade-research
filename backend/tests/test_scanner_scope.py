@@ -1,4 +1,4 @@
-"""Scanner sessions use only the scanner's data sources; EDGAR contact email from Settings."""
+"""Scanner sessions: the scanner defines only the scan; the analysis works like any research session."""
 import json
 
 from fastapi.testclient import TestClient
@@ -18,7 +18,7 @@ def events(c, sid, body):
         return [json.loads(line[6:]) for line in r.iter_lines() if line.startswith("data: ")]
 
 
-def test_scanner_session_preflight_only_checks_its_sources(monkeypatch):
+def test_scanner_analysis_uses_full_team_and_preflight_like_research(monkeypatch):
     monkeypatch.setattr(ibkr_gateway, "gateway_reachable", lambda timeout=0.3: True)
     monkeypatch.delenv("SEC_USER_AGENT", raising=False)
     monkeypatch.setenv("MASSIVE_API_KEY", "mk")
@@ -31,29 +31,42 @@ def test_scanner_session_preflight_only_checks_its_sources(monkeypatch):
     fake = FakeClient()
     monkeypatch.setattr(loop, "client", lambda: fake)
     with TestClient(app) as c:
-        t = ids(c)
         sc = next(s for s in c.get("/api/screeners").json() if s["slug"] == "ibkr_top_gainers")
-        assert sc["tool_ids"] and t["sec_filings"] not in sc["tool_ids"]  # defaults are explicit, no EDGAR
+        assert "tool_ids" not in sc  # a scanner configures only the scan
         r = c.post(f"/api/screeners/{sc['id']}/run").json()
         chat = c.get(f"/api/sessions/{r['session_id']}").json()
-        assert chat["tool_scope"] == sc["tool_ids"]
-        # EDGAR isn't set up, but it isn't one of this scanner's sources: no prompt, the run goes ahead.
+        assert chat["tool_scope"] is None  # no data-source limit on the analysis
+        msgs = chat["messages"]
+        assert "Data notes" not in msgs[0]["text"]
+        # Checked like any research question: EDGAR isn't set up, so the analysis asks first.
         ev = events(c, r["session_id"], {"text": r["prompt"], "hidden": True})
-        assert ev[0]["type"] != "confirm_needed" and ev[-1]["type"] == "done"
-        # Reads as an exchange: instructions, scan results, then the Lead's analysis (the task prompt is hidden).
+        assert ev[0]["type"] == "confirm_needed" and any("EDGAR" in i["tool"] for i in ev[0]["items"])
+        ev = events(c, r["session_id"], {"text": r["prompt"], "hidden": True, "proceed": ev[0]["fingerprint"]})
+        assert ev[-1]["type"] == "done"
+        # Reads as an exchange: instructions, scan results, the decision note, then the Lead's analysis.
         msgs = c.get(f"/api/sessions/{r['session_id']}").json()["messages"]
-        assert [m["role"] for m in msgs] == ["user", "assistant", "assistant"]
+        assert [m["role"] for m in msgs] == ["user", "assistant", "notice", "assistant"]
         assert msgs[0]["text"].startswith("Run scanner **IBKR: top % gainers**") and msgs[1]["model"] == "IBKR scanner"
         assert "| rank |" in msgs[1]["text"]
-        # The Lead saw the whole exchange in order, ending with the task.
+        # The Lead saw the exchange in order, ending with the task, and had the whole team.
         lead = next(k for k in fake.calls if "Your team" in k["system"])
-        roles = [m["role"] for m in lead["messages"]]
-        assert roles[:3] == ["user", "assistant", "user"] and "| rank |" in lead["messages"][1]["content"][0]["text"]
+        assert [m["role"] for m in lead["messages"]][:3] == ["user", "assistant", "user"]
+        assert "| rank |" in lead["messages"][1]["content"][0]["text"]
+        assert {"consult_finance_analyst", "consult_news_analyst"} <= {t["name"] for t in lead["tools"]}
 
-        # Lifting the limit (Use full team) brings the full check back.
-        c.patch(f"/api/sessions/{r['session_id']}", json={"tool_scope": None})
-        ev = events(c, r["session_id"], {"text": "Now the fundamentals?"})
-        assert ev[0]["type"] == "confirm_needed" and any("EDGAR" in i["tool"] for i in ev[0]["items"])
+
+def test_old_scanner_sessions_lose_their_limit():
+    from sqlmodel import Session
+    from app.db import engine as db_engine
+    from app.models import ChatSession
+    from app.seed import ensure_scanners
+    with Session(db_engine) as db:
+        chat = ChatSession(title="old scan", origin="screener:1", tool_scope=[1, 2])
+        db.add(chat)
+        db.commit()
+        ensure_scanners(db)
+        db.refresh(chat)
+        assert chat.tool_scope is None
 
 
 def test_scope_limits_team_and_gives_unheld_sources_to_lead(monkeypatch):

@@ -189,8 +189,8 @@ class Screener(SQLModel, table=True):
     rules: dict[str, Any] = Field(default_factory=dict, sa_column=Column(JSON))
     source: str = "rules"
     params: dict[str, Any] = Field(default_factory=dict, sa_column=Column(JSON))
-    # Data sources the follow-up analysis may use (empty = the full team's sources).
-    tool_ids: list[int] = Field(default_factory=list, sa_column=Column(JSON))
+    # The scanner only defines the scan. After the results, the Lead analyses them (and answers
+    # any follow-up questions) like any research question, with the full team and its tools.
     sort_by: str | None = None
     limit: int = 25
     follow_up_prompt: str = (

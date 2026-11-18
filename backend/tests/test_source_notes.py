@@ -49,16 +49,6 @@ def test_skill_prompt_has_data_notes_and_scope():
         assert c.get(f"/api/sessions/{r2['session_id']}").json()["tool_scope"] is None
 
 
-def test_scanner_instructions_have_data_notes(monkeypatch):
-    from app.screeners import engine
-    monkeypatch.setattr(engine, "fetch_snapshots", lambda ts: {x: {"close": 1, "sma_200": 0, "rsi_14": 30} for x in ts})
-    with TestClient(app) as c:
-        sc = next(s for s in c.get("/api/screeners").json() if s["slug"] == "oversold_uptrend")
-        r = c.post(f"/api/screeners/{sc['id']}/run", json={"universe": ["AAPL"]}).json()
-        first = c.get(f"/api/sessions/{r['session_id']}").json()["messages"][0]["text"]
-        assert "**Task:**" in first and "> **Data notes**" in first and "Yahoo technical snapshot:" in first
-
-
 def test_skill_draft_preselects_sources_used(monkeypatch):
     from app import skill_draft
     from tests.test_response_actions import answered_session

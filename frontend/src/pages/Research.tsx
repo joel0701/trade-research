@@ -43,7 +43,7 @@ export default function Research() {
   const [skills, setSkills] = useState<Json[]>([]);
   const [defaultModelId, setDefaultModelId] = useState<number | null>(null); // the Lead role's model
   const [sessionModel, setSessionModel] = useState<number | null>(null);     // this session's override
-  const [toolScope, setToolScope] = useState<number[] | null>(null);         // scanner sessions: limited sources
+  const [toolScope, setToolScope] = useState<number[] | null>(null);         // skill sessions: limited to the skill's sources
   const [pendingModel, setPendingModel] = useState<number | null>(null);     // chosen before a session exists
   // True while the session on screen has a turn in progress, whether this page started it
   // or it was started earlier (e.g. before you switched to another screen).
@@ -304,8 +304,8 @@ export default function Research() {
         <div className="chat-head">
           <span className="title">{sessions.find((s) => s.id === sessionId)?.title ?? "New research"}</span>
           {toolScope && toolScope.length > 0 && (
-            <span className="scope-chip" title="This session (started from a scanner) only uses the scanner's data sources">
-              Scanner sources only ({toolScope.length})
+            <span className="scope-chip" title="This session (started from a skill) only uses the skill's data sources">
+              Skill sources only ({toolScope.length})
               <button className="link" onClick={async () => {
                 try { await api.patch(`/sessions/${sessionId}`, { tool_scope: null }); setToolScope(null); }
                 catch (e: any) { setError(e.message); }
