@@ -111,3 +111,25 @@ def test_skill_on_scanner_runs_three_stages(monkeypatch):
                 db.delete(d)
             db.commit()
             ensure_scanners(db)
+
+
+def test_skill_sources_limit_its_run_but_not_follow_ups(monkeypatch):
+    fake = FakeClient()
+    monkeypatch.setattr(loop, "client", lambda: fake)
+    with TestClient(app) as c:
+        t = {x["slug"]: x for x in c.get("/api/tools").json()}
+        skill = c.post("/api/skills", json={"slug": "short_check", "name": "Short check",
+                                            "prompt_template": "Short interest for {ticker}?",
+                                            "params": [{"name": "ticker", "label": "Ticker"}],
+                                            "tool_ids": [t["finra_short_volume"]["id"]],
+                                            "lead_model_tool_id": t["haiku"]["id"]}).json()
+        r = c.post(f"/api/skills/{skill['id']}/run", json={"params": {"ticker": "CRWV"}}).json()
+        send(c, r["session_id"], {"text": r["prompt"]})
+        leads = [k for k in fake.calls if "Your team" in k["system"]]
+        first = {x["name"] for x in leads[0]["tools"]}
+        assert first == {"consult_technical_analyst"}  # only the role holding the skill's source
+        n = len(leads)
+        send(c, r["session_id"], {"text": "And the fundamentals?"})
+        follow = [k for k in fake.calls if "Your team" in k["system"]][n:]
+        assert {"consult_finance_analyst", "consult_news_analyst"} <= {x["name"] for x in follow[0]["tools"]}
+        assert follow[0]["model"] == t["opus"]["config"]["model_id"]

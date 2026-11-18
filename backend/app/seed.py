@@ -435,7 +435,9 @@ def ensure_scanners(db: Session) -> None:
             sc = Screener(universe=[], rules={}, **spec)
             db.add(sc)
             existing[sc.slug] = sc
-    for chat in db.exec(select(ChatSession).where(ChatSession.origin.startswith("screener:"))).all():
+    # Skill sessions too: a skill's sources now apply to its own run only, not to follow-ups.
+    for chat in db.exec(select(ChatSession).where(ChatSession.origin.startswith("screener:")
+                                                  | ChatSession.origin.startswith("skill:"))).all():
         if chat.tool_scope:  # (JSON null and SQL NULL both read as None)
             chat.tool_scope = None
             db.add(chat)

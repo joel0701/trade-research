@@ -324,7 +324,7 @@ async def send(session_id: int, body: SendMessage, db: Session = Depends(get_ses
 
     # Some assigned data sources are down: ask the user before running. The held question is kept
     # on the session (so the prompt survives switching screens) and the decision is recorded.
-    report = unavailable_report(db, chat.tool_scope)
+    report = unavailable_report(db, chat.next_turn_tool_scope or chat.tool_scope)
     excluded: list[str] = []
     if report:
         fp = report["fingerprint"]

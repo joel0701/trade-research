@@ -79,9 +79,10 @@ scan, the scanner's task with the scanner's model, then the skill's prompt evalu
 with the skill's model. Follow-up questions use the Research default. The stages run in the
 background, so they finish even if you leave the page.
 
-**Skill and scanner models** apply to their first answer only (e.g. Sonnet for an IBKR scanner's
-summary). Follow-up questions in the session use the Research default (the Lead role's model, or
-the one picked in the composer).
+**Skill and scanner models** (and a skill's data sources) apply to their own run only, so a
+cheaper model such as Sonnet can handle steps that need little reasoning. Follow-up questions in
+the session always use the Research default: the Lead role's model (or the one picked in the
+composer) and the full team.
 
 Default models: Lead and Strategy Optimizer on Claude Opus 5.5; most specialists on Sonnet 5.5;
 Sector Mapper on Haiku 5.5. Opus, Sonnet and Fable use server-side refusal fallbacks
@@ -146,8 +147,8 @@ checks every source assigned to the active roles; if any are unavailable it hold
 asks in the chat whether to continue, grouped by cause, with the impact: *high* when a role has no
 other working source for that kind of data, *low* when another source covers it. You can continue,
 continue without being asked again in that session (until the set of unavailable sources changes),
-or cancel. Sources you've disabled yourself aren't reported. Sessions started from a skill that names its data sources use only those (and only those are
-checked); **Use full team** lifts the limit. A scanner's settings cover only the scan; its results
+or cancel. Sources you've disabled yourself aren't reported. A skill that names its data sources uses only those for its own run (and only those are
+checked). A scanner's settings cover only the scan; its results
 are then analysed, and follow-up questions answered, like any research question, with the full team.
 **Order placement is always blocked**: any MCP tool that places, changes or cancels orders, or
 moves money, is never exposed to the agents (`TRADING_TOOL` in `backend/app/tools/registry.py`).

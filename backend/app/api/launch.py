@@ -91,7 +91,7 @@ async def run_skill(skill_id: int, body: SkillRun, db: Session = Depends(get_ses
         # The skill's model answers the skill's prompt; follow-up questions use the Research default.
         chat = ChatSession(title=f"{skill.name}: {label}".strip(": "), origin=f"skill:{skill.id}",
                            next_turn_model_tool_id=model_id,
-                           tool_scope=list(skill.tool_ids) or None)  # the skill's data sources, if it names any
+                           next_turn_tool_scope=list(skill.tool_ids) or None)  # for the skill's run only
         db.add(chat)
         db.commit()
         db.refresh(chat)
@@ -101,8 +101,7 @@ async def run_skill(skill_id: int, body: SkillRun, db: Session = Depends(get_ses
     # evaluation (skill's model). Follow-up questions use the Research default.
     settings, results, scan_label, rows = await scan(scr, dict(scr.params), list(scr.universe))
     scanner_model = run_model(db, None, scr.lead_model_tool_id)
-    chat = ChatSession(title=f"{skill.name}: {label}".strip(": ") + f" ({len(rows)} results)", origin=f"skill:{skill.id}",
-                       tool_scope=list(skill.tool_ids) or None)
+    chat = ChatSession(title=f"{skill.name}: {label}".strip(": ") + f" ({len(rows)} results)", origin=f"skill:{skill.id}")
     db.add(chat)
     db.commit()
     db.refresh(chat)
@@ -116,10 +115,12 @@ async def run_skill(skill_id: int, body: SkillRun, db: Session = Depends(get_ses
                 f"{' and the scanner analysis' if scr.follow_up_prompt.strip() else ''}.{notes}")
     if scr.follow_up_prompt.strip():
         chat.next_turn_model_tool_id = scanner_model
-        chat.queued_turns = [{"text": evaluate, "model_tool_id": model_id, "hidden": True, "label": skill.name}]
+        chat.queued_turns = [{"text": evaluate, "model_tool_id": model_id, "tool_scope": list(skill.tool_ids) or None,
+                              "hidden": True, "label": skill.name}]
         first = f"Analyse the scanner results above and complete this task: {scr.follow_up_prompt}"
     else:  # the scanner has no task of its own: the skill evaluates the raw results
         chat.next_turn_model_tool_id = model_id
+        chat.next_turn_tool_scope = list(skill.tool_ids) or None
         first = evaluate
     db.add(chat)
     db.commit()

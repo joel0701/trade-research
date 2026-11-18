@@ -121,8 +121,8 @@ export default function Skills() {
                              defaultLabel={`Research default (${leadDefault || "Lead role model"})`} />
             <label>Data sources this skill uses</label>
             <p className="muted small">
-              The session uses only these sources, and their notes (limits such as a fixed lookback) are added to the
-              prompt as a callout. Don't add fields for things a source fixes.
+              The skill's run uses only these sources, and their notes (limits such as a fixed lookback) are added to the
+              prompt as a callout. Don't add fields for things a source fixes. Follow-up questions use the full team.
               {(draft.tool_ids ?? []).length === 0 && <strong> None chosen: the full team's sources are used.</strong>}
             </p>
             <SourcePicker value={draft.tool_ids ?? []} onChange={(tool_ids) => set({ tool_ids })} />

@@ -41,12 +41,13 @@ def test_skill_prompt_has_data_notes_and_scope():
         assert r["prompt"].startswith("Assess dark pool positioning for **CRWV**.\n\n> **Data notes**\n")
         assert "> - **FINRA daily short volume:** Daily, posted by 6 pm ET. Lookback is fixed" in r["prompt"]
         assert "> - **FINRA weekly dark pool (ATS) volume:**" in r["prompt"]
-        assert c.get(f"/api/sessions/{r['session_id']}").json()["tool_scope"] == sources
+        chat = c.get(f"/api/sessions/{r['session_id']}").json()
+        assert chat["next_turn_tool_scope"] == sources and chat["tool_scope"] is None  # skill's run only
         # A skill without sources: no callout, full team.
         plain = next(s for s in c.get("/api/skills").json() if s["slug"] == "full_analysis")
         r2 = c.post(f"/api/skills/{plain['id']}/run", json={"params": {"ticker": "AAPL"}}).json()
         assert "Data notes" not in r2["prompt"]
-        assert c.get(f"/api/sessions/{r2['session_id']}").json()["tool_scope"] is None
+        assert c.get(f"/api/sessions/{r2['session_id']}").json()["next_turn_tool_scope"] is None
 
 
 def test_skill_draft_preselects_sources_used(monkeypatch):

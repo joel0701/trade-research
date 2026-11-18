@@ -159,6 +159,7 @@ def _pop_stage(session_id: int) -> dict[str, Any] | None:
         stage, *rest = chat.queued_turns
         chat.queued_turns = rest or None
         chat.next_turn_model_tool_id = stage.get("model_tool_id")
+        chat.next_turn_tool_scope = stage.get("tool_scope") or None
         db.add(chat)
         db.commit()
         return stage
@@ -222,7 +223,8 @@ def _prepare_turn(session_id: int, user_text: str, attachment_ids: list[int] | N
         if lead is None:
             raise ValueError("No enabled Lead role configured")
         specialists = [r for r in roles if not r.is_lead]
-        lead, specialists = apply_scope(chat.tool_scope, lead, specialists, tools)
+        # A skill's data sources apply to its own run only; follow-ups use the full team.
+        lead, specialists = apply_scope(chat.next_turn_tool_scope or chat.tool_scope, lead, specialists, tools)
         history = [{"role": m.role, "content": expand_refs(db, m.content)} for m in
                    db.exec(select(Message).where(Message.session_id == session_id, Message.role != "notice")
                            .order_by(Message.id)).all()]
@@ -249,6 +251,7 @@ def _prepare_turn(session_id: int, user_text: str, attachment_ids: list[int] | N
         chat.updated_at = now()
         # A skill's or scanner's own model runs just its first answer; later turns use the session's model.
         turn_model, chat.next_turn_model_tool_id = chat.next_turn_model_tool_id, None
+        chat.next_turn_tool_scope = None
         db.add(chat)
         db.commit()
         current = expand_refs(db, user_content)
