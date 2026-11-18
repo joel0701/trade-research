@@ -399,3 +399,19 @@ select.model-select { border-left-width: 4px; border-left-style: solid; }
 .dt tbody tr.active td:first-child { box-shadow: inset 3px 0 0 var(--accent); }
 .dt tbody tr:last-child td { border-bottom: 0; }
 .dt td.pos { color: var(--pos); } .dt td.neg { color: var(--neg); }
+
+/* Generated first prompt of a skill or scanner session */
+.msg.user.run-card { background: color-mix(in srgb, var(--tone) 9%, var(--panel)); border: 1px solid color-mix(in srgb, var(--tone) 40%, transparent);
+                     border-left: 4px solid var(--tone); }
+.run-card-head { display: flex; align-items: center; gap: 8px; margin: -2px 0 8px; padding-bottom: 8px;
+                 border-bottom: 1px solid color-mix(in srgb, var(--tone) 25%, transparent); }
+.run-card-head strong { color: var(--tone); font-size: 13px; letter-spacing: .3px; text-transform: uppercase; }
+.run-card-head .cfg-icon { width: 22px; height: 22px; }
+.run-card-head .muted { margin-left: auto; }
+.msg.run-card strong { color: var(--text); }
+.msg.run-card .run-card-head strong { color: var(--tone); }
+/* Scanner runs: solid amber edge. Skill runs: purple, dashed outline with a soft glow. */
+.msg.user.run-card.run-skill { border: 1.5px dashed color-mix(in srgb, var(--tone) 70%, transparent); border-left: 1.5px dashed color-mix(in srgb, var(--tone) 70%, transparent);
+                               border-radius: 14px; box-shadow: 0 0 0 4px color-mix(in srgb, var(--tone) 7%, transparent);
+                               background: linear-gradient(135deg, color-mix(in srgb, var(--tone) 13%, var(--panel)), var(--panel) 70%); }
+.msg.user.run-card.run-scanner { border-radius: 6px; }

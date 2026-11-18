@@ -123,13 +123,29 @@ def create_session(body: NewSession, db: Session = Depends(get_session)) -> dict
     return chat.model_dump(mode="json")
 
 
+def run_kind(db: Session, chat: ChatSession) -> str | None:
+    """"skill" or "scanner" when the session (or the one it was forked from) was started by a
+    skill or scanner, so its generated first prompt can be shown as a run card."""
+    seen: set[int] = set()
+    while chat is not None and chat.id not in seen:
+        seen.add(chat.id)
+        if chat.origin.startswith("skill:"):
+            return "skill"
+        if chat.origin.startswith("screener:"):
+            return "scanner"
+        if not chat.origin.startswith("fork:"):
+            return None
+        chat = db.get(ChatSession, int(chat.origin.split(":", 1)[1]))
+    return None
+
+
 @router.get("/{session_id}")
 def get_chat(session_id: int, db: Session = Depends(get_session)) -> dict[str, Any]:
     chat = db.get(ChatSession, session_id)
     if chat is None:
         raise HTTPException(404)
     return {**chat.model_dump(mode="json"), "running": session_id in ACTIVE_SESSIONS,
-            "messages": _visible_messages(db, session_id)}
+            "run_kind": run_kind(db, chat), "messages": _visible_messages(db, session_id)}
 
 
 @router.patch("/{session_id}")

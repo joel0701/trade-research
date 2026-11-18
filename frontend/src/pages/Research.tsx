@@ -5,7 +5,7 @@ import { api, AttachmentInfo, Json, sendMessage, StreamEvent, UnavailableReport 
 import UnavailablePrompt from "../UnavailablePrompt";
 import SourcesNotice from "../SourcesNotice";
 import Composer, { ModelTool } from "../Composer";
-import { FileIcon } from "../icons";
+import { FileIcon, Radar, Sparkles } from "../icons";
 import Trace, { parseTime, Run, setPriceTable } from "../Trace";
 import AnswerFooter from "../AnswerFooter";
 import SkillDraftDialog from "../SkillDraftDialog";
@@ -26,6 +26,7 @@ export default function Research() {
   const location = useLocation();
   const [sessions, setSessions] = useState<SessionRow[]>([]);
   const [messages, setMessages] = useState<ChatMsg[]>([]);
+  const [runKind, setRunKind] = useState<"skill" | "scanner" | null>(null);  // session started by a skill or scanner
   const [runs, setRuns] = useState<Run[]>([]);
   const [models, setModels] = useState<ModelTool[]>([]);
   const [draftingSkill, setDraftingSkill] = useState(false);
@@ -117,7 +118,7 @@ export default function Research() {
 
   useEffect(() => {
     setError(""); setFocusRunId(null); setRuns([]); setBusy(false); setLiveText(false); setPendingConfirm(null);
-    if (sessionId == null) { setMessages([]); setSessionModel(pendingModel); return; }
+    if (sessionId == null) { setMessages([]); setSessionModel(pendingModel); setRunKind(null); return; }
     try { localStorage.setItem("lastSession", String(sessionId)); } catch { /* storage unavailable */ }
     loadRuns(sessionId);
     // Only the latest load may update the screen. React runs this effect twice in
@@ -127,6 +128,7 @@ export default function Research() {
       if (cancelled || viewing.current !== sessionId) return;
       if (streaming.current === sessionId) return; // this page is streaming it: don't overwrite
       setMessages(s.messages);
+      setRunKind(s.run_kind ?? null);
       setSessionModel(s.lead_model_tool_id ?? null);
       const held = s.pending_confirm;  // a question awaiting the unavailable-sources decision
       setPendingConfirm(held ? { text: held.text, attachments: held.attachments ?? [], report: held.report,
@@ -276,6 +278,8 @@ export default function Research() {
     setFocusRunId(runId);
   }
 
+  // Skill and scanner sessions start with a generated prompt: shown as a run card, not as your message.
+  const runPromptIndex = runKind ? messages.findIndex((m) => m.role === "user") : -1;
   const lastAssistant = messages.map((m) => m.role).lastIndexOf("assistant");
   // Status comes from the trace, so it is right even after leaving and coming back.
   const leadRun = [...runs].reverse().find((r) => r.parent_run_id == null && r.status === "running");
@@ -315,8 +319,16 @@ export default function Research() {
           {messages.map((m, i) => m.role === "notice" ? (
             <SourcesNotice key={m.id ?? `notice-${i}`} notice={m.notice ?? {}} />
           ) : (
-            <div key={m.id ?? `live-${i}`} ref={i === lastAssistant ? answerRef : undefined} className={`msg ${m.role}`}
+            <div key={m.id ?? `live-${i}`} ref={i === lastAssistant ? answerRef : undefined}
+                 className={`msg ${m.role}${i === runPromptIndex ? ` run-card run-${runKind} tone-${runKind === "scanner" ? "amber" : "purple"}` : ""}`}
                  data-msg-key={String(m.id ?? `live-${i}`)}>
+              {i === runPromptIndex && (
+                <div className="run-card-head">
+                  <span className="cfg-icon">{runKind === "scanner" ? <Radar /> : <Sparkles />}</span>
+                  <strong>{runKind === "scanner" ? "Scanner run" : "Skill run"}</strong>
+                  <span className="muted small">generated from the {runKind === "scanner" ? "scanner's" : "skill's"} settings</span>
+                </div>
+              )}
               {m.attachments && m.attachments.length > 0 && (
                 <div className="chips">
                   {m.attachments.map((a) => (

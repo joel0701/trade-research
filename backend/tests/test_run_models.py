@@ -133,3 +133,24 @@ def test_skill_sources_limit_its_run_but_not_follow_ups(monkeypatch):
         follow = [k for k in fake.calls if "Your team" in k["system"]][n:]
         assert {"consult_finance_analyst", "consult_news_analyst"} <= {x["name"] for x in follow[0]["tools"]}
         assert follow[0]["model"] == t["opus"]["config"]["model_id"]
+
+
+def test_run_kind_for_skill_scanner_and_forks(monkeypatch):
+    from app.screeners import engine
+
+    async def fake_scan(**kw):
+        return [{"rank": 1, "ticker": "CRWV"}]
+    monkeypatch.setattr(ibkr_gateway, "run_scan", fake_scan)
+    monkeypatch.setattr(engine, "fetch_snapshots", lambda t: {})
+    with TestClient(app) as c:
+        sc = next(s for s in c.get("/api/screeners").json() if s["slug"] == "ibkr_top_gainers")
+        r = c.post(f"/api/screeners/{sc['id']}/run").json()
+        assert c.get(f"/api/sessions/{r['session_id']}").json()["run_kind"] == "scanner"
+        first = c.get(f"/api/sessions/{r['session_id']}").json()["messages"][1]["id"]
+        fork = c.post(f"/api/sessions/{r['session_id']}/fork", json={"message_id": first}).json()
+        assert c.get(f"/api/sessions/{fork['id']}").json()["run_kind"] == "scanner"
+        skill = next(s for s in c.get("/api/skills").json() if s["slug"] == "full_analysis")
+        r2 = c.post(f"/api/skills/{skill['id']}/run", json={"params": {"ticker": "AAPL"}}).json()
+        assert c.get(f"/api/sessions/{r2['session_id']}").json()["run_kind"] == "skill"
+        plain = c.post("/api/sessions", json={}).json()
+        assert c.get(f"/api/sessions/{plain['id']}").json()["run_kind"] is None
