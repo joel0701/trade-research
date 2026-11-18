@@ -110,6 +110,10 @@ class ChatSession(SQLModel, table=True):
     # Model for the next turn only, then cleared: a skill's or scanner's own model runs its first
     # answer, and follow-up questions use the session's model (normally the Research default).
     next_turn_model_tool_id: int | None = None
+    # Stages to run automatically after the current turn, in order, each with its own model:
+    # [{"text", "model_tool_id", "hidden", "label"}]. E.g. a skill built on a scanner: the scanner's
+    # analysis (its model), then the skill's evaluation (the skill's model).
+    queued_turns: list[dict[str, Any]] | None = Field(default=None, sa_column=Column(JSON))
     # "Don't ask again in this session" for this set of unavailable sources (see app.preflight).
     ack_unavailable: str | None = None
     # When set (e.g. a session started from a scanner), only these data sources are used: each role
@@ -169,6 +173,9 @@ class Skill(SQLModel, table=True):
     description: str = ""
     prompt_template: str
     params: list[dict[str, Any]] = Field(default_factory=list, sa_column=Column(JSON))
+    # Optional scanner the skill builds on: running the skill runs the scan and the scanner's
+    # analysis (with the scanner's model), then the skill's prompt evaluates them (skill's model).
+    screener_id: int | None = None
     lead_model_tool_id: int | None = None  # model for the skill's run (first answer); follow-ups use the default
     # Data sources sessions from this skill use (empty = the full team's sources).
     tool_ids: list[int] = Field(default_factory=list, sa_column=Column(JSON))

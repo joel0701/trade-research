@@ -150,6 +150,29 @@ async def run_turn(session_id: int, user_text: str, attachment_ids: list[int] | 
         yield event
 
 
+def _pop_stage(session_id: int) -> dict[str, Any] | None:
+    """Take the next queued stage and make its model the next turn's model."""
+    with Session(engine) as db:
+        chat = db.get(ChatSession, session_id)
+        if chat is None or not chat.queued_turns:
+            return None
+        stage, *rest = chat.queued_turns
+        chat.queued_turns = rest or None
+        chat.next_turn_model_tool_id = stage.get("model_tool_id")
+        db.add(chat)
+        db.commit()
+        return stage
+
+
+def _clear_stages(session_id: int) -> None:
+    with Session(engine) as db:
+        chat = db.get(ChatSession, session_id)
+        if chat is not None and chat.queued_turns:
+            chat.queued_turns = None
+            db.add(chat)
+            db.commit()
+
+
 def _lead_model_for(chat: ChatSession, lead: Role, tools: dict[int, Tool], override: int | None = None) -> ModelConfig:
     """This turn's model (override), else the session's chosen Lead model, if set and usable;
     otherwise the Lead role's default."""
@@ -238,24 +261,26 @@ def _prepare_turn(session_id: int, user_text: str, attachment_ids: list[int] | N
 async def _run_prepared(session_id: int, user_text: str, tools: dict[int, Tool], lead: Role,
                         specialists: list[Role], messages: list[dict[str, Any]],
                         lead_model: ModelConfig, excluded: list[str] | None = None) -> AsyncIterator[dict[str, Any]]:
+    """Run the Lead for this turn, then any queued follow-on stages (e.g. a skill evaluating a
+    scanner's analysis), each with its own model. All in one background task and one stream."""
     queue: asyncio.Queue[dict[str, Any] | None] = asyncio.Queue()
 
     async def emit(event: dict[str, Any]) -> None:
         await queue.put(event)
 
-
-    current_run: dict[str, int | None] = {"id": None}
+    turn: dict[str, Any] = {"run_id": None, "model": lead_model}
 
     def on_message(role: str, content: list, visible: bool, usage: dict | None) -> None:
         with Session(engine) as db:
             db.add(Message(session_id=session_id, role=role, content=content, visible=visible,
-                           run_id=current_run["id"],
-                           model=lead_model.model_id if role == "assistant" else None, usage=usage))
+                           run_id=turn["run_id"],
+                           model=turn["model"].model_id if role == "assistant" else None, usage=usage))
             db.commit()
 
-    async def work() -> None:
-        run_id = _start_run(session_id, lead, user_text, None, lead_model.model_id)
-        current_run["id"] = run_id
+    async def one_turn(text: str, lead: Role, specialists: list[Role], messages: list[dict[str, Any]],
+                       model: ModelConfig) -> bool:
+        run_id = _start_run(session_id, lead, text, None, model.model_id)
+        turn.update(run_id=run_id, model=model)
         result = None
         try:
             async with Toolbox([tools[i] for i in lead.tool_ids if i in tools]) as toolbox:
@@ -283,16 +308,29 @@ async def _run_prepared(session_id: int, user_text: str, tools: dict[int, Tool],
                 if excluded:
                     system += ("\n\nThese data sources are unavailable for this question; the user chose to continue "
                                "without them: " + "; ".join(excluded) + ". Where that limits the answer, say so briefly.")
-                result = await run_agent(model=lead_model, system=system, messages=messages, toolbox=toolbox,
+                result = await run_agent(model=model, system=system, messages=messages, toolbox=toolbox,
                                          emit=emit, on_message=on_message, max_iterations=lead.max_iterations)
             _finish_run(run_id, result)
             if result.error:
                 await emit({"type": "error", "message": result.error})
             await emit({"type": "done", "usage": result.usage})
+            return not result.error
         except Exception as e:
             log.exception("Lead turn failed")
             _finish_run(run_id, result, error=str(e))
             await emit({"type": "error", "message": f"{type(e).__name__}: {e}"})
+            return False
+
+    async def work() -> None:
+        try:
+            ok = await one_turn(user_text, lead, specialists, messages, lead_model)
+            while ok and (stage := _pop_stage(session_id)) is not None:
+                await emit({"type": "stage", "label": stage.get("label", "")})
+                _, s_lead, s_specs, s_messages, s_model = _prepare_turn(session_id, stage["text"], None,
+                                                                         bool(stage.get("hidden", True)))
+                ok = await one_turn(stage["text"], s_lead, s_specs, s_messages, s_model)
+            if not ok:
+                _clear_stages(session_id)  # don't run later stages on a failed result
         finally:
             ACTIVE_SESSIONS.discard(session_id)
             await queue.put(None)

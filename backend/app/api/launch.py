@@ -76,28 +76,54 @@ def run_model(db: Session, chosen: int | None, saved: int | None) -> int | None:
 
 
 @router.post("/skills/{skill_id}/run")
-def run_skill(skill_id: int, body: SkillRun, db: Session = Depends(get_session)) -> dict[str, Any]:
+async def run_skill(skill_id: int, body: SkillRun, db: Session = Depends(get_session)) -> dict[str, Any]:
     skill = db.get(Skill, skill_id)
     if skill is None:
         raise HTTPException(404)
     prompt = render(skill.prompt_template, body.params, skill.params)
     label = " ".join(v for v in body.params.values() if v)
     model_id = run_model(db, body.lead_model_tool_id, skill.lead_model_tool_id)
-    # The skill's model answers the skill's prompt; follow-up questions use the Research default.
-    chat = ChatSession(title=f"{skill.name}: {label}".strip(": "), origin=f"skill:{skill.id}",
-                       next_turn_model_tool_id=model_id,
-                       tool_scope=list(skill.tool_ids) or None)  # the skill's data sources, if it names any
+    scr = db.get(Screener, skill.screener_id) if skill.screener_id else None
+    if skill.screener_id and scr is None:
+        raise HTTPException(422, "This skill's scanner was deleted. Pick another scanner or none in Skills.")
+    notes = data_notes(db, skill.tool_ids)
+    if scr is None:
+        # The skill's model answers the skill's prompt; follow-up questions use the Research default.
+        chat = ChatSession(title=f"{skill.name}: {label}".strip(": "), origin=f"skill:{skill.id}",
+                           next_turn_model_tool_id=model_id,
+                           tool_scope=list(skill.tool_ids) or None)  # the skill's data sources, if it names any
+        db.add(chat)
+        db.commit()
+        db.refresh(chat)
+        return {"session_id": chat.id, "prompt": prompt + notes}
+
+    # Built on a scanner: scan, the scanner's analysis (scanner's model), then the skill's
+    # evaluation (skill's model). Follow-up questions use the Research default.
+    settings, results, scan_label, rows = await scan(scr, dict(scr.params), list(scr.universe))
+    scanner_model = run_model(db, None, scr.lead_model_tool_id)
+    chat = ChatSession(title=f"{skill.name}: {label}".strip(": ") + f" ({len(rows)} results)", origin=f"skill:{skill.id}",
+                       tool_scope=list(skill.tool_ids) or None)
     db.add(chat)
     db.commit()
     db.refresh(chat)
-    return {"session_id": chat.id, "prompt": prompt + data_notes(db, skill.tool_ids)}
-
-
-@router.get("/scanner-options")
-def scanner_options() -> dict[str, Any]:
-    """IBKR scan types and locations offered in the Scanners editor."""
-    return {"scan_codes": [{"code": k, "label": v} for k, v in SCAN_CODES.items()],
-            "locations": [{"code": k, "label": v} for k, v in LOCATIONS.items()]}
+    models = {i: db.get(Tool, i).name for i in (scanner_model, model_id) if i}
+    stages = [f"Scanner analysis: **{models.get(scanner_model, 'Research default')}**"] if scr.follow_up_prompt.strip() else []
+    stages.append(f"Skill evaluation: **{models.get(model_id, 'Research default')}**")
+    instructions = (prompt + f"\n\n**Using scanner {scr.name}**\n" + "\n".join(f"- {s}" for s in settings)
+                    + "\n" + "\n".join(f"- {s}" for s in stages))
+    add_exchange(db, chat.id, instructions, results, scan_label)
+    evaluate = (f"{prompt}\n\nBase this on the scanner results above"
+                f"{' and the scanner analysis' if scr.follow_up_prompt.strip() else ''}.{notes}")
+    if scr.follow_up_prompt.strip():
+        chat.next_turn_model_tool_id = scanner_model
+        chat.queued_turns = [{"text": evaluate, "model_tool_id": model_id, "hidden": True, "label": skill.name}]
+        first = f"Analyse the scanner results above and complete this task: {scr.follow_up_prompt}"
+    else:  # the scanner has no task of its own: the skill evaluates the raw results
+        chat.next_turn_model_tool_id = model_id
+        first = evaluate
+    db.add(chat)
+    db.commit()
+    return {"session_id": chat.id, "prompt": first, "hidden": True, "matches": rows}
 
 
 class ScannerRun(BaseModel):
@@ -110,16 +136,15 @@ class ScannerRun(BaseModel):
 RUN_PARAM_KEYS = {"rows", "above_price", "above_volume", "market_cap_above", "average_option_volume_above"}
 
 
-@router.post("/screeners/{screener_id}/run")
-async def run_screen(screener_id: int, body: ScannerRun | None = None,
-                     db: Session = Depends(get_session)) -> dict[str, Any]:
-    scr = db.get(Screener, screener_id)
-    if scr is None:
-        raise HTTPException(404)
-    body = body or ScannerRun()
-    model_id = run_model(db, body.lead_model_tool_id, scr.lead_model_tool_id)
-    params = {**scr.params, **{k: v for k, v in body.params.items() if k in RUN_PARAM_KEYS and v not in ("", None)}}
-    universe = [t.strip().upper() for t in body.universe if t.strip()] if body.universe is not None else scr.universe
+@router.get("/scanner-options")
+def scanner_options() -> dict[str, Any]:
+    """IBKR scan types and locations offered in the Scanners editor."""
+    return {"scan_codes": [{"code": k, "label": v} for k, v in SCAN_CODES.items()],
+            "locations": [{"code": k, "label": v} for k, v in LOCATIONS.items()]}
+
+
+async def scan(scr: Screener, params: dict[str, Any], universe: list[str]) -> tuple[list[str], str, str, list[dict]]:
+    """Run a scanner's scan (no LLM). Returns (settings lines, results text, label, rows)."""
     if scr.source == "ibkr":
         try:
             rows = await run_ibkr_scanner(params, scr.rules, scr.sort_by, scr.limit)
@@ -142,33 +167,49 @@ async def run_screen(screener_id: int, body: ScannerRun | None = None,
         outcome = f"IBKR returned {len(rows)} stocks{' after your rules' if scr.rules else ''}"
     else:
         if not universe:
-            raise HTTPException(422, "Add at least one ticker to scan.")
+            raise HTTPException(422, f"Scanner {scr.name} has no tickers to scan.")
         rows = await run_screener(universe, scr.rules, scr.sort_by, scr.limit)
         settings = [f"Tickers ({len(universe)}): **{', '.join(universe)}**"]
         if scr.rules:
             settings.append(f"Rules: **{describe_rules(scr.rules)}**")
         outcome = f"Found {len(rows)} matches out of {len(universe)} tickers"
-    table = results_to_markdown(rows)
-    # The scanner's settings only drive the scan; the analysis uses the full team, like any research question.
+    if scr.sort_by:
+        settings.append(f"Sorted by: **{scr.sort_by}**")
+    label = "IBKR scanner" if scr.source == "ibkr" else "Scanner"
+    return settings, f"{outcome}:\n\n{results_to_markdown(rows)}", label, rows
+
+
+def add_exchange(db: Session, chat_id: int, instructions: str, results: str, label: str) -> None:
+    """The run reads like a normal exchange: instructions as the user's message, results as a response."""
+    db.add(Message(session_id=chat_id, role="user", content=[{"type": "text", "text": instructions}]))
+    db.add(Message(session_id=chat_id, role="assistant", model=label, content=[{"type": "text", "text": results}]))
+    db.commit()
+
+
+@router.post("/screeners/{screener_id}/run")
+async def run_screen(screener_id: int, body: ScannerRun | None = None,
+                     db: Session = Depends(get_session)) -> dict[str, Any]:
+    scr = db.get(Screener, screener_id)
+    if scr is None:
+        raise HTTPException(404)
+    body = body or ScannerRun()
+    model_id = run_model(db, body.lead_model_tool_id, scr.lead_model_tool_id)
+    params = {**scr.params, **{k: v for k, v in body.params.items() if k in RUN_PARAM_KEYS and v not in ("", None)}}
+    universe = [t.strip().upper() for t in body.universe if t.strip()] if body.universe is not None else scr.universe
+    if scr.source != "ibkr" and not universe:
+        raise HTTPException(422, "Add at least one ticker to scan.")
+    settings, results, label, rows = await scan(scr, params, universe)
     # The scanner's model analyses the results; follow-up questions use the Research default.
     chat = ChatSession(title=f"Scanner: {scr.name} ({len(rows)} results)", origin=f"screener:{scr.id}",
                        next_turn_model_tool_id=model_id)
     db.add(chat)
     db.commit()
     db.refresh(chat)
-    if scr.sort_by:
-        settings.append(f"Sorted by: **{scr.sort_by}**")
     if model_id:
         settings.append(f"Analysis model: **{db.get(Tool, model_id).name}**")
-    # The conversation reads like a normal exchange: the run instructions (settings + task) as the
-    # user's message, then the scan results as a response. The Lead then answers the task.
     instructions = (f"Run scanner **{scr.name}**\n\n" + "\n".join(f"- {s}" for s in settings)
                     + f"\n\n**Task:** {scr.follow_up_prompt}")
-    results = f"{outcome}:\n\n{table}"
-    label = "IBKR scanner" if scr.source == "ibkr" else "Scanner"
-    db.add(Message(session_id=chat.id, role="user", content=[{"type": "text", "text": instructions}]))
-    db.add(Message(session_id=chat.id, role="assistant", model=label, content=[{"type": "text", "text": results}]))
-    db.commit()
+    add_exchange(db, chat.id, instructions, results, label)
     # The UI sends this hidden prompt to start the Lead's analysis (no extra bubble is shown).
     return {"session_id": chat.id, "prompt": SCANNER_FOLLOW_UP, "hidden": True, "matches": rows}
 

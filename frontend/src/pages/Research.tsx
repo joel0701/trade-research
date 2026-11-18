@@ -170,6 +170,7 @@ export default function Research() {
       requestAnimationFrame(() => scroller.current?.scrollTo({ top: scroller.current.scrollHeight, behavior: "smooth" }));
 
       let startNewAnswer = true; // the Lead's text before a tool call is an interim note: replace it
+      let keepPrevious = false;  // a new stage started: the previous stage's answer stays
       let scrolledToAnswer = false;
       let detached = false; // the user opened another session: stop drawing this stream
       let needsConfirm = false;
@@ -188,7 +189,8 @@ export default function Research() {
           setMessages((m) => {
             const copy = [...m];
             if (startNewAnswer) {
-              if (copy[copy.length - 1]?.role === "assistant") copy.pop();
+              if (!keepPrevious && copy[copy.length - 1]?.role === "assistant") copy.pop();
+              keepPrevious = false;
               copy.push({ role: "assistant", text: "", thinking: "" });
               startNewAnswer = false;
             }
@@ -205,6 +207,10 @@ export default function Research() {
           startNewAnswer = true;
           scrolledToAnswer = false;
           setLiveText(false);
+        } else if (e.type === "stage") {
+          startNewAnswer = true; keepPrevious = true; scrolledToAnswer = false;
+          setLiveText(false);
+          loadRuns(target);  // the finished stage's footer (model, cost) can show
         } else if (e.type === "error") {
           setError(e.message);
         }

@@ -74,6 +74,11 @@ cd backend && uv run pytest
 | **Skills** | Prompt templates with parameters, e.g. `{ticker}`; optional data sources; the model the skill runs with |
 | **Scanners** | Rule-based (ticker universe + rules) or IBKR market scanner (scan type, market, price/volume/market-cap filters, optional rules); sort; the task for the Lead after the scan and the model that runs it. Settings cover only the scan: the analysis and follow-ups use the full team |
 
+**Skills built on a scanner** (Skills → *Built on a scanner*) chain the steps in one session: the
+scan, the scanner's task with the scanner's model, then the skill's prompt evaluating those results
+with the skill's model. Follow-up questions use the Research default. The stages run in the
+background, so they finish even if you leave the page.
+
 **Skill and scanner models** apply to their first answer only (e.g. Sonnet for an IBKR scanner's
 summary). Follow-up questions in the session use the Research default (the Lead role's model, or
 the one picked in the composer).

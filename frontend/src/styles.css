@@ -329,3 +329,6 @@ button.danger-btn:hover { background: #a93226; }
               padding: 8px 12px; margin: 12px 0; border-radius: 4px; font-size: 13px; }
 .data-notes ul { margin: 6px 0 0; padding-left: 18px; }
 .data-notes li { margin: 3px 0; }
+.stages { margin: 6px 0 10px; padding-left: 20px; color: var(--muted); }
+.stages li { margin: 2px 0; }
+.stages strong { color: var(--text); font-weight: 600; }

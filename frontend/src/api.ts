@@ -43,7 +43,8 @@ export type StreamEvent =
   | { type: "specialist_end"; role: string; name: string; summary: string }
   | { type: "error"; message: string }
   | ({ type: "confirm_needed" } & UnavailableReport)
-  | { type: "done"; usage: Json };
+  | { type: "done"; usage: Json }
+  | { type: "stage"; label: string };  // the next stage starts (e.g. a skill evaluating a scanner's analysis)
 
 /** POST a message and read the Server-Sent Events stream. */
 export type UnavailableItem = {

@@ -6,11 +6,13 @@ import { Dialog, errorText, LeadModelSelect, TwoPane, useDraft } from "../TwoPan
 import SourcePicker, { DataNotes } from "../SourcePicker";
 
 const BLANK = { slug: "", name: "New skill", description: "", prompt_template: "", lead_model_tool_id: null,
-                params: [{ name: "ticker", label: "Ticker", default: "" }], tool_ids: [], enabled: true };
+                params: [{ name: "ticker", label: "Ticker", default: "" }], tool_ids: [], screener_id: null, enabled: true };
 
-function RunSkillDialog({ skill, models, leadDefault, onClose }: {
-  skill: Json; models: Json[]; leadDefault: string; onClose: () => void;
+function RunSkillDialog({ skill, models, leadDefault, scanners, onClose }: {
+  skill: Json; models: Json[]; leadDefault: string; scanners: Json[]; onClose: () => void;
 }) {
+  const scanner = scanners.find((x) => x.id === skill.screener_id);
+  const modelName = (id: number | null | undefined) => models.find((m) => m.id === id)?.name ?? `Research default (${leadDefault || "Lead role model"})`;
   const navigate = useNavigate();
   const [values, setValues] = useState<Record<string, string>>(
     Object.fromEntries((skill.params ?? []).map((p: Json) => [p.name, p.default ?? ""])));
@@ -23,13 +25,21 @@ function RunSkillDialog({ skill, models, leadDefault, onClose }: {
     setRunning(true); setError("");
     try {
       const r = await api.post(`/skills/${skill.id}/run`, { params: values, lead_model_tool_id: model });
-      navigate(`/research/${r.session_id}`, { state: { autoSend: r.prompt } });
+      navigate(`/research/${r.session_id}`, { state: { autoSend: r.prompt, hidden: !!r.hidden } });
     } catch (e: any) { setError(errorText(e)); setRunning(false); }
   }
 
   return (
     <Dialog title={`Run: ${skill.name}`} onClose={onClose}>
       {skill.description && <p className="muted small">{skill.description}</p>}
+      {scanner && (
+        <ol className="stages small">
+          <li>Scan: <strong>{scanner.name}</strong> (its saved settings)</li>
+          {scanner.follow_up_prompt?.trim() && <li>Scanner analysis: <strong>{modelName(scanner.lead_model_tool_id)}</strong></li>}
+          <li>Skill evaluation: <strong>the model below</strong></li>
+          <li>Follow-up questions: <strong>{modelName(null)}</strong></li>
+        </ol>
+      )}
       <form onSubmit={(e) => { e.preventDefault(); if (!missing.length) run(); }}>
         {(skill.params ?? []).map((p: Json, i: number) => (
           <div key={p.name}>
@@ -60,9 +70,11 @@ export default function Skills() {
   const [models, setModels] = useState<Json[]>([]);
   const [leadDefault, setLeadDefault] = useState("");
   const [running, setRunning] = useState(false);
+  const [scanners, setScanners] = useState<Json[]>([]);
 
   useEffect(() => {
     api.get("/models").then(setModels);
+    api.get("/screeners").then(setScanners);
     api.get("/roles").then((rs) => {
       const id = rs.find((r: Json) => r.is_lead)?.model_tool_id;
       api.get("/models").then((ms) => setLeadDefault(ms.find((m: Json) => m.id === id)?.name ?? ""));
@@ -89,7 +101,17 @@ export default function Skills() {
             <Field label="Name" value={draft.name} onChange={(name) => set({ name })} />
             <Field label="Slug (unique id)" value={draft.slug} onChange={(slug) => set({ slug })} />
             <Field label="Description" value={draft.description} onChange={(description) => set({ description })} />
-            <Field label="Prompt template (use {field} placeholders)" value={draft.prompt_template}
+            <label>Built on a scanner <span className="muted small">· optional</span></label>
+            <select value={draft.screener_id ?? ""} onChange={(e) => set({ screener_id: e.target.value ? Number(e.target.value) : null })}>
+              <option value="">None: the prompt runs on its own</option>
+              {scanners.map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}
+            </select>
+            {draft.screener_id && (
+              <p className="muted small">Running the skill runs this scanner first (scan, then the scanner's task with the
+                scanner's model). The prompt below then evaluates those results with the skill's model. Follow-up
+                questions use the Research default.</p>
+            )}
+            <Field label={draft.screener_id ? "Prompt template: how to evaluate the scanner's results (use {field} placeholders)" : "Prompt template (use {field} placeholders)"} value={draft.prompt_template}
                    onChange={(prompt_template) => set({ prompt_template })} multiline rows={7} />
             <JsonField label='Fields asked for when running: [{"name", "label", "default"}]' value={draft.params}
                        onChange={(params) => set({ params })} rows={6} />
@@ -115,7 +137,7 @@ export default function Skills() {
       )}
       {running && draft?.id && (
         <RunSkillDialog skill={crud.items.find((s) => s.id === draft.id) ?? draft} models={models}
-                        leadDefault={leadDefault} onClose={() => setRunning(false)} />
+                        leadDefault={leadDefault} scanners={scanners} onClose={() => setRunning(false)} />
       )}
     </TwoPane>
   );
