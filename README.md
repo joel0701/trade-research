@@ -117,6 +117,23 @@ format, so a session can switch vendors between questions. On non-Claude models:
 Default model names for other vendors change often: check them under Tools and fill in
 `price_input` / `price_output` (USD per million tokens) to get cost estimates.
 
+### Local models (Ollama, LM Studio, MLX)
+
+Local models are free and private; nothing leaves your machine. Start a local server, then open
+**Tools → Models → Local models**: it lists the models installed on each running server, with
+**+ Add**. Added models appear in the model picker while their server runs.
+
+- **Ollama:** `ollama serve`, then `ollama pull qwen2.5:14b` (port 11434).
+- **LM Studio:** Developer → Start server (port 1234). On Apple Silicon it runs MLX models.
+- **MLX:** `pip install mlx-lm`, then `mlx_lm.server --model mlx-community/Qwen2.5-14B-Instruct-4bit` (port 8080).
+- **Anything else OpenAI-compatible** (llama.cpp, vLLM): set `LOCAL_LLM_BASE_URL` in `.env`.
+
+Ports can be changed in `.env` (see `.env.example`). Pick models that support **tool calling**
+(e.g. Qwen 2.5/3, Llama 3.1+, Mistral Small) so the Lead can consult the team and specialists can use
+data tools. A model without tool calling still answers, but on its own, without the team or data.
+Local models are slower than hosted ones, and specialists run in parallel, so smaller models (7-14B)
+suit specialist roles best on a laptop.
+
 ### Data sources and connections
 
 **Tools → Connections** holds how to reach each provider (endpoint and the name of the `.env`

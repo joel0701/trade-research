@@ -455,3 +455,13 @@ select.model-select { border-left-width: 4px; border-left-style: solid; }
          white-space: pre-wrap; overflow-wrap: anywhere; }
 .ghost kbd { font: 600 11px/1 system-ui, sans-serif; padding: 2px 6px; margin-left: 6px; border-radius: 5px; vertical-align: 2px;
              border: 1px solid var(--border); background: var(--raised); color: var(--muted); }
+
+/* Local models panel (Tools → Models) */
+.local-models { border: 1px solid var(--border); border-left: 3px solid var(--tone-green); border-radius: 10px; padding: 10px 14px;
+                margin: 6px 0 14px; background: var(--panel); }
+.local-models ul { margin: 6px 0 0; }
+.local-models li { margin: 6px 0; }
+.local-list { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0 2px 16px; }
+.local-model { display: inline-flex; align-items: center; gap: 8px; padding: 3px 4px 3px 8px; border: 1px solid var(--border);
+               border-radius: 8px; background: var(--raised); }
+.local-model .act { padding: 2px 8px; font-size: 12px; }

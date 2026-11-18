@@ -21,7 +21,7 @@ const CONNECTION_KIND_HELP: Record<string, string> = {
   none: "No setup needed.",
 };
 
-const MODEL_HELP = 'LLM. Config: {"provider": anthropic|openai|google|meta|xai|mistral|deepseek, "model_id", "max_tokens", '
+const MODEL_HELP = 'LLM. Config: {"provider": anthropic|openai|google|meta|xai|mistral|deepseek|ollama|lmstudio|mlx|local, "model_id", "max_tokens", '
   + '"price_input", "price_output", "price_cache_read" (USD per million tokens)}. Claude only: "effort", "fallbacks", '
   + '"show_thinking". Other vendors: "params" (extra request fields). The vendor\'s API key goes in .env.';
 
@@ -33,6 +33,59 @@ function Tabs({ tab, setTab }: { tab: Tab; setTab: (t: Tab) => void }) {
         <button key={t} role="tab" aria-selected={tab === t} className={tab === t ? "active" : ""}
                 onClick={() => setTab(t)}>{label}</button>
       ))}
+    </div>
+  );
+}
+
+/** Models installed on local servers (Ollama, LM Studio, MLX, …), with one-click Add. */
+function LocalModels({ onAdded }: { onAdded: () => void }) {
+  const [servers, setServers] = useState<Json[] | null>(null);
+  const [busy, setBusy] = useState("");
+  const load = () => { setServers(null); api.get("/local-models").then(setServers).catch(() => setServers([])); };
+  useEffect(load, []);
+  async function add(provider: string, model_id: string) {
+    setBusy(`${provider}:${model_id}`);
+    try { await api.post("/local-models", { provider, model_id }); onAdded(); load(); } finally { setBusy(""); }
+  }
+  const running = (servers ?? []).filter((s) => s.running);
+  return (
+    <div className="local-models">
+      <div className="inline" style={{ justifyContent: "space-between" }}>
+        <strong>Local models</strong>
+        <button className="link" onClick={load}>Refresh</button>
+      </div>
+      {servers === null ? <p className="muted small">Looking for local model servers…</p> : (
+        <>
+          <ul className="plain">
+            {servers.map((s) => (
+              <li key={s.provider}>
+                <span className={`dot ${s.running ? "ok" : "off"}`} />
+                <strong>{s.name}</strong>{" "}
+                <span className="muted small">{s.base_url ? s.base_url : `set ${s.base_url_env} in .env`}
+                  {s.running ? ` · ${s.models.length} model${s.models.length === 1 ? "" : "s"}` : " · not running"}</span>
+                {s.running && s.models.length > 0 && (
+                  <div className="local-list">
+                    {s.models.map((m: Json) => (
+                      <span key={m.model_id} className="local-model">
+                        <code>{m.model_id}</code>
+                        {m.tool_id ? <span className="muted small">added</span> :
+                          <button className="act" disabled={busy === `${s.provider}:${m.model_id}`}
+                                  onClick={() => add(s.provider, m.model_id)}>+ Add</button>}
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </li>
+            ))}
+          </ul>
+          {running.length === 0 && (
+            <p className="muted small">No local server is running. Start Ollama (<code>ollama serve</code>, then
+              <code> ollama pull qwen2.5:14b</code>), LM Studio's local server, or MLX
+              (<code>mlx_lm.server --model mlx-community/Qwen2.5-14B-Instruct-4bit</code>), then Refresh.
+              Local models are free; pick ones that support tool calling so they can consult the team.</p>
+          )}
+        </>
+      )}
     </div>
   );
 }
@@ -124,10 +177,12 @@ export default function Tools() {
 
   if (tab === "models") {
     return (
-      <MasterDetail title="Models" crud={tools} header={header} filter={(t) => t.kind === "model"}
+      <MasterDetail title="Models" crud={tools} header={<>{header}<LocalModels onAdded={() => tools.reload()} /></>}
+        filter={(t) => t.kind === "model"}
         blank={{ slug: "", name: "", kind: "model", description: "", config: { provider: "anthropic", model_id: "", max_tokens: 16000 }, enabled: true }}
         rowExtra={(t) => <span className={`dot ${models[t.id]?.available ? "ok" : "off"}`}
-                               title={models[t.id]?.available ? "Key found" : `No key: ${models[t.id]?.key_env ?? ""}`} />}>
+                               title={models[t.id]?.available ? (models[t.id]?.local ? "Server running" : "Key found")
+                                 : models[t.id]?.local ? "Local server not running" : `No key: ${models[t.id]?.key_env ?? ""}`} />}>
         {(t, set) => (
           <>
             <Field label="Name" value={t.name} onChange={(name) => set({ name })} />
@@ -136,8 +191,10 @@ export default function Tools() {
             <Field label="Description" value={t.description} onChange={(description) => set({ description })} multiline rows={2} />
             <JsonField label="Config" value={t.config} onChange={(config) => set({ config })} />
             {models[t.id] && (models[t.id].available
-              ? <p className="small" style={{ color: "var(--ok-fg)" }}>✓ {models[t.id].provider_name} API key found</p>
-              : <p className="error small">No API key: set {models[t.id].key_env} in .env and restart the backend.</p>)}
+              ? <p className="small" style={{ color: "var(--ok-fg)" }}>✓ {models[t.id].local ? `${models[t.id].provider_name} is running` : `${models[t.id].provider_name} API key found`}</p>
+              : models[t.id].local
+                ? <p className="error small">{models[t.id].provider_name} isn't running{models[t.id].base_url ? ` at ${models[t.id].base_url}` : ""}. Start it, then reload.</p>
+                : <p className="error small">No API key: set {models[t.id].key_env} in .env and restart the backend.</p>)}
             <Toggle label="Enabled" value={t.enabled} onChange={(enabled) => set({ enabled })} />
           </>
         )}

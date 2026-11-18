@@ -3,9 +3,32 @@
 Anthropic uses its own SDK. The others are reached through their OpenAI-compatible
 endpoints with the OpenAI SDK. A model is available only when its vendor's key is set.
 Keys live in .env (see .env.example); they are never stored in the database.
+
+Local servers (Ollama, LM Studio, MLX's mlx_lm.server on Apple Silicon, or any OpenAI-compatible
+server such as llama.cpp or vLLM) need
+no key: their models are available while the server answers.
 """
 import os
+import time
 from dataclasses import dataclass
+
+import httpx
+
+_reach_cache: dict[str, tuple[float, bool]] = {}
+
+
+def server_up(base_url: str, ttl: float = 15.0) -> bool:
+    """Whether a local OpenAI-compatible server answers GET /models (cached briefly)."""
+    now = time.monotonic()
+    hit = _reach_cache.get(base_url)
+    if hit and now - hit[0] < ttl:
+        return hit[1]
+    try:
+        ok = httpx.get(base_url.rstrip("/") + "/models", timeout=0.4).status_code < 500
+    except httpx.HTTPError:
+        ok = False
+    _reach_cache[base_url] = (now, ok)
+    return ok
 
 
 @dataclass(frozen=True)
@@ -19,14 +42,19 @@ class Provider:
     max_tokens_param: str = "max_tokens"
     stream_usage: bool = True  # supports stream_options={"include_usage": True}
     alt_key_envs: tuple[str, ...] = ()
+    local: bool = False  # a server on this machine or network: no key, available while it answers
 
     def key(self) -> str | None:
+        if self.local:
+            return os.getenv(self.key_env) if self.key_env else None
         for env in (self.key_env, *self.alt_key_envs):
             if os.getenv(env):
                 return os.getenv(env)
         return None
 
     def available(self) -> bool:
+        if self.local:
+            return bool(self.url()) and server_up(self.url())
         return self.api == "mock" or bool(self.key())  # the mock needs no key
 
     def url(self) -> str | None:
@@ -47,6 +75,13 @@ PROVIDERS: dict[str, Provider] = {p.slug: p for p in [
              stream_usage=False),
     Provider("deepseek", "DeepSeek", "DEEPSEEK_API_KEY", "openai_compat", "https://api.deepseek.com/v1",
              "DEEPSEEK_BASE_URL"),
+    Provider("ollama", "Ollama (local)", "", "openai_compat", "http://localhost:11434/v1", "OLLAMA_BASE_URL", local=True),
+    Provider("lmstudio", "LM Studio (local)", "", "openai_compat", "http://localhost:1234/v1", "LMSTUDIO_BASE_URL",
+             local=True),
+    Provider("mlx", "MLX (local, Apple Silicon)", "", "openai_compat", "http://localhost:8080/v1", "MLX_BASE_URL",
+             local=True),
+    Provider("local", "Local server (OpenAI-compatible)", "LOCAL_LLM_API_KEY", "openai_compat", None, "LOCAL_LLM_BASE_URL",
+             local=True),
     Provider("mock", "Mock (no cost)", "", "mock"),
 ]}
 

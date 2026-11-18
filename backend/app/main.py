@@ -6,7 +6,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from sqlmodel import Session, select
 
-from app.api import launch, profile, sessions
+from app.api import launch, local_models, profile, sessions
 from app.agents.orchestrator import mark_interrupted_runs
 from app.api.crud import crud_router
 from app.config import CORS_ORIGINS
@@ -39,6 +39,7 @@ for model, prefix in [(Tool, "/tools"), (Connection, "/connections"), (Role, "/r
 app.include_router(sessions.router, prefix="/api")
 app.include_router(launch.router, prefix="/api")
 app.include_router(profile.router, prefix="/api")
+app.include_router(local_models.router, prefix="/api")
 
 
 @app.get("/api/models")
@@ -49,7 +50,8 @@ def models() -> list[dict]:
         for t in db.exec(select(Tool).where(Tool.kind == "model").order_by(Tool.id)).all():
             try:
                 p = provider_of(t.config)
-                info = {"provider": p.slug, "provider_name": p.name, "key_env": p.key_env, "available": p.available()}
+                info = {"provider": p.slug, "provider_name": p.name, "key_env": p.key_env, "available": p.available(),
+                        "local": p.local, "base_url": p.url() if p.local else None}
             except ValueError as e:
                 info = {"provider": t.config.get("provider"), "provider_name": "?", "key_env": None,
                         "available": False, "problem": str(e)}

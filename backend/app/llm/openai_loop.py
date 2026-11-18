@@ -25,7 +25,8 @@ def openai_client(provider: Provider):
     if provider.slug not in _clients:
         from openai import AsyncOpenAI
 
-        _clients[provider.slug] = AsyncOpenAI(api_key=provider.key(), base_url=provider.url())
+        # Local servers ignore the key, but the SDK requires one.
+        _clients[provider.slug] = AsyncOpenAI(api_key=provider.key() or "local", base_url=provider.url())
     return _clients[provider.slug]
 
 
@@ -60,7 +61,18 @@ async def run_agent_openai(*, provider: Provider, model: "ModelConfig", system: 
         calls: dict[int, dict[str, Any]] = {}
         finish = None
         usage = None
-        stream = await client.chat.completions.create(messages=chat, **params)
+        try:
+            stream = await client.chat.completions.create(messages=chat, **params)
+        except Exception as e:
+            # Some local models can't call tools (Ollama: "does not support tools"). Answer without them.
+            if "tools" in params and "support tools" in str(e).lower():
+                log.warning("%s: %s can't call tools; answering without the team or data tools", source, model.model_id)
+                params.pop("tools")
+                chat[0]["content"] += ("\n\nNote: this model can't call tools, so no specialists or data tools are "
+                                       "available. Answer from what you know and say so briefly.")
+                stream = await client.chat.completions.create(messages=chat, **params)
+            else:
+                raise
         async for chunk in stream:
             if getattr(chunk, "usage", None):
                 usage = chunk.usage
