@@ -68,12 +68,13 @@ export function Dialog({ title, onClose, children }: { title: string; onClose: (
 }
 
 /** Lead model picker for run dialogs: only models whose vendor key is set. */
-export function LeadModelSelect({ models, value, onChange, defaultLabel }: {
+export function LeadModelSelect({ models, value, onChange, defaultLabel, label = "Lead Analyst model", hint }: {
   models: Json[]; value: number | null; onChange: (v: number | null) => void; defaultLabel: string;
+  label?: string; hint?: string;
 }) {
   return (
     <>
-      <label>Lead Analyst model</label>
+      <label>{label}{hint && <span className="muted small"> · {hint}</span>}</label>
       <select value={value ?? ""} onChange={(e) => onChange(e.target.value ? Number(e.target.value) : null)}>
         <option value="">{defaultLabel}</option>
         {models.filter((m) => m.available).map((m) => <option key={m.id} value={m.id}>{m.provider_name}: {m.name}</option>)}

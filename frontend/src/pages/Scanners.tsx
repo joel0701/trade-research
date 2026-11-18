@@ -24,7 +24,7 @@ function NumberField({ label, value, onChange, hint }:
 }
 
 const BLANK = { slug: "", name: "New scanner", description: "", source: "rules", params: {}, universe: [], rules: { all: [] },
-                sort_by: null, limit: 25, enabled: true,
+                sort_by: null, limit: 25, lead_model_tool_id: null, enabled: true,
                 follow_up_prompt: "Review these results and pick the most promising candidates." };
 
 /** What the scan itself uses. After the results, the Lead analyses them like any research question. */
@@ -66,7 +66,7 @@ function RunScannerDialog({ scanner, models, leadDefault, codes, locations, onCl
   const ibkr = scanner.source === "ibkr";
   const [p, setP] = useState<Record<string, any>>({ ...(scanner.params ?? {}) });
   const [universe, setUniverse] = useState((scanner.universe ?? []).join(", "));
-  const [model, setModel] = useState<number | null>(null);
+  const [model, setModel] = useState<number | null>(scanner.lead_model_tool_id ?? null);
   const [running, setRunning] = useState(false);
   const [error, setError] = useState("");
   const tickers = universe.split(/[\s,]+/).map((x: string) => x.trim().toUpperCase()).filter(Boolean);
@@ -105,8 +105,8 @@ function RunScannerDialog({ scanner, models, leadDefault, codes, locations, onCl
             <textarea rows={4} value={universe} onChange={(e) => setUniverse(e.target.value)} />
           </>
         )}
-        <LeadModelSelect models={models} value={model} onChange={setModel}
-                         defaultLabel={`${leadDefault || "Lead role default"} (default)`} />
+        <LeadModelSelect models={models} value={model} onChange={setModel} label="Model for the analysis"
+                         hint="follow-up questions use the Research default" defaultLabel={`Research default (${leadDefault || "Lead role model"})`} />
         {error && <p className="error">{error}</p>}
         <div className="actions">
           <button className="primary" disabled={running || (!ibkr && tickers.length === 0)}>{running ? "Scanning…" : "Run"}</button>
@@ -201,6 +201,10 @@ export default function Scanners() {
             <ScanData source={s.source} />
             <Field label="Task for the Lead after the scan (it can use the full team)" value={s.follow_up_prompt}
                    onChange={(follow_up_prompt) => set({ follow_up_prompt })} multiline rows={3} />
+            <LeadModelSelect models={models} value={s.lead_model_tool_id ?? null}
+                             onChange={(lead_model_tool_id) => set({ lead_model_tool_id })}
+                             label="Model for the analysis" hint="runs the task above; follow-up questions use the Research default"
+                             defaultLabel={`Research default (${leadDefault || "Lead role model"})`} />
             <Toggle label="Enabled" value={s.enabled} onChange={(enabled) => set({ enabled })} />
             {crud.error && <p className="error">{crud.error}</p>}
             <div className="actions">

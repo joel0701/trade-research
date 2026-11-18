@@ -229,10 +229,10 @@ def test_scanner_run_overrides_apply_to_this_run_only(monkeypatch):
         r = c.post(f"/api/screeners/{sc['id']}/run",
                    json={"params": {"rows": 10, "above_price": 20, "scan_code": "IGNORED"}, "lead_model_tool_id": haiku}).json()
         assert ib.calls[-1][1:5] == ("TOP_PERC_GAIN", "STK.US.MAJOR", 10, 20.0)  # scan code can't be overridden
-        assert c.get(f"/api/sessions/{r['session_id']}").json()["lead_model_tool_id"] == haiku
+        assert c.get(f"/api/sessions/{r['session_id']}").json()["next_turn_model_tool_id"] == haiku
         ins, _ = run_texts(c, r)
         assert "- Results requested: **10**" in ins and "- Min price: **$20.00**" in ins
-        assert "- Lead model: **Claude Haiku 5.5**" in ins
+        assert "- Analysis model: **Claude Haiku 5.5**" in ins
         saved = next(s for s in c.get("/api/screeners").json() if s["slug"] == "ibkr_top_gainers")
         assert saved["params"] == sc["params"]  # saved scanner unchanged
 

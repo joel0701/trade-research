@@ -49,9 +49,11 @@ def test_skill_model_default_and_override():
         haiku, fable = model_id(c, "haiku"), model_id(c, "fable")
         c.put(f"/api/skills/{skill['id']}", json={"lead_model_tool_id": haiku})
         r = c.post(f"/api/skills/{skill['id']}/run", json={"params": {"ticker": "AAPL"}}).json()
-        assert c.get(f"/api/sessions/{r['session_id']}").json()["lead_model_tool_id"] == haiku
+        chat = c.get(f"/api/sessions/{r['session_id']}").json()
+        assert chat["next_turn_model_tool_id"] == haiku and chat["lead_model_tool_id"] is None
         r = c.post(f"/api/skills/{skill['id']}/run", json={"params": {"ticker": "AAPL"}, "lead_model_tool_id": fable}).json()
-        assert c.get(f"/api/sessions/{r['session_id']}").json()["lead_model_tool_id"] == fable
+        assert c.get(f"/api/sessions/{r['session_id']}").json()["next_turn_model_tool_id"] == fable
+        c.put(f"/api/skills/{skill['id']}", json={"lead_model_tool_id": None})
 
 
 def test_attachments_reach_claude_and_show_in_chat(monkeypatch):

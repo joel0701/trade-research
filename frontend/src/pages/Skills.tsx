@@ -38,8 +38,8 @@ function RunSkillDialog({ skill, models, leadDefault, onClose }: {
                    onChange={(e) => setValues({ ...values, [p.name]: e.target.value })} />
           </div>
         ))}
-        <LeadModelSelect models={models} value={model} onChange={setModel}
-                         defaultLabel={`${leadDefault || "Lead role default"} (default)`} />
+        <LeadModelSelect models={models} value={model} onChange={setModel} label="Model for this run"
+                         hint="follow-up questions use the Research default" defaultLabel={`Research default (${leadDefault || "Lead role model"})`} />
         <DataNotes ids={skill.tool_ids ?? []} />
         {error && <p className="error">{error}</p>}
         <div className="actions">
@@ -95,7 +95,8 @@ export default function Skills() {
                        onChange={(params) => set({ params })} rows={6} />
             <LeadModelSelect models={models} value={draft.lead_model_tool_id ?? null}
                              onChange={(lead_model_tool_id) => set({ lead_model_tool_id })}
-                             defaultLabel="Lead role default" />
+                             label="Model the skill runs with" hint="answers the skill's prompt; follow-up questions use the Research default"
+                             defaultLabel={`Research default (${leadDefault || "Lead role model"})`} />
             <label>Data sources this skill uses</label>
             <p className="muted small">
               The session uses only these sources, and their notes (limits such as a fixed lookback) are added to the

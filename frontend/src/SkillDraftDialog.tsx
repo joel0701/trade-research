@@ -70,10 +70,10 @@ export default function SkillDraftDialog({ sessionId, models, onClose, onSaved }
             <p className="muted small">Pre-selected from the sources this conversation used. Their notes are added to the
               prompt when it runs. None = the full team's sources.</p>
             <SourcePicker value={draft.tool_ids ?? []} onChange={(tool_ids) => set({ tool_ids })} />
-            <label>Default Lead Analyst model</label>
+            <label>Model the skill runs with <span className="muted small">· follow-up questions use the Research default</span></label>
             <select value={draft.lead_model_tool_id ?? ""}
                     onChange={(e) => set({ lead_model_tool_id: e.target.value ? Number(e.target.value) : null })}>
-              <option value="">Lead role default</option>
+              <option value="">Research default</option>
               {models.filter((m) => m.available).map((m) => (
                 <option key={m.id} value={m.id}>{m.provider_name}: {m.name}</option>
               ))}

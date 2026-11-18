@@ -107,6 +107,9 @@ class ChatSession(SQLModel, table=True):
     origin: str = "chat"  # chat | skill:<id> | screener:<id>
     # Model the Lead uses in this session (a Tool of kind "model"); None = the Lead role's default.
     lead_model_tool_id: int | None = None
+    # Model for the next turn only, then cleared: a skill's or scanner's own model runs its first
+    # answer, and follow-up questions use the session's model (normally the Research default).
+    next_turn_model_tool_id: int | None = None
     # "Don't ask again in this session" for this set of unavailable sources (see app.preflight).
     ack_unavailable: str | None = None
     # When set (e.g. a session started from a scanner), only these data sources are used: each role
@@ -166,7 +169,7 @@ class Skill(SQLModel, table=True):
     description: str = ""
     prompt_template: str
     params: list[dict[str, Any]] = Field(default_factory=list, sa_column=Column(JSON))
-    lead_model_tool_id: int | None = None  # default Lead model for sessions this skill starts
+    lead_model_tool_id: int | None = None  # model for the skill's run (first answer); follow-ups use the default
     # Data sources sessions from this skill use (empty = the full team's sources).
     tool_ids: list[int] = Field(default_factory=list, sa_column=Column(JSON))
     enabled: bool = True
@@ -193,6 +196,9 @@ class Screener(SQLModel, table=True):
     # any follow-up questions) like any research question, with the full team and its tools.
     sort_by: str | None = None
     limit: int = 25
+    # Model for the analysis of the results (e.g. Sonnet: little reasoning needed); None = the
+    # Research default. Follow-up questions in the session always use the Research default.
+    lead_model_tool_id: int | None = None
     follow_up_prompt: str = (
         "Review these screener results. Pick the most promising candidates and explain why, "
         "noting risks and any options strategies worth considering."

@@ -22,7 +22,7 @@ router = APIRouter(tags=["launch"])
 
 class SkillRun(BaseModel):
     params: dict[str, str] = {}
-    lead_model_tool_id: int | None = None  # overrides the skill's default Lead model
+    lead_model_tool_id: int | None = None  # this run's model, instead of the skill's
 
 
 def render(template: str, params: dict[str, str], defaults: list[dict[str, Any]]) -> str:
@@ -65,6 +65,16 @@ def _money(x: Any) -> str:
     return f"${float(x):,.0f}" if float(x) >= 100 else f"${float(x):,.2f}"
 
 
+def run_model(db: Session, chosen: int | None, saved: int | None) -> int | None:
+    """The model for a skill's or scanner's run: this run's choice (must be usable), else the saved
+    one if its vendor key is set, else None (the Research default)."""
+    if chosen:
+        check_model(db, chosen)
+        return chosen
+    t = db.get(Tool, saved) if saved else None
+    return saved if t is not None and t.kind == "model" and t.enabled and model_available(t.config) else None
+
+
 @router.post("/skills/{skill_id}/run")
 def run_skill(skill_id: int, body: SkillRun, db: Session = Depends(get_session)) -> dict[str, Any]:
     skill = db.get(Skill, skill_id)
@@ -72,15 +82,10 @@ def run_skill(skill_id: int, body: SkillRun, db: Session = Depends(get_session))
         raise HTTPException(404)
     prompt = render(skill.prompt_template, body.params, skill.params)
     label = " ".join(v for v in body.params.values() if v)
-    if body.lead_model_tool_id:
-        check_model(db, body.lead_model_tool_id)  # an explicit choice must be usable
-    model_id = body.lead_model_tool_id or skill.lead_model_tool_id
-    # A skill's saved default without a key is skipped; the Lead role's model is used instead.
-    default = db.get(Tool, model_id) if model_id else None
-    if default is None or default.kind != "model" or not model_available(default.config):
-        model_id = None
+    model_id = run_model(db, body.lead_model_tool_id, skill.lead_model_tool_id)
+    # The skill's model answers the skill's prompt; follow-up questions use the Research default.
     chat = ChatSession(title=f"{skill.name}: {label}".strip(": "), origin=f"skill:{skill.id}",
-                       lead_model_tool_id=model_id,
+                       next_turn_model_tool_id=model_id,
                        tool_scope=list(skill.tool_ids) or None)  # the skill's data sources, if it names any
     db.add(chat)
     db.commit()
@@ -112,8 +117,7 @@ async def run_screen(screener_id: int, body: ScannerRun | None = None,
     if scr is None:
         raise HTTPException(404)
     body = body or ScannerRun()
-    if body.lead_model_tool_id:
-        check_model(db, body.lead_model_tool_id)
+    model_id = run_model(db, body.lead_model_tool_id, scr.lead_model_tool_id)
     params = {**scr.params, **{k: v for k, v in body.params.items() if k in RUN_PARAM_KEYS and v not in ("", None)}}
     universe = [t.strip().upper() for t in body.universe if t.strip()] if body.universe is not None else scr.universe
     if scr.source == "ibkr":
@@ -146,15 +150,16 @@ async def run_screen(screener_id: int, body: ScannerRun | None = None,
         outcome = f"Found {len(rows)} matches out of {len(universe)} tickers"
     table = results_to_markdown(rows)
     # The scanner's settings only drive the scan; the analysis uses the full team, like any research question.
+    # The scanner's model analyses the results; follow-up questions use the Research default.
     chat = ChatSession(title=f"Scanner: {scr.name} ({len(rows)} results)", origin=f"screener:{scr.id}",
-                       lead_model_tool_id=body.lead_model_tool_id)
+                       next_turn_model_tool_id=model_id)
     db.add(chat)
     db.commit()
     db.refresh(chat)
     if scr.sort_by:
         settings.append(f"Sorted by: **{scr.sort_by}**")
-    if body.lead_model_tool_id:
-        settings.append(f"Lead model: **{db.get(Tool, body.lead_model_tool_id).name}**")
+    if model_id:
+        settings.append(f"Analysis model: **{db.get(Tool, model_id).name}**")
     # The conversation reads like a normal exchange: the run instructions (settings + task) as the
     # user's message, then the scan results as a response. The Lead then answers the task.
     instructions = (f"Run scanner **{scr.name}**\n\n" + "\n".join(f"- {s}" for s in settings)

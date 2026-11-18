@@ -71,8 +71,12 @@ cd backend && uv run pytest
 |---|---|
 | **Tools** | Models (model id, effort, max tokens, refusal fallbacks), built-in Python functions, Claude web search/fetch, MCP servers |
 | **Roles** | Each analyst's model, system prompt, allowed tools, iteration limit; which role is the Lead |
-| **Skills** | Prompt templates with parameters, e.g. `{ticker}` |
-| **Scanners** | Rule-based (ticker universe + rules) or IBKR market scanner (scan type, market, price/volume/market-cap filters, optional rules); sort; the task for the Lead after the scan. Settings cover only the scan: the analysis and follow-ups use the full team |
+| **Skills** | Prompt templates with parameters, e.g. `{ticker}`; optional data sources; the model the skill runs with |
+| **Scanners** | Rule-based (ticker universe + rules) or IBKR market scanner (scan type, market, price/volume/market-cap filters, optional rules); sort; the task for the Lead after the scan and the model that runs it. Settings cover only the scan: the analysis and follow-ups use the full team |
+
+**Skill and scanner models** apply to their first answer only (e.g. Sonnet for an IBKR scanner's
+summary). Follow-up questions in the session use the Research default (the Lead role's model, or
+the one picked in the composer).
 
 Default models: Lead and Strategy Optimizer on Claude Opus 5.5; most specialists on Sonnet 5.5;
 Sector Mapper on Haiku 5.5. Opus, Sonnet and Fable use server-side refusal fallbacks

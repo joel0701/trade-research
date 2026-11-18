@@ -150,11 +150,13 @@ async def run_turn(session_id: int, user_text: str, attachment_ids: list[int] | 
         yield event
 
 
-def _lead_model_for(chat: ChatSession, lead: Role, tools: dict[int, Tool]) -> ModelConfig:
-    """The session's chosen Lead model if set and usable, else the Lead role's default."""
+def _lead_model_for(chat: ChatSession, lead: Role, tools: dict[int, Tool], override: int | None = None) -> ModelConfig:
+    """This turn's model (override), else the session's chosen Lead model, if set and usable;
+    otherwise the Lead role's default."""
     if mock_mode():
         return MOCK_MODEL
-    t = tools.get(chat.lead_model_tool_id) if chat.lead_model_tool_id else None
+    model_id = override or chat.lead_model_tool_id
+    t = tools.get(model_id) if model_id else None
     if t is not None and t.kind == "model" and t.enabled and model_available(t.config):
         return ModelConfig.from_tool_config(t.config)
     # The chosen model is gone or its vendor key was removed: use the Lead role's model.
@@ -222,10 +224,12 @@ def _prepare_turn(session_id: int, user_text: str, attachment_ids: list[int] | N
             first = user_text.strip().splitlines()[0][:80] if user_text.strip() else ""
             chat.title = first or (atts[0].filename if atts else chat.title)
         chat.updated_at = now()
+        # A skill's or scanner's own model runs just its first answer; later turns use the session's model.
+        turn_model, chat.next_turn_model_tool_id = chat.next_turn_model_tool_id, None
         db.add(chat)
         db.commit()
         current = expand_refs(db, user_content)
-        lead_model = _lead_model_for(chat, lead, tools)
+        lead_model = _lead_model_for(chat, lead, tools, turn_model)
 
     messages = repair_history(history) + [{"role": "user", "content": current}]
     return tools, lead, specialists, messages, lead_model
