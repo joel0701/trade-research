@@ -1,6 +1,7 @@
 /** Two-pane layout like Research (without the trace): list + profile on the left, details on the right. */
 import { ReactNode, useEffect, useState } from "react";
 import { Json } from "./api";
+import { VENDOR_COLORS } from "./models";
 import ProfileCard from "./ProfileCard";
 import { ResizeHandle, usePanelWidth } from "./Resizable";
 
@@ -48,7 +49,27 @@ export function useDraft(selected: Json | null) {
 }
 
 /** A centered dialog with a title, body and actions. */
-export function Dialog({ title, onClose, children }: { title: string; onClose: () => void; children: ReactNode }) {
+export type Tone = "blue" | "amber" | "purple" | "green" | "teal";
+
+/** A colour-coded group of fields with a header (used by the Skills and Scanners editors). */
+export function Section({ tone, icon, title, hint, children }: {
+  tone: Tone; icon?: ReactNode; title: string; hint?: ReactNode; children: ReactNode;
+}) {
+  return (
+    <section className={`cfg tone-${tone}`}>
+      <div className="cfg-head">
+        {icon && <span className="cfg-icon">{icon}</span>}
+        <h3>{title}</h3>
+        {hint && <span className="cfg-hint">{hint}</span>}
+      </div>
+      <div className="cfg-body">{children}</div>
+    </section>
+  );
+}
+
+export function Dialog({ title, onClose, children, tone, icon, subtitle }: {
+  title: string; onClose: () => void; children: ReactNode; tone?: Tone; icon?: ReactNode; subtitle?: ReactNode;
+}) {
   useEffect(() => {
     const key = (e: KeyboardEvent) => e.key === "Escape" && onClose();
     window.addEventListener("keydown", key);
@@ -56,9 +77,12 @@ export function Dialog({ title, onClose, children }: { title: string; onClose: (
   }, [onClose]);
   return (
     <div className="modal-backdrop" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
-      <div className="modal" role="dialog" aria-modal="true" aria-label={title}>
+      <div className={`modal ${tone ? `tone-${tone} modal-toned` : ""}`} role="dialog" aria-modal="true" aria-label={title}>
         <div className="modal-head">
-          <strong>{title}</strong>
+          <div className="modal-title">
+            {icon && <span className="cfg-icon">{icon}</span>}
+            <div><strong>{title}</strong>{subtitle && <div className="modal-sub">{subtitle}</div>}</div>
+          </div>
           <button className="link" onClick={onClose} aria-label="Close">✕</button>
         </div>
         {children}
@@ -75,7 +99,8 @@ export function LeadModelSelect({ models, value, onChange, defaultLabel, label =
   return (
     <>
       <label>{label}{hint && <span className="muted small"> · {hint}</span>}</label>
-      <select value={value ?? ""} onChange={(e) => onChange(e.target.value ? Number(e.target.value) : null)}>
+      <select className="model-select" style={{ borderLeftColor: VENDOR_COLORS[models.find((m) => m.id === value && m.available)?.provider] ?? "var(--accent)" }}
+              value={value ?? ""} onChange={(e) => onChange(e.target.value ? Number(e.target.value) : null)}>
         <option value="">{defaultLabel}</option>
         {models.filter((m) => m.available).map((m) => <option key={m.id} value={m.id}>{m.provider_name}: {m.name}</option>)}
       </select>

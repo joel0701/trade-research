@@ -2,7 +2,8 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { api, Json } from "../api";
 import { Field, JsonField, Toggle, useCrud } from "../admin";
-import { Dialog, errorText, LeadModelSelect, TwoPane, useDraft } from "../TwoPane";
+import { Dialog, errorText, LeadModelSelect, Section, TwoPane, useDraft } from "../TwoPane";
+import { Chip, Database, Gear, Prompt, Radar, Sparkles } from "../icons";
 import SourcePicker, { DataNotes } from "../SourcePicker";
 
 const BLANK = { slug: "", name: "New skill", description: "", prompt_template: "", lead_model_tool_id: null,
@@ -30,14 +31,14 @@ function RunSkillDialog({ skill, models, leadDefault, scanners, onClose }: {
   }
 
   return (
-    <Dialog title={`Run: ${skill.name}`} onClose={onClose}>
-      {skill.description && <p className="muted small">{skill.description}</p>}
+    <Dialog title={`Run: ${skill.name}`} onClose={onClose} tone="purple" icon={<Sparkles />}
+            subtitle={skill.description || (scanner ? `Evaluates ${scanner.name} results` : "Skill")}>
       {scanner && (
-        <ol className="stages small">
-          <li>Scan: <strong>{scanner.name}</strong> (its saved settings)</li>
-          {scanner.follow_up_prompt?.trim() && <li>Scanner analysis: <strong>{modelName(scanner.lead_model_tool_id)}</strong></li>}
-          <li>Skill evaluation: <strong>the model below</strong></li>
-          <li>Follow-up questions: <strong>{modelName(null)}</strong></li>
+        <ol className="stages">
+          <li className="tone-amber"><span>Scan</span><strong>{scanner.name}</strong></li>
+          {scanner.follow_up_prompt?.trim() && <li className="tone-amber"><span>Scanner analysis</span><strong>{modelName(scanner.lead_model_tool_id)}</strong></li>}
+          <li className="tone-purple"><span>Skill evaluation</span><strong>model below</strong></li>
+          <li className="tone-green"><span>Follow-ups</span><strong>{modelName(null)}</strong></li>
         </ol>
       )}
       <form onSubmit={(e) => { e.preventDefault(); if (!missing.length) run(); }}>
@@ -97,38 +98,47 @@ export default function Skills() {
                     title={!draft.id ? "Save the skill first" : !draft.enabled ? "Enable the skill to run it" : "Run this skill"}
                     onClick={() => setRunning(true)}>▶ Run</button>
           </div>
-          <div className="card">
-            <Field label="Name" value={draft.name} onChange={(name) => set({ name })} />
-            <Field label="Slug (unique id)" value={draft.slug} onChange={(slug) => set({ slug })} />
-            <Field label="Description" value={draft.description} onChange={(description) => set({ description })} />
-            <label>Built on a scanner <span className="muted small">· optional</span></label>
-            <select value={draft.screener_id ?? ""} onChange={(e) => set({ screener_id: e.target.value ? Number(e.target.value) : null })}>
-              <option value="">None: the prompt runs on its own</option>
-              {scanners.map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}
-            </select>
-            {draft.screener_id && (
-              <p className="muted small">Running the skill runs this scanner first (scan, then the scanner's task with the
-                scanner's model). The prompt below then evaluates those results with the skill's model. Follow-up
-                questions use the Research default.</p>
-            )}
-            <Field label={draft.screener_id ? "Prompt template: how to evaluate the scanner's results (use {field} placeholders)" : "Prompt template (use {field} placeholders)"} value={draft.prompt_template}
-                   onChange={(prompt_template) => set({ prompt_template })} multiline rows={7} />
-            <JsonField label='Fields asked for when running: [{"name", "label", "default"}]' value={draft.params}
-                       onChange={(params) => set({ params })} rows={6} />
-            <LeadModelSelect models={models} value={draft.lead_model_tool_id ?? null}
-                             onChange={(lead_model_tool_id) => set({ lead_model_tool_id })}
-                             label="Model the skill runs with" hint="answers the skill's prompt; follow-up questions use the Research default"
-                             defaultLabel={`Research default (${leadDefault || "Lead role model"})`} />
-            <label>Data sources this skill uses</label>
-            <p className="muted small">
-              The skill's run uses only these sources, and their notes (limits such as a fixed lookback) are added to the
-              prompt as a callout. Don't add fields for things a source fixes. Follow-up questions use the full team.
-              {(draft.tool_ids ?? []).length === 0 && <strong> None chosen: the full team's sources are used.</strong>}
-            </p>
-            <SourcePicker value={draft.tool_ids ?? []} onChange={(tool_ids) => set({ tool_ids })} />
-            <Toggle label="Enabled" value={draft.enabled} onChange={(enabled) => set({ enabled })} />
-            {crud.error && <p className="error">{crud.error}</p>}
-            <div className="actions">
+          <div className="cfg-stack">
+            <Section tone="blue" icon={<Gear />} title="Setup">
+              <Field label="Name" value={draft.name} onChange={(name) => set({ name })} />
+              <div className="grid-2">
+                <div><Field label="Slug (unique id)" value={draft.slug} onChange={(slug) => set({ slug })} /></div>
+                <div><Field label="Description" value={draft.description} onChange={(description) => set({ description })} /></div>
+              </div>
+              <Toggle label="Enabled" value={draft.enabled} onChange={(enabled) => set({ enabled })} />
+            </Section>
+            <Section tone="amber" icon={<Radar />} title="Scanner input" hint="optional">
+              <select value={draft.screener_id ?? ""} onChange={(e) => set({ screener_id: e.target.value ? Number(e.target.value) : null })}>
+                <option value="">None: the prompt runs on its own</option>
+                {scanners.map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}
+              </select>
+              <p className="muted small">{draft.screener_id
+                ? "Running the skill runs this scanner first (scan, then the scanner's task with the scanner's model). The prompt below then evaluates those results with the skill's model."
+                : "Pick a scanner to have this skill evaluate its results."}</p>
+            </Section>
+            <Section tone="purple" icon={<Prompt />} title="Prompt"
+                     hint={draft.screener_id ? "how to evaluate the scanner's results" : "use {field} placeholders"}>
+              <Field label="Prompt template" value={draft.prompt_template}
+                     onChange={(prompt_template) => set({ prompt_template })} multiline rows={7} />
+              <JsonField label='Fields asked for when running: [{"name", "label", "default"}]' value={draft.params}
+                         onChange={(params) => set({ params })} rows={6} />
+            </Section>
+            <Section tone="green" icon={<Chip />} title="Model" hint="follow-up questions use the Research default">
+              <LeadModelSelect models={models} value={draft.lead_model_tool_id ?? null}
+                               onChange={(lead_model_tool_id) => set({ lead_model_tool_id })}
+                               label="Model the skill runs with"
+                               defaultLabel={`Research default (${leadDefault || "Lead role model"})`} />
+            </Section>
+            <Section tone="teal" icon={<Database />} title="Data sources" hint="for the skill's run only">
+              <p className="muted small">
+                The skill's run uses only these sources, and their notes (limits such as a fixed lookback) are added to the
+                prompt as a callout. Don't add fields for things a source fixes. Follow-up questions use the full team.
+                {(draft.tool_ids ?? []).length === 0 && <strong> None chosen: the full team's sources are used.</strong>}
+              </p>
+              <SourcePicker value={draft.tool_ids ?? []} onChange={(tool_ids) => set({ tool_ids })} />
+            </Section>
+            <div className="cfg-actions">
+              {crud.error && <p className="error">{crud.error}</p>}
               <button className="primary" onClick={() => crud.save(draft)}>Save</button>
               {draft.id && <button onClick={() => crud.remove(draft)}>Delete</button>}
             </div>

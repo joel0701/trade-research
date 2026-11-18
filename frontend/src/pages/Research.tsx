@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
-import ReactMarkdown from "react-markdown";
-import remarkGfm from "remark-gfm";
+import { Markdown } from "../DataTable";
 import { api, AttachmentInfo, Json, sendMessage, StreamEvent, UnavailableReport } from "../api";
 import UnavailablePrompt from "../UnavailablePrompt";
 import SourcesNotice from "../SourcesNotice";
@@ -17,10 +16,6 @@ import SessionList, { SessionRow } from "../SessionList";
 
 type ChatMsg = { id?: number; role: "user" | "assistant" | "notice"; text: string; notice?: Json; thinking?: string; run_id?: number | null;
                 attachments?: AttachmentInfo[]; model?: string | null; feedback?: string | null; created_at?: string };
-
-function Markdown({ text }: { text: string }) {
-  return <ReactMarkdown remarkPlugins={[remarkGfm]}>{text}</ReactMarkdown>;
-}
 
 const clock = (s: number) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, "0")}`;
 

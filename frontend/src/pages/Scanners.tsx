@@ -2,7 +2,8 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { api, Json } from "../api";
 import { Field, JsonField, Toggle, useCrud } from "../admin";
-import { Dialog, errorText, LeadModelSelect, TwoPane, useDraft } from "../TwoPane";
+import { Dialog, errorText, LeadModelSelect, Section, TwoPane, useDraft } from "../TwoPane";
+import { Chip, Gear, Prompt, Radar } from "../icons";
 import { useSources } from "../SourcePicker";
 import { PricingIcon } from "../Pricing";
 
@@ -86,11 +87,9 @@ function RunScannerDialog({ scanner, models, leadDefault, codes, locations, onCl
   }
 
   return (
-    <Dialog title={`Run: ${scanner.name}`} onClose={onClose}>
-      <p className="muted small">
-        {ibkr ? <>IBKR scan <strong>{code}</strong> over <strong>{market}</strong>.</> : <>Rule-based scan of your ticker list.</>}
-        {" "}Changes here apply to this run only.
-      </p>
+    <Dialog title={`Run: ${scanner.name}`} onClose={onClose} tone="amber" icon={<Radar />}
+            subtitle={ibkr ? <>IBKR scan <strong>{code}</strong> over <strong>{market}</strong></> : "Rule-based scan of your ticker list"}>
+      <p className="muted small">Changes here apply to this run only.</p>
       <form onSubmit={(e) => { e.preventDefault(); run(); }}>
         {ibkr ? (
           <div className="grid-3">
@@ -154,10 +153,16 @@ export default function Scanners() {
                     title={!s.id ? "Save the scanner first" : !s.enabled ? "Enable the scanner to run it" : "Run this scanner"}
                     onClick={() => setRunning(true)}>▶ Run</button>
           </div>
-          <div className="card">
+          <div className="cfg-stack">
+            <Section tone="blue" icon={<Gear />} title="Setup">
             <Field label="Name" value={s.name} onChange={(name) => set({ name })} />
-            <Field label="Slug" value={s.slug} onChange={(slug) => set({ slug })} />
-            <Field label="Description" value={s.description} onChange={(description) => set({ description })} />
+            <div className="grid-2">
+              <div><Field label="Slug" value={s.slug} onChange={(slug) => set({ slug })} /></div>
+              <div><Field label="Description" value={s.description} onChange={(description) => set({ description })} /></div>
+            </div>
+            <Toggle label="Enabled" value={s.enabled} onChange={(enabled) => set({ enabled })} />
+            </Section>
+            <Section tone="amber" icon={<Radar />} title="Scan" hint="no LLM: IBKR or the rule engine finds the stocks">
             <label>Type</label>
             <select value={s.source ?? "rules"} onChange={(e) => set({ source: e.target.value,
               params: e.target.value === "ibkr" && !p.scan_code ? { scan_code: "TOP_PERC_GAIN", location: "STK.US.MAJOR", rows: 25 } : p })}>
@@ -199,15 +204,19 @@ export default function Scanners() {
             <label>Max results</label>
             <input type="number" value={s.limit} onChange={(e) => set({ limit: Number(e.target.value) })} />
             <ScanData source={s.source} />
-            <Field label="Task for the Lead after the scan (it can use the full team)" value={s.follow_up_prompt}
+            </Section>
+            <Section tone="purple" icon={<Prompt />} title="Analysis" hint="the Lead's task once results are in (full team)">
+            <Field label="Task for the Lead" value={s.follow_up_prompt}
                    onChange={(follow_up_prompt) => set({ follow_up_prompt })} multiline rows={3} />
+            </Section>
+            <Section tone="green" icon={<Chip />} title="Model" hint="follow-up questions use the Research default">
             <LeadModelSelect models={models} value={s.lead_model_tool_id ?? null}
                              onChange={(lead_model_tool_id) => set({ lead_model_tool_id })}
-                             label="Model for the analysis" hint="runs the task above; follow-up questions use the Research default"
+                             label="Model for the analysis"
                              defaultLabel={`Research default (${leadDefault || "Lead role model"})`} />
-            <Toggle label="Enabled" value={s.enabled} onChange={(enabled) => set({ enabled })} />
-            {crud.error && <p className="error">{crud.error}</p>}
-            <div className="actions">
+            </Section>
+            <div className="cfg-actions">
+              {crud.error && <p className="error">{crud.error}</p>}
               <button className="primary" onClick={() => crud.save(s)}>Save</button>
               {s.id && <button onClick={() => crud.remove(s)}>Delete</button>}
             </div>

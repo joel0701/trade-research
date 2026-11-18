@@ -329,6 +329,73 @@ button.danger-btn:hover { background: #a93226; }
               padding: 8px 12px; margin: 12px 0; border-radius: 4px; font-size: 13px; }
 .data-notes ul { margin: 6px 0 0; padding-left: 18px; }
 .data-notes li { margin: 3px 0; }
-.stages { margin: 6px 0 10px; padding-left: 20px; color: var(--muted); }
-.stages li { margin: 2px 0; }
-.stages strong { color: var(--text); font-weight: 600; }
+
+/* ── Colour tones (Skills / Scanners editors and run dialogs) ─────────────── */
+:root { --tone-blue: #6ea8fe; --tone-amber: #f0b44c; --tone-purple: #b58cff; --tone-green: #5fd38d; --tone-teal: #4fd1c5;
+        --pos: #5fd38d; --neg: #ff7b72; }
+:root[data-theme="light"] { --tone-blue: #2f6fdb; --tone-amber: #b7791f; --tone-purple: #7c4dcc; --tone-green: #23885a; --tone-teal: #1f8f86;
+        --pos: #1e7d4f; --neg: #c0392b; }
+.tone-blue { --tone: var(--tone-blue); } .tone-amber { --tone: var(--tone-amber); } .tone-purple { --tone: var(--tone-purple); }
+.tone-green { --tone: var(--tone-green); } .tone-teal { --tone: var(--tone-teal); }
+
+.cfg-stack { display: flex; flex-direction: column; gap: 14px; }
+.cfg { background: var(--panel); border: 1px solid var(--border); border-left: 3px solid var(--tone); border-radius: 10px; overflow: hidden; }
+.cfg-head { display: flex; align-items: center; gap: 10px; padding: 10px 16px;
+            background: linear-gradient(90deg, color-mix(in srgb, var(--tone) 16%, transparent), transparent 70%);
+            border-bottom: 1px solid var(--border); }
+.cfg-head h3 { margin: 0; font-size: 14px; font-weight: 650; color: var(--tone); letter-spacing: .2px; }
+.cfg-hint { font-size: 12px; color: var(--muted); margin-left: auto; text-align: right; }
+.cfg-icon { display: inline-grid; place-items: center; width: 26px; height: 26px; border-radius: 7px; flex-shrink: 0;
+            color: var(--tone); background: color-mix(in srgb, var(--tone) 16%, transparent); }
+.cfg-body { padding: 4px 16px 14px; }
+.cfg-body > label:first-child, .cfg-body > .field:first-child label { margin-top: 8px; }
+.cfg-actions { display: flex; gap: 8px; align-items: center; justify-content: flex-end; padding: 2px 0 8px; }
+.cfg-actions .error { margin: 0 auto 0 0; }
+.grid-2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 0 12px; }
+select.model-select { border-left-width: 4px; border-left-style: solid; }
+
+/* Toned dialogs */
+.modal-toned { padding-top: 0; border-top: 3px solid var(--tone); }
+.modal-toned .modal-head { margin: 0 -20px 12px; padding: 14px 20px 12px; border-bottom: 1px solid var(--border);
+                           background: linear-gradient(90deg, color-mix(in srgb, var(--tone) 18%, transparent), transparent 75%); }
+.modal-title { display: flex; align-items: center; gap: 10px; }
+.modal-sub { font-size: 12px; color: var(--muted); font-weight: 400; margin-top: 2px; }
+.modal-toned button.primary { background: var(--tone); border-color: var(--tone); color: #111; }
+
+/* Stage chips (skill built on a scanner) */
+.stages { list-style: none; margin: 4px 0 12px; padding: 0; display: flex; flex-wrap: wrap; gap: 6px; counter-reset: st; }
+.stages li { counter-increment: st; display: flex; flex-direction: column; padding: 6px 10px 6px 30px; position: relative;
+             border-radius: 8px; border: 1px solid color-mix(in srgb, var(--tone) 45%, transparent);
+             background: color-mix(in srgb, var(--tone) 10%, transparent); font-size: 12px; min-width: 120px; }
+.stages li::before { content: counter(st); position: absolute; left: 9px; top: 8px; width: 15px; height: 15px; border-radius: 50%;
+                     background: var(--tone); color: #111; font-size: 10px; font-weight: 700; display: grid; place-items: center; }
+.stages li span { color: var(--muted); }
+.stages li strong { color: var(--text); font-weight: 600; }
+
+/* ── Interactive tables in answers ───────────────────────────────────────── */
+.msg table, .trace-output table { display: table; }
+.dt { margin: 10px 0 14px; max-width: 100%; }
+.dt-bar { display: flex; align-items: center; gap: 10px; margin-bottom: 6px; flex-wrap: wrap; }
+.dt-bar .act { margin-left: auto; }
+.dt-filter { width: 180px; padding: 4px 8px; font-size: 12px; }
+.dt-wrap { overflow: auto; border: 1px solid var(--border); border-radius: 8px; outline: none; }
+.dt-wrap:focus-visible { box-shadow: 0 0 0 2px var(--accent); }
+.dt-wrap.dt-tall { max-height: 460px; }
+.dt table { border-collapse: separate; border-spacing: 0; width: 100%; font-size: 13px; line-height: 1.4; }
+.dt th, .dt td { border: 0; border-bottom: 1px solid var(--border); padding: 6px 10px; white-space: nowrap; }
+.dt td { white-space: normal; min-width: 60px; }
+.dt td.num, .dt th.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.dt thead th { position: sticky; top: 0; z-index: 1; background: color-mix(in srgb, var(--accent) 14%, var(--raised));
+               color: var(--text); font-weight: 650; text-align: left; cursor: pointer; user-select: none; }
+.dt thead th.num { text-align: right; }
+.dt thead th:hover { background: color-mix(in srgb, var(--accent) 24%, var(--raised)); }
+.dt thead th.sorted { color: var(--accent); }
+.dt-arrow { margin-left: 6px; font-size: 10px; opacity: .35; }
+.dt th.sorted .dt-arrow { opacity: 1; }
+.dt tbody tr:nth-child(even) td { background: color-mix(in srgb, var(--text) 3%, transparent); }
+.dt tbody tr { cursor: pointer; }
+.dt tbody tr:hover td { background: color-mix(in srgb, var(--accent) 9%, transparent); }
+.dt tbody tr.active td { background: color-mix(in srgb, var(--accent) 20%, transparent); }
+.dt tbody tr.active td:first-child { box-shadow: inset 3px 0 0 var(--accent); }
+.dt tbody tr:last-child td { border-bottom: 0; }
+.dt td.pos { color: var(--pos); } .dt td.neg { color: var(--neg); }

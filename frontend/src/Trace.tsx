@@ -1,7 +1,6 @@
 /** Trace log: every Lead and specialist run in a session, with tool calls, timing, tokens and cost. */
 import { useEffect, useRef } from "react";
-import ReactMarkdown from "react-markdown";
-import remarkGfm from "remark-gfm";
+import { Markdown } from "./DataTable";
 import { Json } from "./api";
 
 export type Run = {
@@ -78,7 +77,7 @@ function RunBody({ r }: { r: Run }) {
       {r.output && (
         <details>
           <summary>Output ({k(r.output.length)} chars)</summary>
-          <div className="trace-output"><ReactMarkdown remarkPlugins={[remarkGfm]}>{r.output}</ReactMarkdown></div>
+          <div className="trace-output"><Markdown text={r.output} /></div>
         </details>
       )}
     </>
