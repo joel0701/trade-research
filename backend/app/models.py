@@ -113,8 +113,11 @@ class ChatSession(SQLModel, table=True):
     # Data sources for the next turn only (a skill that names its sources), then cleared, so
     # follow-up questions use the full team.
     next_turn_tool_scope: list[int] | None = Field(default=None, sa_column=Column(JSON))
+    # Extra instructions for the next turn only (e.g. end a skill's or scanner's answer with
+    # suggested next steps), then cleared.
+    next_turn_note: str | None = None
     # Stages to run automatically after the current turn, in order, each with its own model:
-    # [{"text", "model_tool_id", "tool_scope", "hidden", "label"}]. E.g. a skill built on a scanner: the scanner's
+    # [{"text", "model_tool_id", "tool_scope", "note", "hidden", "label"}]. E.g. a skill built on a scanner: the scanner's
     # analysis (its model), then the skill's evaluation (the skill's model).
     queued_turns: list[dict[str, Any]] | None = Field(default=None, sa_column=Column(JSON))
     # "Don't ask again in this session" for this set of unavailable sources (see app.preflight).

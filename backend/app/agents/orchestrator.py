@@ -160,6 +160,7 @@ def _pop_stage(session_id: int) -> dict[str, Any] | None:
         chat.queued_turns = rest or None
         chat.next_turn_model_tool_id = stage.get("model_tool_id")
         chat.next_turn_tool_scope = stage.get("tool_scope") or None
+        chat.next_turn_note = stage.get("note") or None
         db.add(chat)
         db.commit()
         return stage
@@ -252,18 +253,20 @@ def _prepare_turn(session_id: int, user_text: str, attachment_ids: list[int] | N
         # A skill's or scanner's own model runs just its first answer; later turns use the session's model.
         turn_model, chat.next_turn_model_tool_id = chat.next_turn_model_tool_id, None
         chat.next_turn_tool_scope = None
+        note, chat.next_turn_note = chat.next_turn_note, None
         db.add(chat)
         db.commit()
         current = expand_refs(db, user_content)
         lead_model = _lead_model_for(chat, lead, tools, turn_model)
 
     messages = repair_history(history) + [{"role": "user", "content": current}]
-    return tools, lead, specialists, messages, lead_model
+    return tools, lead, specialists, messages, lead_model, note
 
 
 async def _run_prepared(session_id: int, user_text: str, tools: dict[int, Tool], lead: Role,
                         specialists: list[Role], messages: list[dict[str, Any]],
-                        lead_model: ModelConfig, excluded: list[str] | None = None) -> AsyncIterator[dict[str, Any]]:
+                        lead_model: ModelConfig, note: str | None = None,
+                        excluded: list[str] | None = None) -> AsyncIterator[dict[str, Any]]:
     """Run the Lead for this turn, then any queued follow-on stages (e.g. a skill evaluating a
     scanner's analysis), each with its own model. All in one background task and one stream."""
     queue: asyncio.Queue[dict[str, Any] | None] = asyncio.Queue()
@@ -281,7 +284,7 @@ async def _run_prepared(session_id: int, user_text: str, tools: dict[int, Tool],
             db.commit()
 
     async def one_turn(text: str, lead: Role, specialists: list[Role], messages: list[dict[str, Any]],
-                       model: ModelConfig) -> bool:
+                       model: ModelConfig, note: str | None = None) -> bool:
         run_id = _start_run(session_id, lead, text, None, model.model_id)
         turn.update(run_id=run_id, model=model)
         result = None
@@ -308,6 +311,8 @@ async def _run_prepared(session_id: int, user_text: str, tools: dict[int, Tool],
                     }, run_spec)
                 team = "\n".join(f"- consult_{s.slug}: {s.name}. {s.description}" for s in specialists) or "(none)"
                 system = lead.system_prompt + LEAD_SUFFIX.format(today=date.today().isoformat(), team=team)
+                if note:
+                    system += "\n\n" + note
                 if excluded:
                     system += ("\n\nThese data sources are unavailable for this question; the user chose to continue "
                                "without them: " + "; ".join(excluded) + ". Where that limits the answer, say so briefly.")
@@ -326,12 +331,12 @@ async def _run_prepared(session_id: int, user_text: str, tools: dict[int, Tool],
 
     async def work() -> None:
         try:
-            ok = await one_turn(user_text, lead, specialists, messages, lead_model)
+            ok = await one_turn(user_text, lead, specialists, messages, lead_model, note)
             while ok and (stage := _pop_stage(session_id)) is not None:
                 await emit({"type": "stage", "label": stage.get("label", "")})
-                _, s_lead, s_specs, s_messages, s_model = _prepare_turn(session_id, stage["text"], None,
+                _, s_lead, s_specs, s_messages, s_model, s_note = _prepare_turn(session_id, stage["text"], None,
                                                                          bool(stage.get("hidden", True)))
-                ok = await one_turn(stage["text"], s_lead, s_specs, s_messages, s_model)
+                ok = await one_turn(stage["text"], s_lead, s_specs, s_messages, s_model, s_note)
             if not ok:
                 _clear_stages(session_id)  # don't run later stages on a failed result
         finally:

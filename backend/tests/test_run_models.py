@@ -156,3 +156,44 @@ def test_run_kind_for_skill_scanner_and_forks(monkeypatch):
         assert chat["run_kind"] == "skill" and chat["run_name"] == skill["name"]
         plain = c.post("/api/sessions", json={}).json()
         assert c.get(f"/api/sessions/{plain['id']}").json()["run_kind"] is None
+
+
+def test_next_steps_only_on_the_runs_final_answer(monkeypatch):
+    from app.screeners import engine
+
+    async def fake_scan(**kw):
+        return [{"rank": 1, "ticker": "CRWV"}]
+    monkeypatch.setattr(ibkr_gateway, "run_scan", fake_scan)
+    monkeypatch.setattr(engine, "fetch_snapshots", lambda t: {})
+    fake = FakeClient()
+    monkeypatch.setattr(loop, "client", lambda: fake)
+    heading = "### Suggested next steps"
+    lead_systems = lambda: [k["system"] for k in fake.calls if "Your team" in k["system"]]
+    with TestClient(app) as c:
+        sc = next(s for s in c.get("/api/screeners").json() if s["slug"] == "ibkr_top_gainers")
+        r = c.post(f"/api/screeners/{sc['id']}/run").json()
+        send(c, r["session_id"], {"text": r["prompt"], "hidden": True})
+        assert all(heading in s for s in lead_systems())       # the scanner's answer asks for next steps
+        n = len(lead_systems())
+        send(c, r["session_id"], {"text": "Tell me more about CRWV"})
+        assert not any(heading in s for s in lead_systems()[n:])  # follow-ups don't
+
+        # Skill built on the scanner: only the skill's evaluation (the final stage) adds them.
+        skill = c.post("/api/skills", json={"slug": "ns_check", "name": "NS check", "prompt_template": "Rank them.",
+                                            "params": [], "screener_id": sc["id"]}).json()
+        r = c.post(f"/api/skills/{skill['id']}/run", json={"params": {}}).json()
+        n = len(lead_systems())
+        send(c, r["session_id"], {"text": r["prompt"], "hidden": True})
+        stages = lead_systems()[n:]
+        first_stage = [s for s in stages if heading not in s]
+        assert first_stage and heading in stages[-1]
+
+
+def test_mock_answer_includes_next_steps(monkeypatch):
+    monkeypatch.setenv("MOCK_LLM", "1")
+    with TestClient(app) as c:
+        skill = next(s for s in c.get("/api/skills").json() if s["slug"] == "full_analysis")
+        r = c.post(f"/api/skills/{skill['id']}/run", json={"params": {"ticker": "NVDA"}}).json()
+        send(c, r["session_id"], {"text": r["prompt"]})
+        last = c.get(f"/api/sessions/{r['session_id']}").json()["messages"][-1]["text"]
+        assert "### Suggested next steps\n- What news is driving the price action in NVDA today?" in last

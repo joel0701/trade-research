@@ -79,6 +79,11 @@ scan, the scanner's task with the scanner's model, then the skill's prompt evalu
 with the skill's model. Follow-up questions use the Research default. The stages run in the
 background, so they finish even if you leave the page.
 
+**Suggested next steps:** the final answer of a skill or scanner run ends with one to three specific
+follow-up questions based on the data (e.g. the news behind the top gainers' moves, naming the
+tickers). They show as clickable suggestions; clicking one puts it in the box to edit or send.
+Follow-up answers don't add them.
+
 **Skill and scanner models** (and a skill's data sources) apply to their own run only, so a
 cheaper model such as Sonnet can handle steps that need little reasoning. Follow-up questions in
 the session always use the Research default: the Lead role's model (or the one picked in the

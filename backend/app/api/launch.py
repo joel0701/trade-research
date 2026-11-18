@@ -90,7 +90,7 @@ async def run_skill(skill_id: int, body: SkillRun, db: Session = Depends(get_ses
     if scr is None:
         # The skill's model answers the skill's prompt; follow-up questions use the Research default.
         chat = ChatSession(title=f"{skill.name}: {label}".strip(": "), origin=f"skill:{skill.id}",
-                           next_turn_model_tool_id=model_id,
+                           next_turn_model_tool_id=model_id, next_turn_note=NEXT_STEPS,
                            next_turn_tool_scope=list(skill.tool_ids) or None)  # for the skill's run only
         db.add(chat)
         db.commit()
@@ -116,11 +116,12 @@ async def run_skill(skill_id: int, body: SkillRun, db: Session = Depends(get_ses
     if scr.follow_up_prompt.strip():
         chat.next_turn_model_tool_id = scanner_model
         chat.queued_turns = [{"text": evaluate, "model_tool_id": model_id, "tool_scope": list(skill.tool_ids) or None,
-                              "hidden": True, "label": skill.name}]
+                              "note": NEXT_STEPS, "hidden": True, "label": skill.name}]
         first = f"Analyse the scanner results above and complete this task: {scr.follow_up_prompt}"
     else:  # the scanner has no task of its own: the skill evaluates the raw results
         chat.next_turn_model_tool_id = model_id
         chat.next_turn_tool_scope = list(skill.tool_ids) or None
+        chat.next_turn_note = NEXT_STEPS
         first = evaluate
     db.add(chat)
     db.commit()
@@ -202,7 +203,7 @@ async def run_screen(screener_id: int, body: ScannerRun | None = None,
     settings, results, label, rows = await scan(scr, params, universe)
     # The scanner's model analyses the results; follow-up questions use the Research default.
     chat = ChatSession(title=f"Scanner: {scr.name} ({len(rows)} results)", origin=f"screener:{scr.id}",
-                       next_turn_model_tool_id=model_id)
+                       next_turn_model_tool_id=model_id, next_turn_note=NEXT_STEPS)
     db.add(chat)
     db.commit()
     db.refresh(chat)
@@ -214,5 +215,14 @@ async def run_screen(screener_id: int, body: ScannerRun | None = None,
     # The UI sends this hidden prompt to start the Lead's analysis (no extra bubble is shown).
     return {"session_id": chat.id, "prompt": SCANNER_FOLLOW_UP, "hidden": True, "matches": rows}
 
+
+# Added to the final answer of a skill or scanner run (the UI turns the section into suggestions).
+NEXT_STEPS_HEADING = "### Suggested next steps"
+NEXT_STEPS = (
+    f'End your answer with a section headed exactly "{NEXT_STEPS_HEADING}": 1 to 3 bullets, each a specific '
+    "follow-up research question the user could ask next, chosen from what this data shows and naming the "
+    'tickers involved (for example: "What news is driving the moves in CRWV, SMCI and HIMS today?"). Write each '
+    "bullet as the question itself, in plain text, with nothing after the section."
+)
 
 SCANNER_FOLLOW_UP = "Analyse the scanner results above and complete the task."

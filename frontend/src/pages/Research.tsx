@@ -8,6 +8,7 @@ import Composer, { ModelTool } from "../Composer";
 import { FileIcon, Radar, Sparkles } from "../icons";
 import Trace, { parseTime, Run, setPriceTable } from "../Trace";
 import AnswerFooter from "../AnswerFooter";
+import NextSteps, { splitNextSteps } from "../NextSteps";
 import SkillDraftDialog from "../SkillDraftDialog";
 import Timeline from "../Timeline";
 import ProfileCard from "../ProfileCard";
@@ -342,7 +343,17 @@ export default function Research() {
                 </div>
               )}
               {m.thinking && <details><summary>Reasoning</summary><Markdown text={m.thinking} /></details>}
-              <Markdown text={m.text} />
+              {(() => {
+                const { body, steps } = m.role === "assistant" ? splitNextSteps(m.text) : { body: m.text, steps: [] };
+                return (
+                  <>
+                    <Markdown text={body} />
+                    {steps.length > 0 && !(busy && i === lastAssistant) && (
+                      <NextSteps steps={steps} onPick={(q) => setRestore({ text: q, nonce: Date.now() })} />
+                    )}
+                  </>
+                );
+              })()}
               {m.role === "assistant" && m.id != null && sessionId != null && !(busy && i === lastAssistant) && (
                 <AnswerFooter sessionId={sessionId} message={m} models={models} runs={runs} roleNames={roleNames}
                               onViewTrace={viewInTrace} onSaveSkill={() => setDraftingSkill(true)} onFork={forkAt}

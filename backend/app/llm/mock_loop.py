@@ -129,12 +129,17 @@ async def run_agent_mock(*, model: "ModelConfig", system: str, messages: list[di
             _record(messages, on_message, "user", [res], False)
             findings = f"{tool['name']} returned: {(res['content'] or '').strip()[:400]}"
 
+    next_steps = ""
+    if "### Suggested next steps" in system:
+        next_steps = ("\n\n### Suggested next steps\n"
+                      f"- What news is driving the price action in {ticker} today?\n"
+                      f"- How does {ticker}'s options positioning look ahead of its next catalyst?")
     if consults:
         final = (f"🧪 **Mock response** (no LLM was called, so this costs nothing).\n\n"
                  f"**Question:** {question[:400]}\n\n"
                  f"**What the team found (real tool data, canned wording):**\n{findings}\n\n"
                  f"| Item | Value |\n|---|---|\n| Ticker | {ticker} |\n| Specialists consulted | {len(consults)} |\n"
-                 f"| Model | mock |\n\nSwitch off MOCK_LLM (or choose a real model) for a real analysis.")
+                 f"| Model | mock |\n\nSwitch off MOCK_LLM (or choose a real model) for a real analysis.{next_steps}")
     else:
         final = (f"(mock specialist, no LLM call) Summary for {ticker}. "
                  f"{findings or 'No data tool was available to call.'}")

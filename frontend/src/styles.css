@@ -417,3 +417,16 @@ select.model-select { border-left-width: 4px; border-left-style: solid; }
                                border-radius: 14px; box-shadow: 0 0 0 4px color-mix(in srgb, var(--tone) 7%, transparent);
                                background: linear-gradient(135deg, color-mix(in srgb, var(--tone) 18%, var(--panel)), color-mix(in srgb, var(--tone) 6%, var(--panel)) 70%); }
 .msg.user.run-card.run-scanner { border-radius: 6px; }
+
+/* Suggested next steps (end of skill / scanner answers) */
+.next-steps { margin: 14px 0 6px; padding: 10px 12px; border-radius: 10px; border: 1px solid color-mix(in srgb, var(--tone) 40%, transparent);
+              background: color-mix(in srgb, var(--tone) 8%, transparent); }
+.next-steps-head { display: flex; align-items: baseline; gap: 10px; margin-bottom: 8px; }
+.next-steps-head strong { color: var(--tone); font-size: 13px; letter-spacing: .3px; text-transform: uppercase; }
+.next-steps-head .muted { margin-left: auto; }
+.next-step { display: flex; width: 100%; align-items: center; gap: 10px; text-align: left; margin-top: 6px; padding: 8px 10px;
+             border-radius: 8px; border: 1px solid var(--border); background: var(--panel); color: var(--text); font-size: 14px; cursor: pointer; }
+.next-step:hover { border-color: var(--tone); background: color-mix(in srgb, var(--tone) 12%, var(--panel)); }
+.next-step span:first-child { flex: 1; }
+.next-step-go { color: var(--tone); display: inline-flex; opacity: .6; }
+.next-step:hover .next-step-go { opacity: 1; }
