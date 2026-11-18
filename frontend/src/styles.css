@@ -408,10 +408,12 @@ select.model-select { border-left-width: 4px; border-left-style: solid; }
 .run-card-head strong { color: var(--tone); font-size: 13px; letter-spacing: .3px; text-transform: uppercase; }
 .run-card-head .cfg-icon { width: 22px; height: 22px; }
 .run-card-head .muted { margin-left: auto; }
+.run-card-name { font-weight: 650; color: var(--text); font-size: 14px; }
+.run-card-name::before { content: "·"; margin-right: 8px; color: var(--muted); font-weight: 400; }
 .msg.run-card strong { color: var(--text); }
 .msg.run-card .run-card-head strong { color: var(--tone); }
-/* Scanner runs: solid amber edge. Skill runs: purple, dashed outline with a soft glow. */
-.msg.user.run-card.run-skill { border: 1.5px dashed color-mix(in srgb, var(--tone) 70%, transparent); border-left: 1.5px dashed color-mix(in srgb, var(--tone) 70%, transparent);
+/* Scanner runs: green, solid edge. Skill runs: blue, dashed outline with a soft glow. */
+.msg.user.run-card.run-skill { border: 1.5px dashed var(--tone); border-left: 1.5px dashed var(--tone);
                                border-radius: 14px; box-shadow: 0 0 0 4px color-mix(in srgb, var(--tone) 7%, transparent);
-                               background: linear-gradient(135deg, color-mix(in srgb, var(--tone) 13%, var(--panel)), var(--panel) 70%); }
+                               background: linear-gradient(135deg, color-mix(in srgb, var(--tone) 18%, var(--panel)), color-mix(in srgb, var(--tone) 6%, var(--panel)) 70%); }
 .msg.user.run-card.run-scanner { border-radius: 6px; }

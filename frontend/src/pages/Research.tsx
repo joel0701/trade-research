@@ -27,6 +27,7 @@ export default function Research() {
   const [sessions, setSessions] = useState<SessionRow[]>([]);
   const [messages, setMessages] = useState<ChatMsg[]>([]);
   const [runKind, setRunKind] = useState<"skill" | "scanner" | null>(null);  // session started by a skill or scanner
+  const [runName, setRunName] = useState("");
   const [runs, setRuns] = useState<Run[]>([]);
   const [models, setModels] = useState<ModelTool[]>([]);
   const [draftingSkill, setDraftingSkill] = useState(false);
@@ -129,6 +130,7 @@ export default function Research() {
       if (streaming.current === sessionId) return; // this page is streaming it: don't overwrite
       setMessages(s.messages);
       setRunKind(s.run_kind ?? null);
+      setRunName(s.run_name ?? "");
       setSessionModel(s.lead_model_tool_id ?? null);
       const held = s.pending_confirm;  // a question awaiting the unavailable-sources decision
       setPendingConfirm(held ? { text: held.text, attachments: held.attachments ?? [], report: held.report,
@@ -320,12 +322,13 @@ export default function Research() {
             <SourcesNotice key={m.id ?? `notice-${i}`} notice={m.notice ?? {}} />
           ) : (
             <div key={m.id ?? `live-${i}`} ref={i === lastAssistant ? answerRef : undefined}
-                 className={`msg ${m.role}${i === runPromptIndex ? ` run-card run-${runKind} tone-${runKind === "scanner" ? "amber" : "purple"}` : ""}`}
+                 className={`msg ${m.role}${i === runPromptIndex ? ` run-card run-${runKind} tone-${runKind === "scanner" ? "green" : "blue"}` : ""}`}
                  data-msg-key={String(m.id ?? `live-${i}`)}>
               {i === runPromptIndex && (
                 <div className="run-card-head">
                   <span className="cfg-icon">{runKind === "scanner" ? <Radar /> : <Sparkles />}</span>
-                  <strong>{runKind === "scanner" ? "Scanner run" : "Skill run"}</strong>
+                  <strong>{runKind === "scanner" ? "Scanner" : "Skill"}</strong>
+                  {runName && <span className="run-card-name">{runName}</span>}
                   <span className="muted small">generated from the {runKind === "scanner" ? "scanner's" : "skill's"} settings</span>
                 </div>
               )}

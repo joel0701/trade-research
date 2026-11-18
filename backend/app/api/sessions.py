@@ -123,20 +123,25 @@ def create_session(body: NewSession, db: Session = Depends(get_session)) -> dict
     return chat.model_dump(mode="json")
 
 
-def run_kind(db: Session, chat: ChatSession) -> str | None:
-    """"skill" or "scanner" when the session (or the one it was forked from) was started by a
-    skill or scanner, so its generated first prompt can be shown as a run card."""
+def run_info(db: Session, chat: ChatSession) -> tuple[str | None, str | None]:
+    """("skill" | "scanner", its name) when the session (or the one it was forked from) was started
+    by a skill or scanner, so its generated first prompt can be shown as a run card."""
+    from app.models import Screener, Skill
+
     seen: set[int] = set()
     while chat is not None and chat.id not in seen:
         seen.add(chat.id)
-        if chat.origin.startswith("skill:"):
-            return "skill"
-        if chat.origin.startswith("screener:"):
-            return "scanner"
-        if not chat.origin.startswith("fork:"):
-            return None
-        chat = db.get(ChatSession, int(chat.origin.split(":", 1)[1]))
-    return None
+        kind, _, ident = chat.origin.partition(":")
+        if kind in ("skill", "screener"):
+            model = Skill if kind == "skill" else Screener
+            item = db.get(model, int(ident)) if ident.isdigit() else None
+            # A deleted skill/scanner: fall back to the name in the session title ("Name: …").
+            name = item.name if item else chat.title.removeprefix("Scanner: ").split(":")[0].split(" (")[0]
+            return ("skill" if kind == "skill" else "scanner"), name
+        if kind != "fork" or not ident.isdigit():
+            return None, None
+        chat = db.get(ChatSession, int(ident))
+    return None, None
 
 
 @router.get("/{session_id}")
@@ -145,7 +150,7 @@ def get_chat(session_id: int, db: Session = Depends(get_session)) -> dict[str, A
     if chat is None:
         raise HTTPException(404)
     return {**chat.model_dump(mode="json"), "running": session_id in ACTIVE_SESSIONS,
-            "run_kind": run_kind(db, chat), "messages": _visible_messages(db, session_id)}
+            **dict(zip(("run_kind", "run_name"), run_info(db, chat))), "messages": _visible_messages(db, session_id)}
 
 
 @router.patch("/{session_id}")

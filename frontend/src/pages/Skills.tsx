@@ -31,14 +31,14 @@ function RunSkillDialog({ skill, models, leadDefault, scanners, onClose }: {
   }
 
   return (
-    <Dialog title={`Run: ${skill.name}`} onClose={onClose} tone="purple" icon={<Sparkles />}
+    <Dialog title={`Run: ${skill.name}`} onClose={onClose} tone="blue" icon={<Sparkles />}
             subtitle={skill.description || (scanner ? `Evaluates ${scanner.name} results` : "Skill")}>
       {scanner && (
         <ol className="stages">
-          <li className="tone-amber"><span>Scan</span><strong>{scanner.name}</strong></li>
-          {scanner.follow_up_prompt?.trim() && <li className="tone-amber"><span>Scanner analysis</span><strong>{modelName(scanner.lead_model_tool_id)}</strong></li>}
-          <li className="tone-purple"><span>Skill evaluation</span><strong>model below</strong></li>
-          <li className="tone-green"><span>Follow-ups</span><strong>{modelName(null)}</strong></li>
+          <li className="tone-green"><span>Scan</span><strong>{scanner.name}</strong></li>
+          {scanner.follow_up_prompt?.trim() && <li className="tone-green"><span>Scanner analysis</span><strong>{modelName(scanner.lead_model_tool_id)}</strong></li>}
+          <li className="tone-blue"><span>Skill evaluation</span><strong>model below</strong></li>
+          <li className="tone-purple"><span>Follow-ups</span><strong>{modelName(null)}</strong></li>
         </ol>
       )}
       <form onSubmit={(e) => { e.preventDefault(); if (!missing.length) run(); }}>

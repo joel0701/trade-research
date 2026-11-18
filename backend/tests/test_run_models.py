@@ -145,12 +145,14 @@ def test_run_kind_for_skill_scanner_and_forks(monkeypatch):
     with TestClient(app) as c:
         sc = next(s for s in c.get("/api/screeners").json() if s["slug"] == "ibkr_top_gainers")
         r = c.post(f"/api/screeners/{sc['id']}/run").json()
-        assert c.get(f"/api/sessions/{r['session_id']}").json()["run_kind"] == "scanner"
+        chat = c.get(f"/api/sessions/{r['session_id']}").json()
+        assert chat["run_kind"] == "scanner" and chat["run_name"] == "IBKR: top % gainers"
         first = c.get(f"/api/sessions/{r['session_id']}").json()["messages"][1]["id"]
         fork = c.post(f"/api/sessions/{r['session_id']}/fork", json={"message_id": first}).json()
-        assert c.get(f"/api/sessions/{fork['id']}").json()["run_kind"] == "scanner"
+        assert c.get(f"/api/sessions/{fork['id']}").json()["run_name"] == "IBKR: top % gainers"
         skill = next(s for s in c.get("/api/skills").json() if s["slug"] == "full_analysis")
         r2 = c.post(f"/api/skills/{skill['id']}/run", json={"params": {"ticker": "AAPL"}}).json()
-        assert c.get(f"/api/sessions/{r2['session_id']}").json()["run_kind"] == "skill"
+        chat = c.get(f"/api/sessions/{r2['session_id']}").json()
+        assert chat["run_kind"] == "skill" and chat["run_name"] == skill["name"]
         plain = c.post("/api/sessions", json={}).json()
         assert c.get(f"/api/sessions/{plain['id']}").json()["run_kind"] is None

@@ -87,7 +87,7 @@ function RunScannerDialog({ scanner, models, leadDefault, codes, locations, onCl
   }
 
   return (
-    <Dialog title={`Run: ${scanner.name}`} onClose={onClose} tone="amber" icon={<Radar />}
+    <Dialog title={`Run: ${scanner.name}`} onClose={onClose} tone="green" icon={<Radar />}
             subtitle={ibkr ? <>IBKR scan <strong>{code}</strong> over <strong>{market}</strong></> : "Rule-based scan of your ticker list"}>
       <p className="muted small">Changes here apply to this run only.</p>
       <form onSubmit={(e) => { e.preventDefault(); run(); }}>
