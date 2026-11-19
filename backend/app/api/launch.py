@@ -3,8 +3,10 @@
 The response includes the prompt; the UI opens the session and sends it, so the
 results stream into the chat like any other question.
 """
+from datetime import datetime, time as dtime
 from string import Formatter
 from typing import Any
+from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
@@ -117,7 +119,7 @@ async def run_skill(skill_id: int, body: SkillRun, db: Session = Depends(get_ses
         chat.next_turn_model_tool_id = scanner_model
         chat.queued_turns = [{"text": evaluate, "model_tool_id": model_id, "tool_scope": list(skill.tool_ids) or None,
                               "note": NEXT_STEPS, "hidden": True, "label": skill.name}]
-        first = f"Analyse the scanner results above and complete this task: {scr.follow_up_prompt}"
+        first = f"Analyse the scanner results above and complete this task: {scr.follow_up_prompt}" + SCAN_SCOPE
     else:  # the scanner has no task of its own: the skill evaluates the raw results
         chat.next_turn_model_tool_id = model_id
         chat.next_turn_tool_scope = list(skill.tool_ids) or None
@@ -167,6 +169,15 @@ async def scan(scr: Screener, params: dict[str, Any], universe: list[str]) -> tu
         if scr.rules:
             settings.append(f"Extra rules: **{describe_rules(scr.rules)}**")
         outcome = f"IBKR returned {len(rows)} stocks{' after your rules' if scr.rules else ''}"
+        session, session_note = market_session(now_et())
+        settings.append(f"Market session: **{session}**" + (f" ({session_note})" if session_note else ""))
+        requested = int(params.get("rows", 25) or 25)
+        warnings = []
+        if not scr.rules and len(rows) < max(3, requested // 2):
+            warnings.append(f"⚠ Only {len(rows)} of {requested} requested results"
+                            + (" (normal outside regular trading hours)." if session != "open" else "."))
+        warnings.append("Indicator columns (pct_change_1d, rsi_14, moving averages…) are from Yahoo's daily bars as "
+                        "of the last close; IBKR's ranking uses live or extended-hours prices, so they can disagree.")
     else:
         if not universe:
             raise HTTPException(422, f"Scanner {scr.name} has no tickers to scan.")
@@ -178,7 +189,8 @@ async def scan(scr: Screener, params: dict[str, Any], universe: list[str]) -> tu
     if scr.sort_by:
         settings.append(f"Sorted by: **{scr.sort_by}**")
     label = "IBKR scanner" if scr.source == "ibkr" else "Scanner"
-    return settings, f"{outcome}:\n\n{results_to_markdown(rows)}", label, rows
+    notes = "\n\n" + "\n\n".join(f"_{w}_" for w in warnings) if scr.source == "ibkr" else ""
+    return settings, f"{outcome}:\n\n{results_to_markdown(rows)}{notes}", label, rows
 
 
 def add_exchange(db: Session, chat_id: int, instructions: str, results: str, label: str) -> None:
@@ -225,4 +237,29 @@ NEXT_STEPS = (
     "bullet as the question itself, in plain text, with nothing after the section."
 )
 
-SCANNER_FOLLOW_UP = "Analyse the scanner results above and complete the task."
+# Keeps a scanner's analysis on the scanned stocks (a model shouldn't swap in its own list when the
+# scan looks odd; the user can ask for more as a follow-up).
+SCAN_SCOPE = (" Work only with the stocks in the scanner results: don't research, add or recommend other tickers. "
+              "If the results look incomplete or inconsistent with the scan (few rows, a market that's closed, "
+              "'gainers' that are down), say so first and suggest when to re-run, then analyse what's there.")
+SCANNER_FOLLOW_UP = "Analyse the scanner results above and complete the task." + SCAN_SCOPE
+
+ET = ZoneInfo("America/New_York")
+
+
+def now_et() -> datetime:
+    return datetime.now(ET)
+
+
+def market_session(now: datetime) -> tuple[str, str]:
+    """(session, note) for US stocks at `now` (weekends; exchange holidays aren't known here)."""
+    t = now.astimezone(ET)
+    if t.weekday() >= 5:
+        return "closed (weekend)", "IBKR ranks on the last session's data; results are often few or stale."
+    if dtime(9, 30) <= t.time() < dtime(16, 0):
+        return "open", ""
+    if dtime(4, 0) <= t.time() < dtime(9, 30):
+        return "pre-market", "IBKR ranks on thin pre-market trading; expect few results and big swings."
+    if dtime(16, 0) <= t.time() < dtime(20, 0):
+        return "after hours", "IBKR ranks on thin after-hours trading; expect few results."
+    return "closed", "Outside trading hours IBKR's ranking is often stale or nearly empty; re-run when the market is open."

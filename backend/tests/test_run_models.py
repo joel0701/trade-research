@@ -197,3 +197,26 @@ def test_mock_answer_includes_next_steps(monkeypatch):
         send(c, r["session_id"], {"text": r["prompt"]})
         last = c.get(f"/api/sessions/{r['session_id']}").json()["messages"][-1]["text"]
         assert "### Suggested next steps\n- What news is driving the price action in NVDA today?" in last
+
+
+def test_scan_shows_session_warns_and_keeps_analysis_on_scanned_tickers(monkeypatch):
+    from datetime import datetime
+    from app.api import launch
+    from app.screeners import engine
+
+    async def fake_scan(**kw):
+        return [{"rank": 1, "ticker": "SOXL"}, {"rank": 2, "ticker": "IBIT"}]
+    monkeypatch.setattr(ibkr_gateway, "run_scan", fake_scan)
+    monkeypatch.setattr(engine, "fetch_snapshots", lambda t: {})
+    monkeypatch.setattr(launch, "now_et", lambda: datetime(2026, 11, 18, 20, 54, tzinfo=launch.ET))
+    with TestClient(app) as c:
+        sc = next(s for s in c.get("/api/screeners").json() if s["slug"] == "ibkr_top_gainers")
+        r = c.post(f"/api/screeners/{sc['id']}/run").json()
+        msgs = c.get(f"/api/sessions/{r['session_id']}").json()["messages"]
+        assert "- Market session: **closed** (Outside trading hours" in msgs[0]["text"]
+        assert "⚠ Only 2 of 25 requested results (normal outside regular trading hours)." in msgs[1]["text"]
+        assert "from Yahoo's daily bars as of the last close" in msgs[1]["text"]
+        assert "don't research, add or recommend other tickers" in r["prompt"]
+    assert launch.market_session(datetime(2026, 11, 18, 10, 0, tzinfo=launch.ET))[0] == "open"
+    assert launch.market_session(datetime(2026, 11, 21, 12, 0, tzinfo=launch.ET))[0] == "closed (weekend)"
+    assert launch.market_session(datetime(2026, 11, 18, 17, 0, tzinfo=launch.ET))[0] == "after hours"
