@@ -257,6 +257,9 @@ so a large result is paid for again on every later step. To keep them small with
   compaction saved, with a total per run. Claude's own web search and fetch results are measured too;
   those are fetched by Anthropic, so the app can't page them.
 
+The full approach (why results drive cost, the principles, every technique with its exact rules, what
+is built and planned, and how to evaluate a change) is in [docs/tool-results.md](docs/tool-results.md).
+
 **Strict team mode** (Tools → Models, per model; off by default) makes a Lead consult each specialist at
 most once and 3 times in total, with short specialist reports. It's faster on slow local models but may
 reduce quality. By default every Lead may consult each specialist up to twice and 5 times in total.
