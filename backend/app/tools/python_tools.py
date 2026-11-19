@@ -6,6 +6,8 @@ Register new functions in PYTHON_TOOLS; then add a Tool row with kind=python.
 """
 import asyncio
 import json
+import time
+import threading
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from typing import Any
@@ -102,13 +104,50 @@ async def options_chain(ticker: str, expiry: str | None = None, strikes_around_s
     return await asyncio.to_thread(run)
 
 
+_ddg_lock = threading.Lock()
+_ddg_last = [0.0]
+DDG_MIN_INTERVAL = 1.0   # seconds between searches, app-wide (specialists search in parallel)
+DDG_RETRIES = 2
+DDG_KEEP = ("title", "href", "url", "body", "date", "source")
+
+
+def _ddg_once(query: str, max_results: int, news: bool) -> list[dict]:
+    from ddgs import DDGS
+
+    with _ddg_lock:  # one search at a time, spaced out, to avoid DuckDuckGo's rate limits
+        wait = DDG_MIN_INTERVAL - (time.monotonic() - _ddg_last[0])
+        if wait > 0:
+            time.sleep(wait)
+        try:
+            with DDGS(timeout=10) as d:
+                return list(d.news(query, max_results=max_results) if news else d.text(query, max_results=max_results))
+        finally:
+            _ddg_last[0] = time.monotonic()
+
+
 async def ddg_search(query: str, max_results: int = 8, news: bool = False) -> str:
     def run() -> str:
-        from ddgs import DDGS
+        from ddgs.exceptions import DDGSException, RatelimitException, TimeoutException
 
-        with DDGS() as d:
-            hits = list(d.news(query, max_results=max_results) if news else d.text(query, max_results=max_results))
-        return json.dumps(hits, default=str) if hits else "No results."
+        max_n = max(1, min(int(max_results or 8), 20))
+        for attempt in range(DDG_RETRIES + 1):
+            try:
+                hits = _ddg_once(query, max_n, news)
+                break
+            except (RatelimitException, TimeoutException) as e:
+                if attempt == DDG_RETRIES:
+                    kind = "rate-limited" if isinstance(e, RatelimitException) else "timed out"
+                    return (f"DuckDuckGo search {kind} after {DDG_RETRIES + 1} tries. Use another search tool "
+                            "(e.g. web_search) or try again later.")
+                time.sleep(1.5 * (attempt + 1))
+            except DDGSException as e:
+                if "no results" in str(e).lower():  # ddgs raises when nothing matches
+                    return "No results."
+                if attempt == DDG_RETRIES:
+                    return f"DuckDuckGo search failed: {e}. Use another search tool (e.g. web_search) or try again later."
+                time.sleep(1.5 * (attempt + 1))
+        rows = [{k: h[k] for k in DDG_KEEP if h.get(k)} for h in hits]
+        return json.dumps(rows, default=str) if rows else "No results."
 
     return await asyncio.to_thread(run)
 
