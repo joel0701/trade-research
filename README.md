@@ -59,6 +59,14 @@ cd frontend && npm install && npm run dev
 The database is created at `data/trade_research.db` and seeded with default roles, tools, skills
 and scanners on first start. Delete the file to reset.
 
+Logs: the backend writes `data/logs/backend.log` (everything it logs, with full tracebacks), and
+errors in the browser (uncaught errors, failed API calls, errors during a turn) go to
+`data/logs/frontend.log`. Both rotate at 5 MB. To follow them while you test:
+
+```bash
+tail -f data/logs/backend.log data/logs/frontend.log
+```
+
 Tests (no API calls; Claude is faked):
 
 ```bash

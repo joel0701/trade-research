@@ -1,5 +1,6 @@
 """Chat sessions: list, read, send a message (streamed as Server-Sent Events)."""
 import json
+import logging
 from typing import Any, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, UploadFile
@@ -15,6 +16,7 @@ from app.preflight import unavailable_report
 from app.skill_draft import DraftError, draft_skill
 from app.models import Attachment, ChatSession, Message, Run, Tool, now
 
+log = logging.getLogger(__name__)
 router = APIRouter(prefix="/sessions", tags=["sessions"])
 
 
@@ -372,6 +374,7 @@ async def send(session_id: int, body: SendMessage, db: Session = Depends(get_ses
             async for event in run_turn(session_id, text, body.attachment_ids, excluded, hidden=body.hidden):
                 yield f"data: {json.dumps(event, default=str)}\n\n"
         except Exception as e:
+            log.exception("Session %s: turn failed", session_id)
             yield f"data: {json.dumps({'type': 'error', 'message': str(e)})}\n\n"
 
     return StreamingResponse(events(), media_type="text/event-stream",

@@ -1,5 +1,11 @@
 import React, { useEffect, useState } from "react";
-import { api } from "./api";
+import { api, reportError } from "./api";
+
+// Uncaught browser errors go to data/logs/frontend.log too.
+window.addEventListener("error", (e) => reportError(e.message || "Uncaught error",
+  `${e.filename ?? ""}:${e.lineno ?? ""}:${e.colno ?? ""}\n${e.error?.stack ?? ""}`));
+window.addEventListener("unhandledrejection", (e) => reportError(`Unhandled promise rejection: ${e.reason?.message ?? e.reason}`,
+  e.reason?.stack ?? ""));
 import { Chevron, Gear, Moon, Sun, Users, Wrench } from "./icons";
 import Logo from "./Logo";
 import { usePopover } from "./Composer";

@@ -4,6 +4,17 @@ export const BACKEND_DOWN =
   "Can't reach the backend. Check that it is running (uv run uvicorn app.main:app --reload --port 8321 in the backend folder) "
   + "and look at that terminal for errors.";
 
+/** Send an error to the backend's data/logs/frontend.log. Never throws; never logs its own failures. */
+export function reportError(message: string, detail = "", level: "error" | "warning" = "error") {
+  try {
+    void fetch("/api/client-log", {
+      method: "POST", headers: { "Content-Type": "application/json" }, keepalive: true,
+      body: JSON.stringify({ level, message: String(message).slice(0, 2000), detail: String(detail).slice(0, 6000),
+                             url: location.href }),
+    }).catch(() => {});
+  } catch { /* logging must never break the app */ }
+}
+
 async function req<T = any>(method: string, path: string, body?: unknown): Promise<T> {
   let r: Response;
   try {
@@ -24,7 +35,11 @@ async function req<T = any>(method: string, path: string, body?: unknown): Promi
     throw new Error("Something other than the Trade Research backend answered on the backend port. "
       + "Check the backend terminal for errors such as 'address already in use'.");
   }
-  if (!r.ok) throw new Error(`${r.status}: ${await r.text()}`);
+  if (!r.ok) {
+    const text = await r.text();
+    reportError(`${method} /api${path} failed: ${r.status}`, text, r.status < 500 ? "warning" : "error");
+    throw new Error(`${r.status}: ${text}`);
+  }
   return r.json();
 }
 
@@ -71,12 +86,21 @@ export async function uploadAttachment(sessionId: number, file: File): Promise<A
 export async function sendMessage(sessionId: number, text: string, onEvent: (e: StreamEvent) => void,
                                   attachmentIds: number[] = [],
                                   confirm: { proceed?: string; remember?: boolean; hidden?: boolean } = {}) {
+  const handle = onEvent;
+  onEvent = (e: StreamEvent) => {
+    if (e.type === "error") reportError(`Session ${sessionId}: ${e.message}`, "", "error");
+    handle(e);
+  };
   const r = await fetch(`/api/sessions/${sessionId}/messages`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ text, attachment_ids: attachmentIds, ...confirm }),
   });
-  if (!r.ok || !r.body) throw new Error(`${r.status}: ${await r.text()}`);
+  if (!r.ok || !r.body) {
+    const text = await r.text();
+    reportError(`Sending a message to session ${sessionId} failed: ${r.status}`, text);
+    throw new Error(`${r.status}: ${text}`);
+  }
   const reader = r.body.getReader();
   const decoder = new TextDecoder();
   let buf = "";

@@ -3,6 +3,7 @@ from typing import Any
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
+from pydantic import BaseModel
 from fastapi.middleware.cors import CORSMiddleware
 from sqlmodel import Session, select
 
@@ -18,11 +19,14 @@ from app.seed import seed
 from app.llm.providers import PROVIDERS, local_model_states, provider_of
 from app.tools.python_tools import PYTHON_TOOLS
 
-logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
+from app.logs import setup_logging
+
+setup_logging()
 
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
+    setup_logging()  # again here: uvicorn sets up its own loggers after importing the app
     init_db()
     with Session(engine) as db:
         seed(db)
@@ -40,6 +44,26 @@ app.include_router(sessions.router, prefix="/api")
 app.include_router(launch.router, prefix="/api")
 app.include_router(profile.router, prefix="/api")
 app.include_router(local_models.router, prefix="/api")
+
+
+class ClientLog(BaseModel):
+    level: str = "error"
+    message: str
+    detail: str = ""
+    url: str = ""
+
+
+_frontend_log = logging.getLogger("frontend")
+
+
+@app.post("/api/client-log", status_code=204)
+def client_log(entry: ClientLog) -> None:
+    """Errors reported by the browser, written to data/logs/frontend.log."""
+    level = logging.WARNING if entry.level == "warning" else logging.ERROR
+    text = entry.message[:2000] + (f" | {entry.url[:300]}" if entry.url else "")
+    if entry.detail:
+        text += "\n" + entry.detail[:6000]
+    _frontend_log.log(level, text)
 
 
 @app.get("/api/models")

@@ -320,6 +320,7 @@ async def _run_prepared(session_id: int, user_text: str, tools: dict[int, Tool],
                                          emit=emit, on_message=on_message, max_iterations=lead.max_iterations)
             _finish_run(run_id, result)
             if result.error:
+                log.error("Session %s, %s on %s: %s", session_id, lead.slug, model.model_id, result.error)
                 await emit({"type": "error", "message": result.error})
             await emit({"type": "done", "usage": result.usage})
             return not result.error
