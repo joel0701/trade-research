@@ -31,6 +31,39 @@ def server_up(base_url: str, ttl: float = 15.0) -> bool:
     return ok
 
 
+_state_cache: dict[str, tuple[float, dict[str, dict]]] = {}
+MIN_CONTEXT = 16384  # this app's prompts (instructions, tool lists, tool results) need at least this
+
+
+def local_model_states(provider: "Provider", ttl: float = 5.0) -> dict[str, dict]:
+    """Per installed model on a local server: {"loaded": bool | None, "chat": bool, "context": int | None}.
+    LM Studio reports state, type and loaded context; Ollama reports which models are loaded (it loads
+    others on first use). Other servers: {} (unknown)."""
+    url = provider.url()
+    if not url or not provider.local:
+        return {}
+    now = time.monotonic()
+    hit = _state_cache.get(provider.slug)
+    if hit and now - hit[0] < ttl:
+        return hit[1]
+    root = url.rstrip("/").removesuffix("/v1")
+    out: dict[str, dict] = {}
+    try:
+        if provider.slug == "lmstudio":
+            for m in httpx.get(f"{root}/api/v0/models", timeout=1.5).json().get("data", []):
+                out[m["id"]] = {"loaded": m.get("state") == "loaded", "chat": m.get("type") not in ("embeddings", "embedding"),
+                                "context": m.get("loaded_context_length") or None}
+        elif provider.slug == "ollama":
+            loaded = {m.get("model") or m.get("name") for m in httpx.get(f"{root}/api/ps", timeout=1.5).json().get("models", [])}
+            for m in httpx.get(f"{root}/api/tags", timeout=1.5).json().get("models", []):
+                name = m.get("model") or m.get("name")
+                out[name] = {"loaded": name in loaded, "chat": "embed" not in name.lower(), "context": None}
+    except (httpx.HTTPError, ValueError, KeyError, AttributeError):
+        out = {}
+    _state_cache[provider.slug] = (now, out)
+    return out
+
+
 @dataclass(frozen=True)
 class Provider:
     slug: str

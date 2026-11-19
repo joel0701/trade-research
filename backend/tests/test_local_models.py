@@ -23,8 +23,34 @@ def fake_get(running: dict[str, list[str]]):
     return get
 
 
+def test_lmstudio_shows_loaded_state_and_hides_embeddings(monkeypatch):
+    providers._reach_cache.clear(); providers._state_cache.clear()
+    v0 = {"data": [{"id": "qwen/qwen3.8-27b", "type": "llm", "state": "loaded", "loaded_context_length": 4096},
+                   {"id": "text-embedding-nomic-embed-text-v1.5", "type": "embeddings", "state": "not-loaded"},
+                   {"id": "mistral-small", "type": "llm", "state": "not-loaded"}]}
+
+    def get(url, timeout=None):
+        if url.startswith("http://localhost:1234/api/v0/models"):
+            return FakeResp(v0)
+        if url.startswith("http://localhost:1234/v1"):
+            return FakeResp({"data": [{"id": m["id"]} for m in v0["data"]]})
+        raise httpx.ConnectError("refused")
+    monkeypatch.setattr(httpx, "get", get)
+    with TestClient(app) as c:
+        lm = next(s for s in c.get("/api/local-models").json() if s["provider"] == "lmstudio")
+        rows = {m["model_id"]: m for m in lm["models"]}
+        assert list(rows) == ["qwen/qwen3.8-27b", "mistral-small"]  # loaded first, embeddings hidden
+        assert rows["qwen/qwen3.8-27b"]["loaded"] and rows["qwen/qwen3.8-27b"]["context_low"]
+        assert rows["mistral-small"]["loaded"] is False
+        tool = c.post("/api/local-models", json={"provider": "lmstudio", "model_id": "qwen/qwen3.8-27b"}).json()
+        m = next(x for x in c.get("/api/models").json() if x["id"] == tool["id"])
+        assert m["available"] and m["loaded"] and m["context"] == 4096
+        c.delete(f"/api/tools/{tool['id']}")
+    providers._reach_cache.clear(); providers._state_cache.clear()
+
+
 def test_discover_and_add_local_models(monkeypatch):
-    providers._reach_cache.clear()
+    providers._reach_cache.clear(); providers._state_cache.clear()
     monkeypatch.setattr(httpx, "get", fake_get({"http://localhost:11434/v1": ["llama3.1:8b", "qwen2.5:14b", "nomic-embed-text"],
                                                 "http://localhost:8080/v1": ["mlx-community/Qwen2.5-7B-Instruct-4bit"]}))
     with TestClient(app) as c:

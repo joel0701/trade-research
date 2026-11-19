@@ -214,6 +214,8 @@ export default function Composer({ placeholder, busy, models, modelId, defaultMo
                           <ModelMark color={VENDOR_COLORS[m.provider]} />
                           <span>
                             <strong>{m.name}</strong>{m.id === defaultModelId && <span className="badge">default</span>}
+                            {m.local && m.loaded === true && <span className="badge badge-ok">loaded</span>}
+                            {m.local && m.loaded === false && <span className="badge badge-warn" title="Load it in its app first (or turn on just-in-time loading)">not loaded</span>}
                             <span className="muted block">{m.description || m.config.model_id}</span>
                           </span>
                         </span>

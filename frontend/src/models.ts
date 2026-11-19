@@ -9,6 +9,7 @@ export type ModelInfo = Json & {
 export const VENDOR_COLORS: Record<string, string> = {
   anthropic: "#d97757", openai: "#10a37f", google: "#4285f4", meta: "#0866ff",
   xai: "#8a8a8a", mistral: "#fa520f", deepseek: "#4d6bfe", mock: "#7a7f8c",
+  ollama: "#e0e0e0", lmstudio: "#6d5dfc", mlx: "#a2aaad", local: "#22c58b",
 };
 
 /** Group models by vendor, keeping the order they arrive in. */

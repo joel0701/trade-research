@@ -9,7 +9,7 @@ from pydantic import BaseModel
 from sqlmodel import Session, select
 
 from app.db import get_session
-from app.llm.providers import PROVIDERS, server_up
+from app.llm.providers import MIN_CONTEXT, PROVIDERS, local_model_states, server_up
 from app.models import Tool
 
 router = APIRouter()
@@ -36,9 +36,18 @@ def local_models(db: Session = Depends(get_session)) -> list[dict[str, Any]]:
         url = p.url()
         running = bool(url) and server_up(url, ttl=0)
         models = _installed(url) if running else []
+        states = local_model_states(p, ttl=0) if running else {}
+        rows = []
+        for m in models:
+            st = states.get(m, {})
+            if st.get("chat") is False:
+                continue  # an embedding model (by the server's own type)
+            ctx = st.get("context")
+            rows.append({"model_id": m, "tool_id": added.get((p.slug, m)), "loaded": st.get("loaded"),
+                         "context": ctx, "context_low": bool(ctx and ctx < MIN_CONTEXT)})
+        rows.sort(key=lambda r: (r["loaded"] is False, r["model_id"]))  # loaded models first
         out.append({"provider": p.slug, "name": p.name, "base_url": url, "base_url_env": p.base_url_env,
-                    "running": running,
-                    "models": [{"model_id": m, "tool_id": added.get((p.slug, m))} for m in models]})
+                    "running": running, "min_context": MIN_CONTEXT, "models": rows})
     return out
 
 

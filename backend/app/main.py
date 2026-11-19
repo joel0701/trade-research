@@ -15,7 +15,7 @@ from app.catalog import CAPABILITIES
 from app.models import Connection, Role, Screener, Skill, Tool
 from app.tools.registry import availability
 from app.seed import seed
-from app.llm.providers import PROVIDERS, provider_of
+from app.llm.providers import PROVIDERS, local_model_states, provider_of
 from app.tools.python_tools import PYTHON_TOOLS
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
@@ -52,6 +52,10 @@ def models() -> list[dict]:
                 p = provider_of(t.config)
                 info = {"provider": p.slug, "provider_name": p.name, "key_env": p.key_env, "available": p.available(),
                         "local": p.local, "base_url": p.url() if p.local else None}
+                if p.local and info["available"]:
+                    st = local_model_states(p).get(t.config.get("model_id"), {})
+                    info["loaded"] = st.get("loaded")  # None = the server doesn't say
+                    info["context"] = st.get("context")
             except ValueError as e:
                 info = {"provider": t.config.get("provider"), "provider_name": "?", "key_env": None,
                         "available": False, "problem": str(e)}

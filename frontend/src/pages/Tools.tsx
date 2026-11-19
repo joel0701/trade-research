@@ -66,8 +66,13 @@ function LocalModels({ onAdded }: { onAdded: () => void }) {
                 {s.running && s.models.length > 0 && (
                   <div className="local-list">
                     {s.models.map((m: Json) => (
-                      <span key={m.model_id} className="local-model">
+                      <span key={m.model_id} className={`local-model ${m.loaded === false ? "unloaded" : ""}`}
+                            title={m.loaded === true ? "Loaded and ready" : m.loaded === false ? `Not loaded in ${s.name.split(" (")[0]}` : ""}>
+                        {m.loaded != null && <span className={`dot ${m.loaded ? "ok" : "off"}`} />}
                         <code>{m.model_id}</code>
+                        {m.loaded === false && <span className="muted small">not loaded</span>}
+                        {m.context_low && <span className="ctx-warn" title={`This app needs at least ${s.min_context.toLocaleString()} tokens of context`}>
+                          context {m.context.toLocaleString()}: raise to {s.min_context.toLocaleString()}+</span>}
                         {m.tool_id ? <span className="local-added">✓ in your models</span> :
                           <button className="act act-accent" disabled={busy === `${s.provider}:${m.model_id}`}
                                   title="Add it to your models so it appears in the model picker"
@@ -80,8 +85,9 @@ function LocalModels({ onAdded }: { onAdded: () => void }) {
             ))}
           </ul>
           {running.some((s) => s.models.some((m: Json) => !m.tool_id)) && (
-            <p className="muted small">A green dot means the server is running. Click <strong>+ Add to models</strong> to
-              make a model selectable in Research, Roles, Skills and Scanners.</p>
+            <p className="muted small">Green dot: loaded and ready. Click <strong>+ Add to models</strong> to make a model
+              selectable in Research, Roles, Skills and Scanners. Models that aren't loaded need loading in their app first
+              (Ollama loads them automatically).</p>
           )}
           {running.length === 0 && (
             <p className="muted small">No local server is running. Start Ollama (<code>ollama serve</code>, then
@@ -185,9 +191,14 @@ export default function Tools() {
       <MasterDetail title="Models" crud={tools} header={<>{header}<LocalModels onAdded={() => tools.reload()} /></>}
         filter={(t) => t.kind === "model"}
         blank={{ slug: "", name: "", kind: "model", description: "", config: { provider: "anthropic", model_id: "", max_tokens: 16000 }, enabled: true }}
-        rowExtra={(t) => <span className={`dot ${models[t.id]?.available ? "ok" : "off"}`}
-                               title={models[t.id]?.available ? (models[t.id]?.local ? "Server running" : "Key found")
-                                 : models[t.id]?.local ? "Local server not running" : `No key: ${models[t.id]?.key_env ?? ""}`} />}>
+        rowExtra={(t) => {
+          const m = models[t.id];
+          const ready = !!m?.available && m?.loaded !== false;
+          const title = !m ? "" : m.local
+            ? (!m.available ? `${m.provider_name} isn't running` : m.loaded === false ? `Not loaded in ${m.provider_name}` : "Loaded and ready")
+            : m.available ? "Key found" : `No key: ${m.key_env ?? ""}`;
+          return <span className={`dot ${ready ? "ok" : "off"}`} title={title} />;
+        }}>
         {(t, set) => (
           <>
             <Field label="Name" value={t.name} onChange={(name) => set({ name })} />
@@ -196,7 +207,11 @@ export default function Tools() {
             <Field label="Description" value={t.description} onChange={(description) => set({ description })} multiline rows={2} />
             <JsonField label="Config" value={t.config} onChange={(config) => set({ config })} />
             {models[t.id] && (models[t.id].available
-              ? <p className="small" style={{ color: "var(--ok-fg)" }}>✓ {models[t.id].local ? `${models[t.id].provider_name} is running` : `${models[t.id].provider_name} API key found`}</p>
+              ? (models[t.id].local && models[t.id].loaded === false
+                  ? <p className="error small">Not loaded: load it in {models[t.id].provider_name} first (or turn on just-in-time loading there).</p>
+                  : <p className="small" style={{ color: "var(--ok-fg)" }}>✓ {models[t.id].local
+                      ? `Loaded in ${models[t.id].provider_name}${models[t.id].context ? ` · context ${models[t.id].context.toLocaleString()} tokens` : ""}`
+                      : `${models[t.id].provider_name} API key found`}</p>)
               : models[t.id].local
                 ? <p className="error small">{models[t.id].provider_name} isn't running{models[t.id].base_url ? ` at ${models[t.id].base_url}` : ""}. Start it, then reload.</p>
                 : <p className="error small">No API key: set {models[t.id].key_env} in .env and restart the backend.</p>)}
