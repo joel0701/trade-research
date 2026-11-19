@@ -114,7 +114,7 @@ def test_scanner_run_shows_results_only_then_questions_use_the_default(monkeypat
         assert "### Suggested next steps\n- What news is driving today's moves in CRWV and NVDA?" in res
         send(c, r["session_id"], {"text": "What news is driving today's moves in CRWV and NVDA?"})
         lead = [k for k in fake.calls if "Your team" in k["system"]][0]
-        assert lead["model"] == tools["opus"]["config"]["model_id"] and "Suggested next steps" not in lead["system"]
+        assert lead["model"] == tools["opus"]["config"]["model_id"] and "Suggested next steps" in lead["system"]
         assert {"consult_finance_analyst", "consult_news_analyst"} <= {t["name"] for t in lead["tools"]}
 
 
@@ -147,7 +147,7 @@ def test_skill_on_scanner_scan_then_skill_model(monkeypatch):
         n = len(leads)
         send(c, r["session_id"], {"text": "Which one first?"})
         follow = [k for k in fake.calls if "Your team" in k["system"]][n:]
-        assert {k["model"] for k in follow} == {mid["opus"]} and not any(heading in k["system"] for k in follow)
+        assert {k["model"] for k in follow} == {mid["opus"]} and all(heading in k["system"] for k in follow)
 
         c.delete(f"/api/screeners/{sc['id']}")  # deleting the scanner turns the skill back into a plain skill
         assert next(s for s in c.get("/api/skills").json() if s["id"] == skill["id"])["screener_id"] is None
@@ -179,18 +179,18 @@ def test_scan_shows_session_and_warns(monkeypatch):
     assert launch.market_session(datetime(2026, 11, 18, 17, 0, tzinfo=launch.ET))[0] == "after hours"
 
 
-def test_plain_skill_answer_gets_next_steps(monkeypatch):
+def test_every_answer_gets_next_steps(monkeypatch):
+    """Skill runs and follow-up questions alike end with suggested next steps."""
     fake = FakeClient()
     monkeypatch.setattr(loop, "client", lambda: fake)
     with TestClient(app) as c:
         skill = next(s for s in c.get("/api/skills").json() if s["slug"] == "full_analysis")
         r = c.post(f"/api/skills/{skill['id']}/run", json={"params": {"ticker": "AAPL"}}).json()
         send(c, r["session_id"], {"text": r["prompt"]})
-        n = len(fake.calls)
-        assert any("### Suggested next steps" in k["system"] for k in fake.calls if "Your team" in k["system"])
         send(c, r["session_id"], {"text": "And the risks?"})
-        assert not any("### Suggested next steps" in k["system"] for k in fake.calls[n:] if "Your team" in k["system"])
-
+        leads = [k for k in fake.calls if "Your team" in k["system"]]
+        assert len(leads) >= 2 and all("### Suggested next steps" in k["system"] for k in leads)
+        assert all(k["system"].count("### Suggested next steps") == 1 for k in leads)  # asked once, not twice
 
 
 def test_lead_consults_each_specialist_at_most_twice_per_question(monkeypatch):

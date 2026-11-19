@@ -62,6 +62,16 @@ put the relevant figures or excerpts in the consult context.
 This is research and education, not personalised financial advice."""
 
 
+# Every Lead answer ends with suggested follow-up questions; the UI makes them clickable and puts the
+# first one in the input box (Tab to use it).
+NEXT_STEPS_HEADING = "### Suggested next steps"
+NEXT_STEPS = (
+    f'End your answer with a section headed exactly "{NEXT_STEPS_HEADING}": 1 to 3 bullets, each a specific '
+    "follow-up research question the user could ask next, building on this answer and naming the tickers "
+    'involved (for example: "What\'s the technical setup for CRWV and HIMS?"). Don\'t suggest what this answer '
+    "already covers. Write each bullet as the question itself, in plain text, with nothing after the section."
+)
+
 # Consult limits per question. Strict team mode (a model setting, off by default) is tighter: each
 # consult is another round for the Lead and every report must be re-read, which is slow on local models.
 MAX_CONSULTS_PER_ROLE = 2  # keeps a model from fanning out one consult per ticker
@@ -352,6 +362,7 @@ async def _run_prepared(session_id: int, user_text: str, tools: dict[int, Tool],
                                                                  max_consults=per_role, max_total=max_total)
                 if strict:
                     system += STRICT_LEAD_NOTE
+                system += "\n\n" + NEXT_STEPS
                 if note:
                     system += "\n\n" + note
                 if excluded:

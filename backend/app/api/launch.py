@@ -92,7 +92,7 @@ async def run_skill(skill_id: int, body: SkillRun, db: Session = Depends(get_ses
     if scr is None:
         # The skill's model answers the skill's prompt; follow-up questions use the Research default.
         chat = ChatSession(title=f"{skill.name}: {label}".strip(": "), origin=f"skill:{skill.id}",
-                           next_turn_model_tool_id=model_id, next_turn_note=NEXT_STEPS,
+                           next_turn_model_tool_id=model_id,
                            next_turn_tool_scope=list(skill.tool_ids) or None)  # for the skill's run only
         db.add(chat)
         db.commit()
@@ -103,7 +103,7 @@ async def run_skill(skill_id: int, body: SkillRun, db: Session = Depends(get_ses
     # skill's model. Follow-up questions use the Research default.
     settings, results, scan_label, rows = await scan(scr, dict(scr.params), list(scr.universe))
     chat = ChatSession(title=f"{skill.name}: {label}".strip(": ") + f" ({len(rows)} results)", origin=f"skill:{skill.id}",
-                       next_turn_model_tool_id=model_id, next_turn_note=NEXT_STEPS,
+                       next_turn_model_tool_id=model_id,
                        next_turn_tool_scope=list(skill.tool_ids) or None)
     db.add(chat)
     db.commit()
@@ -221,14 +221,7 @@ async def run_screen(screener_id: int, body: ScannerRun | None = None,
     return {"session_id": chat.id, "matches": rows}
 
 
-# Added to the final answer of a skill or scanner run (the UI turns the section into suggestions).
-NEXT_STEPS_HEADING = "### Suggested next steps"
-NEXT_STEPS = (
-    f'End your answer with a section headed exactly "{NEXT_STEPS_HEADING}": 1 to 3 bullets, each a specific '
-    "follow-up research question the user could ask next, chosen from what this data shows and naming the "
-    'tickers involved (for example: "What news is driving the moves in CRWV, SMCI and HIMS today?"). Write each '
-    "bullet as the question itself, in plain text, with nothing after the section."
-)
+from app.agents.orchestrator import NEXT_STEPS_HEADING  # noqa: E402  (every Lead answer ends with suggestions)
 
 # Keeps a scanner's analysis on the scanned stocks (a model shouldn't swap in its own list when the
 # scan looks odd; the user can ask for more as a follow-up).

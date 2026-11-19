@@ -114,10 +114,10 @@ top tickers, and no AI model runs. You then ask about the results like any resea
 (Research default model, full team). **Skills built on a scanner** (Skills → *Scanner input*) run
 the scan and then the skill's prompt on the results, with the skill's model, in one session.
 
-**Suggested next steps:** a skill's answer ends with one to three specific follow-up questions based
-on the data, naming the tickers; scanner results end with ready-made questions about the top tickers
-(e.g. the news behind their moves). They show as clickable suggestions; clicking one puts it in the box to edit or send.
-Follow-up answers don't add them.
+**Suggested next steps:** every answer ends with one to three specific follow-up questions that build on
+it, naming the tickers; scanner results end with ready-made questions about the top tickers. They show
+as clickable suggestions (clicking one puts it in the box to edit or send), and the latest answer's first
+suggestion appears as grey text in the empty box: press Tab to use it.
 
 **A skill's model** (and its data sources) apply to the skill's own run only, so a
 cheaper model such as Sonnet can handle steps that need little reasoning. Follow-up questions in
