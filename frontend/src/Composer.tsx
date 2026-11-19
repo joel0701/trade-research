@@ -85,7 +85,7 @@ function SkillsMenu({ skills, onRun }: { skills: Json[]; onRun: (skill: Json, pa
 }
 
 export default function Composer({ placeholder, busy, models, modelId, defaultModelId, onModelChange,
-                                   ensureSession, onSend, skills, onRunSkill, restore, suggestion }: {
+                                   ensureSession, onSend, skills, onRunSkill, restore, suggestion, onOpenModels }: {
   placeholder: string;
   busy: boolean;
   models: ModelTool[];
@@ -98,6 +98,7 @@ export default function Composer({ placeholder, busy, models, modelId, defaultMo
   onRunSkill: (skill: Json, params: Record<string, string>) => Promise<void>;
   restore?: { text: string; nonce: number }; // put text back in the box (e.g. after Cancel)
   suggestion?: string;  // shown as grey text in the empty box; Tab fills it in, typing replaces it
+  onOpenModels?: () => void;  // refresh the model list (e.g. a local model server was just started)
 }) {
   const [text, setText] = useState("");
   useEffect(() => { if (restore) { setText(restore.text); box.current?.focus(); } }, [restore?.nonce]);
@@ -188,7 +189,7 @@ export default function Composer({ placeholder, busy, models, modelId, defaultMo
       </div>
       <div className="composer-bar">
         <div className="pop-anchor" ref={modelPop.ref}>
-          <button type="button" className="tool-btn model-btn" onClick={() => modelPop.setOpen(!modelPop.open)}
+          <button type="button" className="tool-btn model-btn" onClick={() => { if (!modelPop.open) onOpenModels?.(); modelPop.setOpen(!modelPop.open); }}
                   title="Model the Lead Analyst uses for this session">
             <ModelMark color={VENDOR_COLORS[effective?.provider ?? ""]} />
             <strong className="model-name">{effective?.name.replace(/^Claude /, "") ?? "Model"}</strong>
@@ -198,7 +199,7 @@ export default function Composer({ placeholder, busy, models, modelId, defaultMo
           {modelPop.open && (
             <div className="popover up">
               <div className="pop-title">Lead Analyst model <span className="muted">· this session</span></div>
-              {usable.length === 0 && <div className="pop-item muted">No models have an API key. Add one to .env.</div>}
+              {usable.length === 0 && <div className="pop-item muted">No models available. Add an API key to .env, or start a local model server and add its models in Tools → Models.</div>}
               {byVendor(usable).map(([vendor, list]) => (
                 <div key={vendor}>
                   <div className="pop-group">{vendor}</div>

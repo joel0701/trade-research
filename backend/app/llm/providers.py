@@ -21,7 +21,7 @@ def server_up(base_url: str, ttl: float = 15.0) -> bool:
     """Whether a local OpenAI-compatible server answers GET /models (cached briefly)."""
     now = time.monotonic()
     hit = _reach_cache.get(base_url)
-    if hit and now - hit[0] < ttl:
+    if hit and now - hit[0] < (ttl if hit[1] else min(ttl, 5.0)):  # re-check a stopped server sooner
         return hit[1]
     try:
         ok = httpx.get(base_url.rstrip("/") + "/models", timeout=0.4).status_code < 500

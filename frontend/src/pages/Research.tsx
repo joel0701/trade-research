@@ -409,6 +409,7 @@ export default function Research() {
             onRunSkill={runSkill}
             restore={restore}
             suggestion={suggestion}
+            onOpenModels={() => api.get("/models").then((ms) => { setPriceTable(ms); setModels(ms); }).catch(() => {})}
           />
         </div>
       </section>
