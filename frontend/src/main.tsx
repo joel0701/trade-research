@@ -6,7 +6,7 @@ window.addEventListener("error", (e) => reportError(e.message || "Uncaught error
   `${e.filename ?? ""}:${e.lineno ?? ""}:${e.colno ?? ""}\n${e.error?.stack ?? ""}`));
 window.addEventListener("unhandledrejection", (e) => reportError(`Unhandled promise rejection: ${e.reason?.message ?? e.reason}`,
   e.reason?.stack ?? ""));
-import { Chevron, Gear, Moon, Sun, Users, Wrench } from "./icons";
+import { Chevron, Gear, Help, Moon, Sun, Users, Wrench } from "./icons";
 import Logo from "./Logo";
 import { usePopover } from "./Composer";
 import ReactDOM from "react-dom/client";
@@ -85,6 +85,10 @@ function App() {
               MOCK LLM
             </span>
           )}
+          <a className="support-link" href="/support.html" target="_blank" rel="noreferrer"
+             title="Documentation: how the app works, its settings and configuration">
+            <Help /><span>Support</span>
+          </a>
           <ProfileMenu />
         </div>
         <nav className="topnav">

@@ -9,6 +9,11 @@ Every chat session is saved and can be reopened and continued. **Skills** (pre-b
 Roles, tools, skills and scanners are all data, editable in the app; no code change is needed to
 add a role or connect a tool.
 
+**Support:** the **Support** link in the header (next to your profile icon) opens the full
+documentation: every screen, setting and configuration option, how a question runs, team limits,
+tool result compaction, logs and troubleshooting. It's a single page, `frontend/public/support.html`,
+with search and a table of contents; keep it updated when features change.
+
 ## Architecture
 
 ```

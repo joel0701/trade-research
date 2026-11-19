@@ -62,3 +62,6 @@ export const Users = () => (
 export const Wrench = () => (
   <svg {...base}><path d="M14.7 6.3a4 4 0 0 0 5 5L21 13l-8 8-3-3 8-8-1.3-1.3a4 4 0 0 1-5-5L13 2l1.7 1.7a4 4 0 0 0 0 2.6z" /></svg>
 );
+export const Help = () => (
+  <svg {...base}><circle cx="12" cy="12" r="9.5" /><path d="M9.3 9.2a2.8 2.8 0 0 1 5.4 1c0 1.9-2.7 2.4-2.7 4" /><circle cx="12" cy="17.3" r=".6" fill="currentColor" /></svg>
+);

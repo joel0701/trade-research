@@ -1,0 +1,592 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Trade Research Support</title>
+<link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+<script>
+  // Follow the app's theme (saved by the app in localStorage under "theme").
+  try { document.documentElement.dataset.theme = localStorage.getItem("theme") || "dark"; } catch (e) { document.documentElement.dataset.theme = "dark"; }
+</script>
+<style>
+  :root {
+    --bg: #0e0e0e; --panel: #181818; --raised: #222; --text: #ececec; --muted: #9a9a9a; --border: #2c2c2c;
+    --accent: #7aa7ff; --accent-soft: #1e2a40; --code: #1c1c1c; --ok: #7fd49a; --warn: #f0b44c; --mark: #5a4a10;
+    --blue: #6ea8fe; --green: #5fd38d; --amber: #f0b44c; --purple: #b58cff; --teal: #4fd1c5;
+    color-scheme: dark;
+  }
+  :root[data-theme="light"] {
+    --bg: #f4f4f2; --panel: #ffffff; --raised: #fafaf8; --text: #1d1d1b; --muted: #6b6b66; --border: #e0dfda;
+    --accent: #2f6fdb; --accent-soft: #e8f0fd; --code: #f2f1ee; --ok: #1e7b3c; --warn: #b7791f; --mark: #fff1a8;
+    --blue: #2f6fdb; --green: #23885a; --amber: #b7791f; --purple: #7c4dcc; --teal: #1f8f86;
+    color-scheme: light;
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; scroll-padding-top: 76px; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.6 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  a { color: var(--accent); }
+  header { position: sticky; top: 0; z-index: 5; display: flex; align-items: center; gap: 12px; padding: 10px 20px;
+           background: var(--panel); border-bottom: 1px solid var(--border); }
+  header .brand { display: flex; align-items: center; gap: 10px; font-size: 17px; text-decoration: none; color: var(--text); }
+  header .brand b { background: linear-gradient(90deg, #3b7cff, #22c58b); -webkit-background-clip: text; background-clip: text; color: transparent; }
+  header .sub { color: var(--muted); font-size: 14px; }
+  header input { margin-left: auto; width: min(320px, 45vw); padding: 7px 10px; border-radius: 8px; border: 1px solid var(--border);
+                 background: var(--raised); color: var(--text); font: inherit; font-size: 14px; }
+  .layout { display: grid; grid-template-columns: 250px minmax(0, 1fr); max-width: 1240px; margin: 0 auto; }
+  nav.toc { position: sticky; top: 57px; align-self: start; max-height: calc(100vh - 57px); overflow: auto; padding: 18px 12px 30px 20px;
+            border-right: 1px solid var(--border); font-size: 14px; }
+  nav.toc a { display: block; color: var(--muted); text-decoration: none; padding: 3px 8px; border-radius: 6px; }
+  nav.toc a:hover, nav.toc a.on { color: var(--text); background: var(--accent-soft); }
+  nav.toc .grp { margin: 14px 0 4px; font-size: 11px; text-transform: uppercase; letter-spacing: .6px; color: var(--muted); padding-left: 8px; }
+  main { padding: 26px 40px 80px; min-width: 0; }
+  section { padding-bottom: 18px; border-bottom: 1px solid var(--border); margin-bottom: 26px; }
+  section:last-child { border-bottom: 0; }
+  section.hidden { display: none; }
+  h1 { font-size: 28px; margin: 0 0 6px; }
+  h2 { font-size: 22px; margin: 0 0 10px; }
+  h3 { font-size: 16px; margin: 22px 0 6px; }
+  p, li { max-width: 860px; }
+  .lead { color: var(--muted); font-size: 16px; max-width: 760px; }
+  code, kbd { font: 13px ui-monospace, SFMono-Regular, Menlo, monospace; background: var(--code); border: 1px solid var(--border);
+              border-radius: 5px; padding: 1px 5px; }
+  pre { background: var(--code); border: 1px solid var(--border); border-radius: 8px; padding: 12px 14px; overflow-x: auto;
+        font: 13px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; max-width: 860px; }
+  pre code { background: none; border: 0; padding: 0; }
+  table { border-collapse: collapse; width: 100%; max-width: 900px; margin: 10px 0 14px; font-size: 14px; }
+  th, td { border-bottom: 1px solid var(--border); padding: 7px 10px; text-align: left; vertical-align: top; }
+  th { background: var(--raised); font-weight: 650; }
+  .wrap { overflow-x: auto; }
+  .note { border-left: 3px solid var(--accent); background: var(--accent-soft); padding: 9px 14px; border-radius: 6px; max-width: 860px; margin: 12px 0; }
+  .warn { border-left-color: var(--warn); background: color-mix(in srgb, var(--warn) 12%, transparent); }
+  .tag { display: inline-block; font-size: 12px; padding: 0 7px; border-radius: 5px; border: 1px solid currentColor; margin-right: 4px; }
+  .t-blue { color: var(--blue); } .t-green { color: var(--green); } .t-amber { color: var(--amber); }
+  .t-purple { color: var(--purple); } .t-teal { color: var(--teal); }
+  .flow { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 10px 0 14px; }
+  .flow span { border: 1px solid var(--border); background: var(--panel); border-radius: 8px; padding: 6px 10px; font-size: 14px; }
+  .flow i { color: var(--muted); font-style: normal; }
+  mark { background: var(--mark); color: inherit; border-radius: 3px; }
+  .empty { color: var(--muted); display: none; }
+  @media (max-width: 820px) {
+    .layout { grid-template-columns: minmax(0, 1fr); }
+    table { display: block; overflow-x: auto; }
+    nav.toc { position: static; max-height: none; border-right: 0; border-bottom: 1px solid var(--border); padding: 12px 16px; }
+    main { padding: 20px 16px 60px; }
+    header .sub { display: none; }
+  }
+</style>
+</head>
+<body>
+<header>
+  <a class="brand" href="/research" title="Back to Trade Research">
+    <svg width="28" height="28" viewBox="0 0 32 32" aria-hidden="true"><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#3b7cff"/><stop offset="1" stop-color="#22c58b"/></linearGradient></defs><rect width="32" height="32" rx="8" fill="url(#g)"/><g fill="#fff"><rect x="7.6" y="15" width="1.6" height="11" rx=".8" opacity=".8"/><rect x="5.9" y="18" width="5" height="6" rx="1.3" opacity=".8"/><rect x="15.2" y="9.5" width="1.6" height="13" rx=".8" opacity=".9"/><rect x="13.5" y="12" width="5" height="8" rx="1.3" opacity=".9"/><rect x="22.8" y="4.5" width="1.6" height="13" rx=".8"/><rect x="21.1" y="6.5" width="5" height="8.5" rx="1.3"/></g></svg>
+    <span>Trade <b>Research</b></span>
+  </a>
+  <span class="sub">Support &amp; documentation</span>
+  <input id="q" type="search" placeholder="Search the documentation…" aria-label="Search the documentation" />
+</header>
+
+<div class="layout">
+<nav class="toc" aria-label="Contents">
+  <div class="grp">Start</div>
+  <a href="#overview">Overview</a>
+  <a href="#getting-started">Getting started</a>
+  <a href="#concepts">How it works</a>
+  <div class="grp">Using the app</div>
+  <a href="#research">Research sessions</a>
+  <a href="#answers">Answers, tables &amp; suggestions</a>
+  <a href="#trace">Trace &amp; cost</a>
+  <a href="#skills">Skills</a>
+  <a href="#scanners">Scanners</a>
+  <a href="#scanners-vs-skills">Scanners vs. skills</a>
+  <div class="grp">Configuration</div>
+  <a href="#roles">Roles (the team)</a>
+  <a href="#models">Models &amp; vendors</a>
+  <a href="#local-models">Local models</a>
+  <a href="#data-sources">Data sources &amp; connections</a>
+  <a href="#ibkr">Interactive Brokers</a>
+  <a href="#unavailable">Unavailable sources prompt</a>
+  <a href="#settings">Profile &amp; settings</a>
+  <a href="#env">.env reference</a>
+  <div class="grp">Logic &amp; operations</div>
+  <a href="#run-logic">How a question runs</a>
+  <a href="#limits">Team limits</a>
+  <a href="#tool-results">Tool results &amp; compaction</a>
+  <a href="#mock">Mock mode (no cost)</a>
+  <a href="#logs">Logs</a>
+  <a href="#safety">Safety &amp; privacy</a>
+  <a href="#troubleshooting">Troubleshooting</a>
+  <a href="#glossary">Glossary</a>
+</nav>
+
+<main id="content">
+<p class="empty" id="no-results">No sections match your search.</p>
+
+<section id="overview">
+  <h1>Trade Research</h1>
+  <p class="lead">A multi-agent research assistant for stocks and options. You chat with a <b>Lead Analyst</b> who consults a
+    team of specialists, each with its own model, instructions and data sources. Sessions are saved, so you can come back and
+    continue any conversation.</p>
+  <h3>The main parts</h3>
+  <table>
+    <tr><th>Part</th><th>What it is</th><th>Where</th></tr>
+    <tr><td><b>Research</b></td><td>Chat sessions with the Lead Analyst and the team.</td><td>Research tab</td></tr>
+    <tr><td><b>Skills</b></td><td>Reusable prompts with fields (e.g. <code>{ticker}</code>), a model and optionally a scanner and data sources.</td><td>Skills tab</td></tr>
+    <tr><td><b>Scanners</b></td><td>Rule-based or IBKR market scans that return a results table. No AI model runs.</td><td>Scanners tab</td></tr>
+    <tr><td><b>Roles</b></td><td>The Lead Analyst and the specialists: model, instructions, data sources.</td><td>Profile menu → Roles</td></tr>
+    <tr><td><b>Tools</b></td><td>Data sources, connections and models.</td><td>Profile menu → Tools</td></tr>
+    <tr><td><b>Settings</b></td><td>Your name, photo, time zone, clock and theme.</td><td>Profile menu → Profile &amp; settings</td></tr>
+  </table>
+  <div class="note">This tool is for research and education. It is not financial advice, and it never places, changes or cancels orders.</div>
+</section>
+
+<section id="getting-started">
+  <h2>Getting started</h2>
+  <h3>Requirements</h3>
+  <ul><li>Python 3.11+ with <code>uv</code>, and Node 20+.</li><li>At least one model: an API key for a vendor (e.g. Anthropic) or a local model server.</li></ul>
+  <h3>First run</h3>
+  <pre><code>cp -n .env.example .env        # then add your keys
+cd backend &amp;&amp; uv sync &amp;&amp; uv run uvicorn app.main:app --reload --port 8321
+cd frontend &amp;&amp; npm install &amp;&amp; npm run dev   # http://localhost:5173</code></pre>
+  <p>The database is created at <code>data/trade_research.db</code> and filled with default roles, data sources, skills and scanners
+    on first start. Defaults you delete are not recreated.</p>
+  <div class="note warn"><b>Restart the backend after editing <code>.env</code>.</b> The <code>--reload</code> option only reacts to code
+    changes, not to <code>.env</code>. Use <code>cp -n</code> (never plain <code>cp</code>) so an existing <code>.env</code> is never overwritten.</div>
+  <h3>Updating</h3>
+  <pre><code>git -C ~/trade-research pull</code></pre>
+  <p>Then restart the backend and reload the browser page. Your <code>.env</code> and <code>data/</code> folder are never touched by updates.</p>
+</section>
+
+<section id="concepts">
+  <h2>How it works</h2>
+  <div class="flow"><span>You ask a question</span><i>→</i><span>Lead Analyst plans</span><i>→</i><span>consults specialists (in parallel)</span><i>→</i><span>specialists call data tools</span><i>→</i><span>Lead writes the answer</span></div>
+  <ul>
+    <li>The <b>Lead Analyst</b> decides which specialists a question needs, asks them, weighs their findings and writes the answer.</li>
+    <li>Each <b>specialist</b> is an agent with its own model and data sources. It calls tools (price history, filings, news…) and reports back.</li>
+    <li>The <b>app runs every tool call</b> itself. Models only request a tool with inputs; the app fetches the data and returns it.</li>
+    <li>Everything is recorded: the conversation (including hidden tool calls and specialist reports) and a <b>trace</b> of every run with tokens and cost.</li>
+  </ul>
+</section>
+
+<section id="research">
+  <h2>Research sessions</h2>
+  <ul>
+    <li><b>New research</b> starts a session. Sessions are listed on the left; right-click one to rename or delete it.</li>
+    <li><b>Model picker</b> (bottom left of the box): the Lead's model for this session. Only models that are usable are listed: vendors with an API key, and local models you added while their server runs. Local models show a <i>loaded</i> / <i>not loaded</i> badge.</li>
+    <li><b>Attach</b> PDFs, images or text files. Documents are visible to the Lead, who passes relevant excerpts to specialists.</li>
+    <li><b>Skills</b> button: run a skill from inside a session.</li>
+    <li><b>Timeline</b> (left edge of the chat): a marker per turn; hover to preview, click to jump.</li>
+    <li>A running question keeps running if you switch sessions or pages; the session shows it is working.</li>
+  </ul>
+  <h3>Follow-up questions</h3>
+  <p>The Lead keeps the whole session in context, including the specialists' earlier reports. A follow-up builds on what is already
+    known and consults only for what is missing. Follow-ups always use the Research default model (the Lead role's model, or the one
+    you picked in the model picker) and the full team.</p>
+  <h3>Run cards</h3>
+  <p>Sessions started by a skill or scanner begin with a <b>run card</b> instead of a normal message:
+    <span class="tag t-blue">Skill · name</span> (blue, dashed outline) or <span class="tag t-green">Scanner · name</span> (green, solid edge).
+    Forked sessions keep the card.</p>
+  <h3>Answer actions</h3>
+  <p>Under each answer: the model, time, cost and specialists consulted, plus <b>Save as skill</b>, <b>Fork chat</b> (copy the session up to that answer), copy, and thumbs up/down.</p>
+</section>
+
+<section id="answers">
+  <h2>Answers, tables &amp; suggestions</h2>
+  <h3>Interactive tables</h3>
+  <ul>
+    <li>Click a column header to sort (again to reverse). Sorting understands <code>$1,234</code>, <code>+18.4%</code>, <code>4.1B</code> and <code>(3.4%)</code> as negative; blanks sort last.</li>
+    <li>Hover highlights a row; click a row (or click the table and use <kbd>↑</kbd> <kbd>↓</kbd>) to select it.</li>
+    <li>Signed numbers show green (+) or red (−).</li>
+    <li>Tables with more than 5 rows get a row filter and <b>Copy CSV</b> (copies the visible rows in their current order). Long tables scroll with the header kept in view.</li>
+  </ul>
+  <h3>Suggested next steps</h3>
+  <ul>
+    <li>Every answer ends with one to three follow-up questions that build on it. Scanner results end with ready-made questions about the top tickers.</li>
+    <li>Click a suggestion to put it in the box, then edit or send.</li>
+    <li>The latest answer's first suggestion appears as grey text in the empty box: press <kbd>Tab</kbd> to use it, or just type your own question.</li>
+  </ul>
+</section>
+
+<section id="trace">
+  <h2>Trace &amp; cost</h2>
+  <p><b>Show trace</b> (top right of a session) lists every run: the Lead's turn and each specialist it consulted, with model, time, tokens and estimated cost.</p>
+  <ul>
+    <li>Expand a run to see what it was asked, the tools it called (with inputs and a preview of results) and its output.</li>
+    <li>Each tool call shows its result size in tokens and how much compaction saved (e.g. <code>≈775 tok · −68%</code>). Large results (≈4,000 tokens or more) are amber. Claude's own web search and fetch results are marked <i>(Anthropic)</i>.</li>
+    <li>Costs are estimates from the prices set on each model (Tools → Models). Local models cost $0.</li>
+  </ul>
+</section>
+
+<section id="skills">
+  <h2>Skills</h2>
+  <p>A skill is a reusable instruction set for the AI team: a prompt template with fields, run by the Lead with the skill's model.</p>
+  <h3>Settings</h3>
+  <table>
+    <tr><th>Section</th><th>Setting</th><th>What it does</th></tr>
+    <tr><td><span class="tag t-blue">Setup</span></td><td>Name, slug, description, enabled</td><td>How the skill is listed and identified.</td></tr>
+    <tr><td><span class="tag t-amber">Scanner input</span></td><td>Built on a scanner (optional)</td><td>Runs that scan first (no AI), then the prompt evaluates the results.</td></tr>
+    <tr><td><span class="tag t-purple">Prompt</span></td><td>Prompt template; fields</td><td>Text with <code>{field}</code> placeholders. Each field (<code>name</code>, <code>label</code>, <code>default</code>) is asked for when you run it; values appear in bold in the run card.</td></tr>
+    <tr><td><span class="tag t-green">Model</span></td><td>Model the skill runs with</td><td>Answers the skill's prompt only. Follow-up questions use the Research default.</td></tr>
+    <tr><td><span class="tag t-teal">Data sources</span></td><td>Sources this skill uses (optional)</td><td>Limits the skill's run to these sources (none = full team). Their <i>notes</i> are added to the prompt as a "Data notes" callout. Follow-ups use the full team.</td></tr>
+  </table>
+  <h3>Running a skill</h3>
+  <div class="flow"><span class="t-green">Scan (if built on a scanner, no AI)</span><i>→</i><span class="t-blue">Skill's prompt, skill's model</span><i>→</i><span class="t-purple">Follow-ups, Research default</span></div>
+  <p>The run dialog asks for the fields, lets you pick a different model for this run, and shows the data notes and stages.</p>
+  <h3>Save as skill</h3>
+  <p>Under any answer, <b>Save as skill</b> drafts a skill from the conversation (prompt, fields, and the data sources the conversation used). Review and edit it before saving.</p>
+  <div class="note">Don't add fields for things a data source fixes (e.g. a lookback window the source can't change). Put those limits in the source's notes instead.</div>
+</section>
+
+<section id="scanners">
+  <h2>Scanners</h2>
+  <p>A scanner filters market data with set criteria and shows the matches. <b>No AI model runs and nothing is charged.</b> You then ask about the results.</p>
+  <h3>Types</h3>
+  <table>
+    <tr><th>Type</th><th>How it scans</th><th>Settings</th></tr>
+    <tr><td><b>Rule-based</b></td><td>Computes indicators from Yahoo daily bars for each ticker in your list and applies your rules.</td><td>Universe (tickers), rules, sort, max results.</td></tr>
+    <tr><td><b>IBKR market scanner</b></td><td>IBKR scans the whole market through IB Gateway, ranked by IBKR. Results get indicator columns from Yahoo; optional rules filter them further.</td><td>Scan type, market, results requested (max 50), min price, min volume, min market cap ($M), extra rules, sort.</td></tr>
+  </table>
+  <h3>IBKR scan types</h3>
+  <p>Top % gainers · Top % losers · Most active (shares) · Most active (dollar volume) · Hot by volume (vs average) · Most trades ·
+    Near 52-week high · Near 52-week low · Widest price range · Unusual option volume · Most active options · Highest option implied
+    volatility · Implied vs historical volatility (highest) · Biggest IV increase · Highest put/call volume ratio · Lowest put/call volume ratio.</p>
+  <p>Markets: US listed stocks (NYSE, Nasdaq, AMEX…), all US stocks (incl. OTC), Nasdaq, NYSE.</p>
+  <h3>Rules</h3>
+  <pre><code>{"all": [ {"field": "close", "op": ">", "field2": "sma_200"},
+          {"field": "rsi_14", "op": "&lt;", "value": 40} ]}</code></pre>
+  <p>Combine with <code>all</code>, <code>any</code>, <code>not</code>. Fields: close, volume, avg_volume_20, rel_volume, sma_20, sma_50,
+    sma_200, rsi_14, macd, macd_signal, macd_hist, atr_14, pct_change_1d/5d/20d, high_52w, low_52w, pct_from_52w_high.
+    Sort by a field; prefix <code>-</code> for descending (for IBKR, empty keeps IBKR's ranking).</p>
+  <h3>What a run shows</h3>
+  <ul>
+    <li>The run card: scan, market, filters and the <b>market session</b> (open, pre-market, after hours, closed, weekend). Outside regular hours IBKR results are often few or stale.</li>
+    <li>The results table, a warning when IBKR returns far fewer rows than requested, and a note that indicator columns come from Yahoo's last close while IBKR ranks on live or extended-hours prices.</li>
+    <li>Suggested questions about the top tickers.</li>
+  </ul>
+  <p>Run dialog changes (results, price, volume, market cap, tickers) apply to that run only.</p>
+</section>
+
+<section id="scanners-vs-skills">
+  <h2>Scanners vs. skills</h2>
+  <p>A scanner <b>finds candidates</b>; a skill <b>reasons about them</b>.</p>
+  <div class="wrap"><table>
+    <tr><th></th><th>Scanner</th><th>Skill</th></tr>
+    <tr><td><b>Purpose</b></td><td>Surfaces tickers matching rules or filters (price action, volume, options metrics).</td><td>Packages repeatable reasoning or a research workflow for the AI team.</td></tr>
+    <tr><td><b>How it runs</b></td><td>IBKR scanner or the rule engine. No AI model, no cost.</td><td>The Lead runs the prompt with the skill's model, consulting specialists as needed.</td></tr>
+    <tr><td><b>Speed &amp; data</b></td><td>Fast, mechanical filtering over many stocks.</td><td>Slower; better at context, synthesis and multi-step logic.</td></tr>
+    <tr><td><b>Customization</b></td><td>Scan types, filters and JSON rules.</td><td>Natural-language prompt with fields, a model, optional data sources.</td></tr>
+    <tr><td><b>Cost &amp; control</b></td><td>Free; only surfaces matches.</td><td>Costs what its model costs; calls tools within the app's guardrails (read-only data, no orders).</td></tr>
+  </table></div>
+  <h3>Using them together</h3>
+  <ul>
+    <li><b>Scanner, then your questions:</b> scan, look at the table, ask about the names you care about. You only pay for analysis you ask for.</li>
+    <li><b>Skill built on a scanner:</b> for an evaluation you repeat, e.g. "rank today's top gainers for swing setups".</li>
+    <li><b>Skill on its own:</b> analyses that start from a ticker or a question (full analysis, earnings preview, options strategy).</li>
+  </ul>
+</section>
+
+<section id="roles">
+  <h2>Roles (the team)</h2>
+  <p>Profile menu → <b>Roles</b>. Each role has a model, a system prompt (instructions), data sources, an iteration limit, and an enabled switch. One role is the Lead.</p>
+  <div class="wrap"><table>
+    <tr><th>Role</th><th>Default model</th><th>Focus</th><th>Default sources</th></tr>
+    <tr><td><b>Lead Analyst</b></td><td>Opus</td><td>Plans, consults specialists, weighs findings, writes the answer.</td><td>Consults the team</td></tr>
+    <tr><td>Sector Mapper</td><td>Haiku</td><td>Sector, industry, peers, suppliers, customers, sector trends.</td><td>Yahoo fundamentals, DuckDuckGo</td></tr>
+    <tr><td>Finance Analyst</td><td>Sonnet</td><td>Financial statements, valuation, growth, margins, balance sheet, earnings.</td><td>Yahoo fundamentals, web search</td></tr>
+    <tr><td>Technical Analyst</td><td>Sonnet</td><td>Trend, support/resistance, momentum, volume, volatility, setups; dark pool / off-exchange flow.</td><td>Price history, technical snapshot, FINRA</td></tr>
+    <tr><td>News Analyst</td><td>Sonnet</td><td>Recent news, catalysts and sentiment.</td><td>Web search, DuckDuckGo</td></tr>
+    <tr><td>Strategy Optimizer</td><td>Opus</td><td>Stock and options trade structures, strikes, expiries, risk/reward.</td><td>Option chains, technical snapshot</td></tr>
+    <tr><td>Research Agent</td><td>Sonnet</td><td>Deep web research on open questions.</td><td>Web search, web fetch</td></tr>
+  </table></div>
+  <p>The Lead sees each specialist's name and description when deciding whom to consult, so clear, non-overlapping descriptions make routing more consistent.</p>
+</section>
+
+<section id="models">
+  <h2>Models &amp; vendors</h2>
+  <p>Profile menu → <b>Tools → Models</b>. A model is available when its vendor's key is in <code>.env</code> (or, for local models, while its server runs). Unavailable models aren't offered in pickers.</p>
+  <table>
+    <tr><th>Vendor</th><th>Key in .env</th><th>Notes</th></tr>
+    <tr><td>Anthropic (Claude)</td><td><code>ANTHROPIC_API_KEY</code></td><td>Full features: web search/fetch tools, thinking, refusal fallbacks.</td></tr>
+    <tr><td>OpenAI</td><td><code>OPENAI_API_KEY</code></td><td rowspan="6">Called through OpenAI-compatible endpoints. Claude-only features are skipped; PDFs are sent as extracted text.</td></tr>
+    <tr><td>Google (Gemini)</td><td><code>GOOGLE_API_KEY</code></td></tr>
+    <tr><td>Meta (Llama API)</td><td><code>LLAMA_API_KEY</code></td></tr>
+    <tr><td>xAI (Grok)</td><td><code>XAI_API_KEY</code></td></tr>
+    <tr><td>Mistral</td><td><code>MISTRAL_API_KEY</code></td></tr>
+    <tr><td>DeepSeek</td><td><code>DEEPSEEK_API_KEY</code></td></tr>
+    <tr><td>Local servers</td><td>none</td><td>Ollama, LM Studio, MLX, any OpenAI-compatible server. See <a href="#local-models">Local models</a>.</td></tr>
+  </table>
+  <h3>Model config</h3>
+  <p>Each model's JSON config: <code>provider</code>, <code>model_id</code>, <code>max_tokens</code>, prices <code>price_input</code> / <code>price_output</code> / <code>price_cache_read</code> (USD per million tokens, for cost estimates). Claude only: <code>effort</code>, <code>fallbacks</code>, <code>show_thinking</code>. Other vendors: <code>params</code> (extra request fields).</p>
+  <h3>Strict team mode</h3>
+  <p>A toggle per model: when that model is the Lead, it consults each specialist at most once and 3 times in total, with short specialist reports. Faster on slow local models, but may reduce quality. Off by default. See <a href="#limits">Team limits</a>.</p>
+  <h3>Which model runs when</h3>
+  <table>
+    <tr><th>Step</th><th>Model</th></tr>
+    <tr><td>A question in a session</td><td>Research default: the model picked in the session, else the Lead role's model.</td></tr>
+    <tr><td>A skill's run</td><td>The skill's model (or the one chosen in its run dialog).</td></tr>
+    <tr><td>Follow-ups after a skill</td><td>Research default.</td></tr>
+    <tr><td>A scanner run</td><td>None.</td></tr>
+    <tr><td>Each specialist</td><td>The model set on its role.</td></tr>
+  </table>
+</section>
+
+<section id="local-models">
+  <h2>Local models</h2>
+  <p>Free and private: the model runs on your machine. Start a server, then open <b>Tools → Models → Local models</b>.</p>
+  <table>
+    <tr><th>Server</th><th>Default address</th><th>Start</th></tr>
+    <tr><td>LM Studio</td><td><code>localhost:1234</code></td><td>Developer tab → Start server. Runs MLX models on Apple Silicon.</td></tr>
+    <tr><td>Ollama</td><td><code>localhost:11434</code></td><td><code>ollama serve</code>, then <code>ollama pull &lt;model&gt;</code></td></tr>
+    <tr><td>MLX</td><td><code>localhost:8080</code></td><td><code>pip install mlx-lm</code>, then <code>mlx_lm.server --model &lt;model&gt;</code></td></tr>
+    <tr><td>Other (llama.cpp, vLLM…)</td><td><code>LOCAL_LLM_BASE_URL</code></td><td>Set the address in <code>.env</code>.</td></tr>
+  </table>
+  <h3>The Local models panel</h3>
+  <ul>
+    <li>Each server shows whether it's running. Each model shows a green dot when <b>loaded</b>, or "not loaded".</li>
+    <li><b>+ Add to models</b> makes a model selectable everywhere; added models show "✓ in your models".</li>
+    <li>Embedding models are hidden. A warning appears when a model is loaded with less than 16,384 tokens of context.</li>
+  </ul>
+  <h3>Choosing and running local models</h3>
+  <ul>
+    <li><b>Tool calling</b> is required for the Lead to consult the team and for specialists to use data. A model without it still answers, but on its own.</li>
+    <li><b>Context length:</b> set at least 32,768 in LM Studio's load settings, and set context overflow to <i>stop at limit</i> so overflow shows an error instead of silently dropping the middle of the conversation.</li>
+    <li><b>Format:</b> on a Mac prefer MLX builds; use GGUF when no MLX build exists or tool calling misbehaves.</li>
+    <li><b>Memory (4-bit):</b> ~5 GB for 7–8B, ~9 GB for 14B, ~15–20 GB for 24–32B, plus room for context.</li>
+    <li><b>Dense vs. mixture-of-experts (MoE):</b> MoE models use only a few billion parameters per token, so they're several times faster for similar memory, with slightly lower quality than a dense model of the same total size.</li>
+    <li><b>Best fit:</b> a Claude Lead with local or Haiku specialists gives most of the quality at a lower price. A large dense local Lead is slow, because the Lead re-reads every specialist report.</li>
+  </ul>
+</section>
+
+<section id="data-sources">
+  <h2>Data sources &amp; connections</h2>
+  <p>Profile menu → <b>Tools</b>. A <b>connection</b> is how to reach a provider (endpoint, key variable, cost type). A <b>data source</b> is what a connection provides; one connection can serve several sources.</p>
+  <h3>Categories</h3>
+  <p>Real-time quotes · Price history · Option chains · Fundamentals · SEC filings · Insider trading · Dark pool · News &amp; sentiment · Web search · Brokerage · Screening · Other.</p>
+  <h3>Built-in providers</h3>
+  <table>
+    <tr><th>Provider</th><th>Cost</th><th>Provides</th></tr>
+    <tr><td>Yahoo Finance</td><td><span class="tag t-green">Free</span></td><td>Price history, technical snapshot, fundamentals, option chain (delayed).</td></tr>
+    <tr><td>SEC EDGAR</td><td><span class="tag t-green">Free</span></td><td>Filings, reading a filing's text, Form 4 insider trades. Needs <code>SEC_USER_AGENT</code>.</td></tr>
+    <tr><td>FINRA</td><td><span class="tag t-green">Free</span></td><td>Daily short volume (dark pool short ratio); weekly ATS (dark pool) volume by venue.</td></tr>
+    <tr><td>DuckDuckGo</td><td><span class="tag t-green">Free</span></td><td>Web and news search (titles, links, snippets).</td></tr>
+    <tr><td>Interactive Brokers (IB Gateway)</td><td><span class="tag t-blue">Free with account</span></td><td>Quotes, price bars, option chain with greeks, scanners, account (read-only).</td></tr>
+    <tr><td>Massive.com</td><td><span class="tag t-amber">Paid plan</span></td><td>Quotes, bars, option chain with IV and greeks, news with sentiment, off-exchange prints.</td></tr>
+    <tr><td>Anthropic server tools</td><td><span class="tag t-amber">Paid</span></td><td>Claude web search and web fetch (Claude models only).</td></tr>
+    <tr><td>Bigdata.com</td><td><span class="tag t-amber">Paid plan</span></td><td>News, filings, transcripts (MCP server).</td></tr>
+  </table>
+  <h3>Settings</h3>
+  <ul>
+    <li><b>Connection:</b> name, kind (<code>mcp</code>, <code>http</code>, <code>tws</code>, <code>none</code>), config, key variable name (the value stays in <code>.env</code>), <b>cost</b> (free / free with account / paid plan; shown as an icon on the connection and its sources), enabled.</li>
+    <li><b>Data source:</b> name, categories, connection, kind (<code>python</code>, <code>claude_server_tool</code>, <code>mcp_server</code>), description, config, <b>notes</b>, enabled.</li>
+    <li><b>Notes</b> describe what a source supports and its limits (e.g. FINRA's fixed lookback). Agents see them with the tool, and skills that use the source get them as a "Data notes" callout.</li>
+  </ul>
+  <h3>Adding a vendor</h3>
+  <p>Put its key in <code>.env</code>, add a connection naming that variable, then add data sources on it. MCP servers need no code; REST APIs need a small built-in Python tool.</p>
+  <h3>DuckDuckGo limitations</h3>
+  <p>Unofficial (no API key or guarantees), rate-limited by IP, snippets only, variable quality. The app runs one search at a time, at least a second apart, retries rate limits twice, and treats "no results" as a normal answer. It works with any model, including local ones.</p>
+</section>
+
+<section id="ibkr">
+  <h2>Interactive Brokers (IB Gateway)</h2>
+  <ol>
+    <li>Install IB Gateway (Stable), log in (paper first), and in Configure → Settings → API enable <i>ActiveX and Socket Clients</i>. Keep <i>Read-Only API</i> on.</li>
+    <li>If your port isn't 4002 (paper IB Gateway), set <code>IBKR_PORT</code> (4001 live; TWS 7497 paper / 7496 live).</li>
+    <li>Tools → Connections → <i>Interactive Brokers (IB Gateway)</i> shows whether it's reachable.</li>
+  </ol>
+  <ul>
+    <li><b>Market data:</b> real-time needs IBKR subscriptions; otherwise data is delayed and results say so (<code>IBKR_MARKET_DATA_TYPE=3</code>).</li>
+    <li><b>Option chain:</b> one expiry per call, strikes near the money (8 each side by default, up to 20), bid/ask/last/volume, model IV and greeks, next 12 expirations. No open interest.</li>
+    <li><b>Daily logins:</b> turn on <i>Auto restart</i> (Configure → Settings → Lock and Exit) and keep the computer awake.</li>
+  </ul>
+</section>
+
+<section id="unavailable">
+  <h2>Unavailable sources prompt</h2>
+  <p>Before a question runs, the app checks the data sources of the roles involved. If some are unavailable (e.g. a missing key, IB Gateway not running), it holds the question and asks in the chat:</p>
+  <ul>
+    <li>Grouped by cause, with the impact: <b>high</b> when a role has no other working source for that kind of data, <b>low</b> when another covers it.</li>
+    <li><b>Continue</b>, <b>Continue and don't ask again in this session</b> (until the set of unavailable sources changes), or <b>Cancel</b>.</li>
+    <li>The held question and your decision are saved in the session. Sources you disabled yourself aren't reported.</li>
+  </ul>
+</section>
+
+<section id="settings">
+  <h2>Profile &amp; settings</h2>
+  <p>Click your avatar (top right) for the menu: <b>Profile &amp; settings</b>, <b>Roles</b>, <b>Tools</b>, and light/dark mode. The <b>Support</b> link next to it opens this page.</p>
+  <ul>
+    <li><b>Profile:</b> name, photo, email.</li>
+    <li><b>Time zone</b> and <b>12/24-hour clock</b>: how times are shown (they are stored in UTC).</li>
+    <li><b>Theme:</b> dark or light.</li>
+    <li>Panels (session list, trace) can be resized by dragging their edges; sizes are remembered per browser.</li>
+  </ul>
+</section>
+
+<section id="env">
+  <h2>.env reference</h2>
+  <p>Secrets and machine settings live in <code>.env</code> at the project root (never in the database). Restart the backend after changes.</p>
+  <div class="wrap"><table>
+    <tr><th>Variable</th><th>Purpose</th><th>Default</th></tr>
+    <tr><td><code>ANTHROPIC_API_KEY</code>, <code>OPENAI_API_KEY</code>, <code>GOOGLE_API_KEY</code>, <code>LLAMA_API_KEY</code>, <code>XAI_API_KEY</code>, <code>MISTRAL_API_KEY</code>, <code>DEEPSEEK_API_KEY</code></td><td>Vendor keys; a vendor's models are available only when its key is set.</td><td>empty</td></tr>
+    <tr><td><code>*_BASE_URL</code> (e.g. <code>OPENAI_BASE_URL</code>)</td><td>Override a vendor endpoint (proxy, Azure…).</td><td>vendor default</td></tr>
+    <tr><td><code>SEC_USER_AGENT</code></td><td>Required by the SEC: app name and your contact email.</td><td>empty</td></tr>
+    <tr><td><code>MASSIVE_API_KEY</code>, <code>MASSIVE_BASE_URL</code></td><td>Massive.com access.</td><td>empty; api.massive.com</td></tr>
+    <tr><td><code>IBKR_HOST</code>, <code>IBKR_PORT</code>, <code>IBKR_CLIENT_ID</code>, <code>IBKR_MARKET_DATA_TYPE</code></td><td>IB Gateway connection.</td><td>127.0.0.1, 4002, 17, 3</td></tr>
+    <tr><td><code>BIGDATA_API_KEY</code>, <code>IBKR_MCP_TOKEN</code></td><td>MCP server keys.</td><td>empty</td></tr>
+    <tr><td><code>OLLAMA_BASE_URL</code>, <code>LMSTUDIO_BASE_URL</code>, <code>MLX_BASE_URL</code></td><td>Local model servers.</td><td>:11434, :1234, :8080 (<code>/v1</code>)</td></tr>
+    <tr><td><code>LOCAL_LLM_BASE_URL</code>, <code>LOCAL_LLM_API_KEY</code></td><td>Any other OpenAI-compatible server.</td><td>unset</td></tr>
+    <tr><td><code>MOCK_LLM</code></td><td><code>1</code> = every role uses the free mock.</td><td>off</td></tr>
+    <tr><td><code>DATABASE_URL</code></td><td>Database location.</td><td>data/trade_research.db</td></tr>
+    <tr><td><code>CORS_ORIGINS</code></td><td>Allowed frontend origins.</td><td>http://localhost:5173</td></tr>
+    <tr><td><code>MAX_LOOP_ITERATIONS</code></td><td>Hard cap on steps per agent run.</td><td>25</td></tr>
+    <tr><td><code>UPLOAD_DIR</code>, <code>MAX_UPLOAD_MB</code></td><td>Attachments folder and size limit.</td><td>data/uploads, 20</td></tr>
+    <tr><td><code>LOG_DIR</code>, <code>LOG_MAX_MB</code>, <code>LOG_KEEP_DAYS</code>, <code>LOG_MAX_TOTAL_MB</code></td><td>Log folder, new file size, retention days, total size per kind.</td><td>data/logs, 5, 14, 200</td></tr>
+  </table></div>
+</section>
+
+<section id="run-logic">
+  <h2>How a question runs</h2>
+  <ol>
+    <li><b>Checks:</b> the unavailable-sources check (held for your decision if needed).</li>
+    <li><b>Model:</b> a one-time model for this turn if set (a skill's run), otherwise the session's model, otherwise the Lead role's model. A chosen model without a key or server falls back to the Lead role's model.</li>
+    <li><b>Scope:</b> a skill that names data sources limits its own run to them; roles left without sources aren't offered to the Lead. Follow-ups use the full team.</li>
+    <li><b>Lead loop:</b> the Lead reads the whole session, then consults specialists (in parallel when it asks for several at once) within the <a href="#limits">team limits</a>.</li>
+    <li><b>Specialist loops:</b> each specialist calls its data tools; results are compacted and paged (<a href="#tool-results">details</a>); it returns a report.</li>
+    <li><b>Answer:</b> the Lead writes the answer, ending with suggested next steps. Everything is saved and traced.</li>
+    <li><b>Queued stages:</b> some runs chain stages in one background task; they continue even if you leave the page, and stop if a stage fails.</li>
+  </ol>
+  <h3>Scanner run</h3>
+  <p>The scan runs (no AI); the session gets the run card and results; nothing else runs until you ask.</p>
+  <h3>Skill built on a scanner</h3>
+  <p>The scan runs (no AI); then the skill's prompt runs on the results with the skill's model; it's told to work only with the scanned tickers and to flag odd results (few rows, market closed) instead of substituting its own list.</p>
+</section>
+
+<section id="limits">
+  <h2>Team limits</h2>
+  <p>The Lead is told to ask each specialist once per question with every ticker in one consultation, to make all consultations in the same step, and to re-consult only to fill a specific gap.</p>
+  <table>
+    <tr><th></th><th>Default (every Lead)</th><th>Strict team mode (opt-in, per model)</th></tr>
+    <tr><td>Consultations per specialist, per question</td><td>2</td><td>1</td></tr>
+    <tr><td>Consultations in total, per question</td><td>5</td><td>3</td></tr>
+    <tr><td>Specialist reports</td><td>as written</td><td>about 250 words; over 6,000 characters trimmed</td></tr>
+  </table>
+  <p>Requests over the limits aren't run; the Lead is told to answer with what it has.</p>
+</section>
+
+<section id="tool-results">
+  <h2>Tool results &amp; compaction</h2>
+  <p>Each step of an agent re-sends the whole conversation so far, so a large tool result is paid for again at every later step. Results are kept small without losing information:</p>
+  <ul>
+    <li><b>Compaction (lossless):</b> JSON lists of similar objects become tables (<code>columns</code> + <code>rows</code>, field names once); empty fields dropped; floats rounded to 4 decimals (4 significant digits below 1); no whitespace. Applied only when smaller.</li>
+    <li><b>Paging instead of cutting:</b> results over 16,000 characters (~4,000 tokens) are sent as a first page ending at a line break, with a note on what's left. The agent reads on, or searches the whole result for a keyword, with the <code>read_more</code> tool.</li>
+    <li><b>SEC filings:</b> start with a list of the filing's sections; jump with <code>find</code>, continue with <code>offset</code>.</li>
+    <li><b>Measured:</b> the trace shows each result's size and the saving. Claude's web search/fetch results are measured but processed by Anthropic, so they can't be paged.</li>
+  </ul>
+  <p>Full details: <code>docs/tool-results.md</code> in the project.</p>
+</section>
+
+<section id="mock">
+  <h2>Mock mode (no cost)</h2>
+  <p>Set <code>MOCK_LLM=1</code> in <code>.env</code> and restart: every role uses a free mock. The Lead consults the most relevant specialists, specialists really call a data tool, and answers are canned but stream and appear in the trace, footer and timeline with $0 cost. A <b>MOCK LLM</b> badge shows in the header. To mock just one session, pick <i>Mock LLM (no cost)</i> in the model picker.</p>
+</section>
+
+<section id="logs">
+  <h2>Logs</h2>
+  <ul>
+    <li><code>data/logs/backend_&lt;date&gt;_&lt;time&gt;.log</code>: everything the backend logs, with full tracebacks and every error shown in a chat.</li>
+    <li><code>data/logs/frontend_&lt;date&gt;_&lt;time&gt;.log</code>: browser errors (uncaught errors, failed API calls, errors during a turn).</li>
+    <li>A new file starts at every app start, at 5 MB, and at midnight. Files older than 14 days are deleted, and the oldest go once a kind passes 200 MB.</li>
+    <li><code>backend-latest.log</code> / <code>frontend-latest.log</code> always point at the current files.</li>
+  </ul>
+  <pre><code>tail -F ~/trade-research/data/logs/backend-latest.log ~/trade-research/data/logs/frontend-latest.log</code></pre>
+</section>
+
+<section id="safety">
+  <h2>Safety &amp; privacy</h2>
+  <ul>
+    <li><b>No trading:</b> any tool that places, changes or cancels orders, or moves money, is never exposed to the agents. Brokerage access is read-only.</li>
+    <li><b>Secrets</b> stay in <code>.env</code>; the database only stores the variable names. Keys are never returned by the API.</li>
+    <li><b>Local models</b> keep your conversation on your machine; data requests still go to the data providers.</li>
+    <li><b>Research only:</b> answers are research and education, not personal financial advice.</li>
+  </ul>
+</section>
+
+<section id="troubleshooting">
+  <h2>Troubleshooting</h2>
+  <table>
+    <tr><th>Symptom</th><th>Check</th></tr>
+    <tr><td>"No API key" error</td><td>The key line in <code>.env</code> (<code>grep -c "^ANTHROPIC_API_KEY=." .env</code> prints 1 when set); restart the backend; <code>curl -s localhost:8321/api/providers</code> shows <code>"configured": true</code>.</td></tr>
+    <tr><td>Can't reach the backend</td><td>The uvicorn terminal for errors such as "address already in use"; the backend runs on port 8321.</td></tr>
+    <tr><td>Local model missing from the picker</td><td>Server running (green dot), model <b>added</b> (Tools → Models → Local models), and loaded.</td></tr>
+    <tr><td>Local model slow or off-topic</td><td>Context length ≥ 32K and overflow set to stop at limit; consider a smaller or MoE model, or strict team mode.</td></tr>
+    <tr><td>IBKR scanner returns few or odd results</td><td>The market session in the run card; outside regular hours results are thin.</td></tr>
+    <tr><td>IBKR source unavailable</td><td>IB Gateway running and logged in, API access on, port matches <code>IBKR_PORT</code>.</td></tr>
+    <tr><td>DuckDuckGo errors</td><td>Usually rate limits; the app retries and suggests another search tool. Check the backend log.</td></tr>
+    <tr><td>Settings in .env "disappeared"</td><td>Git never touches <code>.env</code>; check <code>stat</code> times and shell history for <code>cp .env.example .env</code>.</td></tr>
+  </table>
+  <p>For any error, the latest backend log has the details: <code>grep -n -A 25 "ERROR" data/logs/backend-latest.log | tail -60</code></p>
+</section>
+
+<section id="glossary">
+  <h2>Glossary</h2>
+  <table>
+    <tr><th>Term</th><th>Meaning</th></tr>
+    <tr><td>Lead Analyst</td><td>The agent you talk to; plans, consults specialists, writes answers.</td></tr>
+    <tr><td>Specialist</td><td>An agent with a focus (news, technicals…), its own model and data sources.</td></tr>
+    <tr><td>Consult</td><td>The Lead asking a specialist a question.</td></tr>
+    <tr><td>Tool call</td><td>An agent requesting data; the app runs it and returns the result.</td></tr>
+    <tr><td>Data source</td><td>A tool that provides data (e.g. FINRA daily short volume).</td></tr>
+    <tr><td>Connection</td><td>How to reach a provider; can serve several data sources.</td></tr>
+    <tr><td>MCP</td><td>Model Context Protocol: a standard way to connect tool servers.</td></tr>
+    <tr><td>Context window</td><td>How much text a model can consider at once, in tokens.</td></tr>
+    <tr><td>Token</td><td>A unit of text for models (~4 characters of English).</td></tr>
+    <tr><td>Run card</td><td>The coloured first message of a skill or scanner session.</td></tr>
+    <tr><td>Research default</td><td>The model used for questions: the session's pick, else the Lead role's model.</td></tr>
+    <tr><td>Strict team mode</td><td>Tighter consult limits and short reports for a Lead model.</td></tr>
+    <tr><td>Market session</td><td>Open, pre-market, after hours, closed or weekend (US, Eastern time).</td></tr>
+  </table>
+</section>
+</main>
+</div>
+
+<script>
+  // Highlight the current section in the contents.
+  const links = [...document.querySelectorAll("nav.toc a")];
+  const sections = [...document.querySelectorAll("main section")];
+  const spy = new IntersectionObserver((entries) => {
+    entries.forEach((e) => {
+      if (e.isIntersecting) links.forEach((a) => a.classList.toggle("on", a.getAttribute("href") === "#" + e.target.id));
+    });
+  }, { rootMargin: "-80px 0px -70% 0px" });
+  sections.forEach((s) => spy.observe(s));
+
+  // Search: show only sections that contain every word, and highlight matches.
+  const q = document.getElementById("q");
+  const original = new Map(sections.map((s) => [s, s.innerHTML]));
+  function highlight(el, words) {
+    const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+    const nodes = [];
+    while (walker.nextNode()) nodes.push(walker.currentNode);
+    const re = new RegExp("(" + words.map((w) => w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|") + ")", "gi");
+    nodes.forEach((n) => {
+      if (!re.test(n.nodeValue)) return;
+      const span = document.createElement("span");
+      span.innerHTML = n.nodeValue.replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c])).replace(re, "<mark>$1</mark>");
+      n.replaceWith(span);
+    });
+  }
+  q.addEventListener("input", () => {
+    const words = q.value.trim().toLowerCase().split(/\s+/).filter(Boolean);
+    let shown = 0;
+    sections.forEach((s) => {
+      s.innerHTML = original.get(s);
+      const hit = !words.length || words.every((w) => s.textContent.toLowerCase().includes(w));
+      s.classList.toggle("hidden", !hit);
+      links.forEach((a) => { if (a.getAttribute("href") === "#" + s.id) a.style.display = hit ? "" : "none"; });
+      if (hit) { shown++; if (words.length) highlight(s, words); }
+    });
+    document.getElementById("no-results").style.display = shown ? "none" : "block";
+  });
+  if (location.hash.startsWith("#q=")) { q.value = decodeURIComponent(location.hash.slice(3)); q.dispatchEvent(new Event("input")); }
+</script>
+</body>
+</html>
