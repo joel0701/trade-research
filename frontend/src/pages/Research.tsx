@@ -377,7 +377,7 @@ export default function Research() {
           )}
           {pendingConfirm && sessionId != null && (
             <UnavailablePrompt
-              question={pendingConfirm.hidden ? "Analyse the scanner results above" : pendingConfirm.text}
+              question={pendingConfirm.hidden ? "Run the skill on the scanner results above" : pendingConfirm.text}
               report={pendingConfirm.report}
               onContinue={(remember) => send(pendingConfirm.text, sessionId, pendingConfirm.attachments,
                                              { proceed: pendingConfirm.report.fingerprint, remember,
@@ -385,7 +385,7 @@ export default function Research() {
               onCancel={async () => {
                 const { text, hidden } = pendingConfirm;
                 setPendingConfirm(null);
-                if (!hidden) setRestore({ text, nonce: Date.now() });  // nothing to restore for a scanner's analysis
+                if (!hidden) setRestore({ text, nonce: Date.now() });  // nothing to restore for a skill's hidden prompt
                 try {
                   await api.post(`/sessions/${sessionId}/pending/cancel`);
                   const s = await api.get(`/sessions/${sessionId}`);

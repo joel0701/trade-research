@@ -99,42 +99,27 @@ async def run_skill(skill_id: int, body: SkillRun, db: Session = Depends(get_ses
         db.refresh(chat)
         return {"session_id": chat.id, "prompt": prompt + notes}
 
-    # Built on a scanner: scan, the scanner's analysis (scanner's model), then the skill's
-    # evaluation (skill's model). Follow-up questions use the Research default.
+    # Built on a scanner: the scan (no LLM), then the skill's prompt evaluates the results with the
+    # skill's model. Follow-up questions use the Research default.
     settings, results, scan_label, rows = await scan(scr, dict(scr.params), list(scr.universe))
-    scanner_model = run_model(db, None, scr.lead_model_tool_id)
-    chat = ChatSession(title=f"{skill.name}: {label}".strip(": ") + f" ({len(rows)} results)", origin=f"skill:{skill.id}")
+    chat = ChatSession(title=f"{skill.name}: {label}".strip(": ") + f" ({len(rows)} results)", origin=f"skill:{skill.id}",
+                       next_turn_model_tool_id=model_id, next_turn_note=NEXT_STEPS,
+                       next_turn_tool_scope=list(skill.tool_ids) or None)
     db.add(chat)
     db.commit()
     db.refresh(chat)
-    models = {i: db.get(Tool, i).name for i in (scanner_model, model_id) if i}
-    stages = [f"Scanner analysis: **{models.get(scanner_model, 'Research default')}**"] if scr.follow_up_prompt.strip() else []
-    stages.append(f"Skill evaluation: **{models.get(model_id, 'Research default')}**")
+    model_name = db.get(Tool, model_id).name if model_id else "Research default"
     instructions = (prompt + f"\n\n**Using scanner {scr.name}**\n" + "\n".join(f"- {s}" for s in settings)
-                    + "\n" + "\n".join(f"- {s}" for s in stages))
+                    + f"\n- Skill evaluation: **{model_name}**")
     add_exchange(db, chat.id, instructions, results, scan_label)
-    evaluate = (f"{prompt}\n\nBase this on the scanner results above"
-                f"{' and the scanner analysis' if scr.follow_up_prompt.strip() else ''}.{notes}")
-    if scr.follow_up_prompt.strip():
-        chat.next_turn_model_tool_id = scanner_model
-        chat.queued_turns = [{"text": evaluate, "model_tool_id": model_id, "tool_scope": list(skill.tool_ids) or None,
-                              "note": NEXT_STEPS, "hidden": True, "label": skill.name}]
-        first = f"Analyse the scanner results above and complete this task: {scr.follow_up_prompt}" + SCAN_SCOPE
-    else:  # the scanner has no task of its own: the skill evaluates the raw results
-        chat.next_turn_model_tool_id = model_id
-        chat.next_turn_tool_scope = list(skill.tool_ids) or None
-        chat.next_turn_note = NEXT_STEPS
-        first = evaluate
-    db.add(chat)
-    db.commit()
-    return {"session_id": chat.id, "prompt": first, "hidden": True, "matches": rows}
+    evaluate = f"{prompt}\n\nBase this on the scanner results above." + SCAN_SCOPE + notes
+    return {"session_id": chat.id, "prompt": evaluate, "hidden": True, "matches": rows}
 
 
 class ScannerRun(BaseModel):
     """One-off settings for this run only; the saved scanner isn't changed."""
     params: dict[str, Any] = {}           # IBKR: rows, above_price, above_volume, market_cap_above
     universe: list[str] | None = None     # rule-based: tickers to check
-    lead_model_tool_id: int | None = None
 
 
 RUN_PARAM_KEYS = {"rows", "above_price", "above_volume", "market_cap_above", "average_option_volume_above"}
@@ -200,32 +185,40 @@ def add_exchange(db: Session, chat_id: int, instructions: str, results: str, lab
     db.commit()
 
 
+def scan_suggestions(rows: list[dict[str, Any]]) -> str:
+    """Free follow-up questions about the top results (no LLM): shown as suggestions in the UI."""
+    tickers = [str(r["ticker"]) for r in rows[:3] if r.get("ticker")]
+    if not tickers:
+        return ""
+    names = tickers[0] if len(tickers) == 1 else ", ".join(tickers[:-1]) + " and " + tickers[-1]
+    them = "it" if len(tickers) == 1 else "these"
+    return (f"\n\n{NEXT_STEPS_HEADING}\n"
+            f"- What news is driving today's moves in {names}?\n"
+            f"- What's the technical setup for {names}, and do the moves look like they can continue?\n"
+            f"- Are there options setups worth a look in {names}? Compare risk/reward for {them}.")
+
+
 @router.post("/screeners/{screener_id}/run")
 async def run_screen(screener_id: int, body: ScannerRun | None = None,
                      db: Session = Depends(get_session)) -> dict[str, Any]:
+    """Run the scan and show the results. No LLM is involved: you then ask about the results, and
+    those questions use the Research default model and the full team."""
     scr = db.get(Screener, screener_id)
     if scr is None:
         raise HTTPException(404)
     body = body or ScannerRun()
-    model_id = run_model(db, body.lead_model_tool_id, scr.lead_model_tool_id)
     params = {**scr.params, **{k: v for k, v in body.params.items() if k in RUN_PARAM_KEYS and v not in ("", None)}}
     universe = [t.strip().upper() for t in body.universe if t.strip()] if body.universe is not None else scr.universe
     if scr.source != "ibkr" and not universe:
         raise HTTPException(422, "Add at least one ticker to scan.")
     settings, results, label, rows = await scan(scr, params, universe)
-    # The scanner's model analyses the results; follow-up questions use the Research default.
-    chat = ChatSession(title=f"Scanner: {scr.name} ({len(rows)} results)", origin=f"screener:{scr.id}",
-                       next_turn_model_tool_id=model_id, next_turn_note=NEXT_STEPS)
+    chat = ChatSession(title=f"Scanner: {scr.name} ({len(rows)} results)", origin=f"screener:{scr.id}")
     db.add(chat)
     db.commit()
     db.refresh(chat)
-    if model_id:
-        settings.append(f"Analysis model: **{db.get(Tool, model_id).name}**")
-    instructions = (f"Run scanner **{scr.name}**\n\n" + "\n".join(f"- {s}" for s in settings)
-                    + f"\n\n**Task:** {scr.follow_up_prompt}")
-    add_exchange(db, chat.id, instructions, results, label)
-    # The UI sends this hidden prompt to start the Lead's analysis (no extra bubble is shown).
-    return {"session_id": chat.id, "prompt": SCANNER_FOLLOW_UP, "hidden": True, "matches": rows}
+    instructions = f"Run scanner **{scr.name}**\n\n" + "\n".join(f"- {s}" for s in settings)
+    add_exchange(db, chat.id, instructions, results + scan_suggestions(rows), label)
+    return {"session_id": chat.id, "matches": rows}
 
 
 # Added to the final answer of a skill or scanner run (the UI turns the section into suggestions).
@@ -242,7 +235,6 @@ NEXT_STEPS = (
 SCAN_SCOPE = (" Work only with the stocks in the scanner results: don't research, add or recommend other tickers. "
               "If the results look incomplete or inconsistent with the scan (few rows, a market that's closed, "
               "'gainers' that are down), say so first and suggest when to re-run, then analyse what's there.")
-SCANNER_FOLLOW_UP = "Analyse the scanner results above and complete the task." + SCAN_SCOPE
 
 ET = ZoneInfo("America/New_York")
 

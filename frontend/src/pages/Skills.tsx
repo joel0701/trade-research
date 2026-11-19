@@ -35,8 +35,7 @@ function RunSkillDialog({ skill, models, leadDefault, scanners, onClose }: {
             subtitle={skill.description || (scanner ? `Evaluates ${scanner.name} results` : "Skill")}>
       {scanner && (
         <ol className="stages">
-          <li className="tone-green"><span>Scan</span><strong>{scanner.name}</strong></li>
-          {scanner.follow_up_prompt?.trim() && <li className="tone-green"><span>Scanner analysis</span><strong>{modelName(scanner.lead_model_tool_id)}</strong></li>}
+          <li className="tone-green"><span>Scan (no AI)</span><strong>{scanner.name}</strong></li>
           <li className="tone-blue"><span>Skill evaluation</span><strong>model below</strong></li>
           <li className="tone-purple"><span>Follow-ups</span><strong>{modelName(null)}</strong></li>
         </ol>
@@ -113,7 +112,7 @@ export default function Skills() {
                 {scanners.map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}
               </select>
               <p className="muted small">{draft.screener_id
-                ? "Running the skill runs this scanner first (scan, then the scanner's task with the scanner's model). The prompt below then evaluates those results with the skill's model."
+                ? "Running the skill runs this scan first (no AI model). The prompt below then evaluates the results with the skill's model."
                 : "Pick a scanner to have this skill evaluate its results."}</p>
             </Section>
             <Section tone="purple" icon={<Prompt />} title="Prompt"

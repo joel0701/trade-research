@@ -407,21 +407,15 @@ IBKR_SCANNERS = [
     dict(slug="ibkr_top_gainers", name="IBKR: top % gainers", source="ibkr",
          description="Biggest % gainers today among US listed stocks over $5 with real volume.",
          params={"scan_code": "TOP_PERC_GAIN", "location": "STK.US.MAJOR", "rows": 25, "above_price": 5,
-                 "above_volume": 500000},
-         follow_up_prompt="Review today's top gainers. Which moves look like they have real catalysts and could "
-                          "continue, and which look exhausted? Note risks and any options setups worth a look."),
+                 "above_volume": 500000}),
     dict(slug="ibkr_unusual_options", name="IBKR: unusual option volume", source="ibkr",
          description="Stocks with unusually high option volume versus normal, over $5 and $1B market cap.",
          params={"scan_code": "HOT_BY_OPT_VOLUME", "location": "STK.US.MAJOR", "rows": 25, "above_price": 5,
-                 "market_cap_above": 1000},
-         follow_up_prompt="Look into the unusual options activity. For the most interesting names, what is the "
-                          "likely catalyst, is the flow bullish or bearish, and what trades would fit?"),
+                 "market_cap_above": 1000}),
     dict(slug="ibkr_iv_rich", name="IBKR: IV rich vs historical", source="ibkr",
          description="Highest implied volatility relative to historical volatility (options look expensive).",
          params={"scan_code": "HIGH_OPT_IMP_VOLAT_OVER_HIST", "location": "STK.US.MAJOR", "rows": 25,
-                 "above_price": 10, "market_cap_above": 2000},
-         follow_up_prompt="These stocks have options priced rich versus realized volatility. Explain why (earnings, "
-                          "events) and suggest premium-selling strategies with defined risk where they make sense."),
+                 "above_price": 10, "market_cap_above": 2000}),
 ]
 
 

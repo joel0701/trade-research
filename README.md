@@ -83,19 +83,19 @@ cd backend && uv run pytest
 | **Tools** | Models (model id, effort, max tokens, refusal fallbacks), built-in Python functions, Claude web search/fetch, MCP servers |
 | **Roles** | Each analyst's model, system prompt, allowed tools, iteration limit; which role is the Lead |
 | **Skills** | Prompt templates with parameters, e.g. `{ticker}`; optional data sources; the model the skill runs with |
-| **Scanners** | Rule-based (ticker universe + rules) or IBKR market scanner (scan type, market, price/volume/market-cap filters, optional rules); sort; the task for the Lead after the scan and the model that runs it. Settings cover only the scan: the analysis and follow-ups use the full team |
+| **Scanners** | Rule-based (ticker universe + rules) or IBKR market scanner (scan type, market, price/volume/market-cap filters, optional rules); sort. A run only scans and shows the results (no AI model, no cost); you then ask about them |
 
-**Skills built on a scanner** (Skills → *Built on a scanner*) chain the steps in one session: the
-scan, the scanner's task with the scanner's model, then the skill's prompt evaluating those results
-with the skill's model. Follow-up questions use the Research default. The stages run in the
-background, so they finish even if you leave the page.
+**Scanners only scan.** Running one shows the results table, with suggested questions about the
+top tickers, and no AI model runs. You then ask about the results like any research question
+(Research default model, full team). **Skills built on a scanner** (Skills → *Scanner input*) run
+the scan and then the skill's prompt on the results, with the skill's model, in one session.
 
-**Suggested next steps:** the final answer of a skill or scanner run ends with one to three specific
-follow-up questions based on the data (e.g. the news behind the top gainers' moves, naming the
-tickers). They show as clickable suggestions; clicking one puts it in the box to edit or send.
+**Suggested next steps:** a skill's answer ends with one to three specific follow-up questions based
+on the data, naming the tickers; scanner results end with ready-made questions about the top tickers
+(e.g. the news behind their moves). They show as clickable suggestions; clicking one puts it in the box to edit or send.
 Follow-up answers don't add them.
 
-**Skill and scanner models** (and a skill's data sources) apply to their own run only, so a
+**A skill's model** (and its data sources) apply to the skill's own run only, so a
 cheaper model such as Sonnet can handle steps that need little reasoning. Follow-up questions in
 the session always use the Research default: the Lead role's model (or the one picked in the
 composer) and the full team.

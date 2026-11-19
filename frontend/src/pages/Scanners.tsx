@@ -2,8 +2,8 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { api, Json } from "../api";
 import { Field, JsonField, Toggle, useCrud } from "../admin";
-import { Dialog, errorText, LeadModelSelect, Section, TwoPane, useDraft } from "../TwoPane";
-import { Chip, Gear, Prompt, Radar } from "../icons";
+import { Dialog, errorText, Section, TwoPane, useDraft } from "../TwoPane";
+import { Gear, Radar } from "../icons";
 import { useSources } from "../SourcePicker";
 import { PricingIcon } from "../Pricing";
 
@@ -25,8 +25,7 @@ function NumberField({ label, value, onChange, hint }:
 }
 
 const BLANK = { slug: "", name: "New scanner", description: "", source: "rules", params: {}, universe: [], rules: { all: [] },
-                sort_by: null, limit: 25, lead_model_tool_id: null, enabled: true,
-                follow_up_prompt: "Review these results and pick the most promising candidates." };
+                sort_by: null, limit: 25, enabled: true };
 
 /** What the scan itself uses. After the results, the Lead analyses them like any research question. */
 function ScanData({ source }: { source: string }) {
@@ -52,22 +51,22 @@ function ScanData({ source }: { source: string }) {
           : [item("technical_snapshot", "daily bars for each ticker; indicators computed here")]}
       </ul>
       <p className="muted small">
-        This page configures only the scan. After the results come in, the Lead analyses them, and answers any
-        follow-up questions, like any research question: with the full team and all available data sources.
+        Running a scanner only scans and shows the results: no AI model runs and nothing is charged. Ask about the
+        results afterwards (with the Research default and the full team), or build a skill on this scanner to have
+        the Lead evaluate the results automatically.
       </p>
     </>
   );
 }
 
 /** Asks for this run's settings (pre-filled from the scanner; not saved), then runs it into a new session. */
-function RunScannerDialog({ scanner, models, leadDefault, codes, locations, onClose }: {
-  scanner: Json; models: Json[]; leadDefault: string; codes: Option[]; locations: Option[]; onClose: () => void;
+function RunScannerDialog({ scanner, codes, locations, onClose }: {
+  scanner: Json; codes: Option[]; locations: Option[]; onClose: () => void;
 }) {
   const navigate = useNavigate();
   const ibkr = scanner.source === "ibkr";
   const [p, setP] = useState<Record<string, any>>({ ...(scanner.params ?? {}) });
   const [universe, setUniverse] = useState((scanner.universe ?? []).join(", "));
-  const [model, setModel] = useState<number | null>(scanner.lead_model_tool_id ?? null);
   const [running, setRunning] = useState(false);
   const [error, setError] = useState("");
   const tickers = universe.split(/[\s,]+/).map((x: string) => x.trim().toUpperCase()).filter(Boolean);
@@ -78,18 +77,17 @@ function RunScannerDialog({ scanner, models, leadDefault, codes, locations, onCl
     setRunning(true); setError("");
     try {
       const body = ibkr
-        ? { params: { rows: p.rows, above_price: p.above_price, above_volume: p.above_volume, market_cap_above: p.market_cap_above },
-            lead_model_tool_id: model }
-        : { universe: tickers, lead_model_tool_id: model };
+        ? { params: { rows: p.rows, above_price: p.above_price, above_volume: p.above_volume, market_cap_above: p.market_cap_above } }
+        : { universe: tickers };
       const r = await api.post(`/screeners/${scanner.id}/run`, body);
-      navigate(`/research/${r.session_id}`, { state: { autoSend: r.prompt, hidden: !!r.hidden } });
+      navigate(`/research/${r.session_id}`);  // results only; you ask about them next
     } catch (e: any) { setError(errorText(e)); setRunning(false); }
   }
 
   return (
     <Dialog title={`Run: ${scanner.name}`} onClose={onClose} tone="green" icon={<Radar />}
             subtitle={ibkr ? <>IBKR scan <strong>{code}</strong> over <strong>{market}</strong></> : "Rule-based scan of your ticker list"}>
-      <p className="muted small">Changes here apply to this run only.</p>
+      <p className="muted small">Changes here apply to this run only. Shows the results; no AI model runs.</p>
       <form onSubmit={(e) => { e.preventDefault(); run(); }}>
         {ibkr ? (
           <div className="grid-3">
@@ -104,11 +102,9 @@ function RunScannerDialog({ scanner, models, leadDefault, codes, locations, onCl
             <textarea rows={4} value={universe} onChange={(e) => setUniverse(e.target.value)} />
           </>
         )}
-        <LeadModelSelect models={models} value={model} onChange={setModel} label="Model for the analysis"
-                         hint="follow-up questions use the Research default" defaultLabel={`Research default (${leadDefault || "Lead role model"})`} />
         {error && <p className="error">{error}</p>}
         <div className="actions">
-          <button className="primary" disabled={running || (!ibkr && tickers.length === 0)}>{running ? "Scanning…" : "Run"}</button>
+          <button className="primary" disabled={running || (!ibkr && tickers.length === 0)}>{running ? "Scanning…" : "Scan"}</button>
           <button type="button" onClick={onClose}>Cancel</button>
         </div>
       </form>
@@ -121,16 +117,9 @@ export default function Scanners() {
   const { draft, set } = useDraft(crud.selected);
   const [codes, setCodes] = useState<Option[]>([]);
   const [locations, setLocations] = useState<Option[]>([]);
-  const [models, setModels] = useState<Json[]>([]);
-  const [leadDefault, setLeadDefault] = useState("");
   const [running, setRunning] = useState(false);
   useEffect(() => {
     api.get("/scanner-options").then((o) => { setCodes(o.scan_codes); setLocations(o.locations); }).catch(() => {});
-    Promise.all([api.get("/models"), api.get("/roles")]).then(([ms, rs]) => {
-      setModels(ms);
-      const id = rs.find((r: Json) => r.is_lead)?.model_tool_id;
-      setLeadDefault(ms.find((m: Json) => m.id === id)?.name ?? "");
-    }).catch(() => {});
   }, []);
   useEffect(() => { if (!crud.selected && crud.items.length) crud.setSelected(crud.items[0]); }, [crud.items]);
 
@@ -205,16 +194,6 @@ export default function Scanners() {
             <input type="number" value={s.limit} onChange={(e) => set({ limit: Number(e.target.value) })} />
             <ScanData source={s.source} />
             </Section>
-            <Section tone="purple" icon={<Prompt />} title="Analysis" hint="the Lead's task once results are in (full team)">
-            <Field label="Task for the Lead" value={s.follow_up_prompt}
-                   onChange={(follow_up_prompt) => set({ follow_up_prompt })} multiline rows={3} />
-            </Section>
-            <Section tone="green" icon={<Chip />} title="Model" hint="follow-up questions use the Research default">
-            <LeadModelSelect models={models} value={s.lead_model_tool_id ?? null}
-                             onChange={(lead_model_tool_id) => set({ lead_model_tool_id })}
-                             label="Model for the analysis"
-                             defaultLabel={`Research default (${leadDefault || "Lead role model"})`} />
-            </Section>
             <div className="cfg-actions">
               {crud.error && <p className="error">{crud.error}</p>}
               <button className="primary" onClick={() => crud.save(s)}>Save</button>
@@ -224,7 +203,7 @@ export default function Scanners() {
         </div>
       )}
       {running && s?.id && (
-        <RunScannerDialog scanner={crud.items.find((x) => x.id === s.id) ?? s} models={models} leadDefault={leadDefault}
+        <RunScannerDialog scanner={crud.items.find((x) => x.id === s.id) ?? s}
                           codes={codes} locations={locations} onClose={() => setRunning(false)} />
       )}
     </TwoPane>

@@ -18,7 +18,7 @@ def events(c, sid, body):
         return [json.loads(line[6:]) for line in r.iter_lines() if line.startswith("data: ")]
 
 
-def test_scanner_analysis_uses_full_team_and_preflight_like_research(monkeypatch):
+def test_scanner_session_questions_use_full_team_and_preflight_like_research(monkeypatch):
     monkeypatch.setattr(ibkr_gateway, "gateway_reachable", lambda timeout=0.3: True)
     monkeypatch.delenv("SEC_USER_AGENT", raising=False)
     monkeypatch.setenv("MASSIVE_API_KEY", "mk")
@@ -35,22 +35,17 @@ def test_scanner_analysis_uses_full_team_and_preflight_like_research(monkeypatch
         assert "tool_ids" not in sc  # a scanner configures only the scan
         r = c.post(f"/api/screeners/{sc['id']}/run").json()
         chat = c.get(f"/api/sessions/{r['session_id']}").json()
-        assert chat["tool_scope"] is None  # no data-source limit on the analysis
-        msgs = chat["messages"]
-        assert "Data notes" not in msgs[0]["text"]
-        # Checked like any research question: EDGAR isn't set up, so the analysis asks first.
-        ev = events(c, r["session_id"], {"text": r["prompt"], "hidden": True})
+        assert chat["tool_scope"] is None and fake.calls == []  # results only: nothing ran yet
+        # Your question is checked like any research question: EDGAR isn't set up, so it asks first.
+        ev = events(c, r["session_id"], {"text": "What's driving CRWV?"})
         assert ev[0]["type"] == "confirm_needed" and any("EDGAR" in i["tool"] for i in ev[0]["items"])
-        ev = events(c, r["session_id"], {"text": r["prompt"], "hidden": True, "proceed": ev[0]["fingerprint"]})
+        ev = events(c, r["session_id"], {"text": "What's driving CRWV?", "proceed": ev[0]["fingerprint"]})
         assert ev[-1]["type"] == "done"
-        # Reads as an exchange: instructions, scan results, the decision note, then the Lead's analysis.
         msgs = c.get(f"/api/sessions/{r['session_id']}").json()["messages"]
-        assert [m["role"] for m in msgs] == ["user", "assistant", "notice", "assistant"]
+        assert [m["role"] for m in msgs] == ["user", "assistant", "notice", "user", "assistant"]
         assert msgs[0]["text"].startswith("Run scanner **IBKR: top % gainers**") and msgs[1]["model"] == "IBKR scanner"
-        assert "| rank |" in msgs[1]["text"]
-        # The Lead saw the exchange in order, ending with the task, and had the whole team.
+        # The Lead saw the scan results before your question, and had the whole team.
         lead = next(k for k in fake.calls if "Your team" in k["system"])
-        assert [m["role"] for m in lead["messages"]][:3] == ["user", "assistant", "user"]
         assert "| rank |" in lead["messages"][1]["content"][0]["text"]
         assert {"consult_finance_analyst", "consult_news_analyst"} <= {t["name"] for t in lead["tools"]}
 

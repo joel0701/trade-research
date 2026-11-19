@@ -205,17 +205,13 @@ class Screener(SQLModel, table=True):
     rules: dict[str, Any] = Field(default_factory=dict, sa_column=Column(JSON))
     source: str = "rules"
     params: dict[str, Any] = Field(default_factory=dict, sa_column=Column(JSON))
-    # The scanner only defines the scan. After the results, the Lead analyses them (and answers
-    # any follow-up questions) like any research question, with the full team and its tools.
+    # A scanner only scans: a run shows the results (no LLM, no cost). You then ask about them like
+    # any research question. To have the Lead evaluate results automatically, build a skill on it.
     sort_by: str | None = None
     limit: int = 25
-    # Model for the analysis of the results (e.g. Sonnet: little reasoning needed); None = the
-    # Research default. Follow-up questions in the session always use the Research default.
+    # No longer used (scanners don't run the Lead); kept so older databases still load.
     lead_model_tool_id: int | None = None
-    follow_up_prompt: str = (
-        "Review these screener results. Pick the most promising candidates and explain why, "
-        "noting risks and any options strategies worth considering."
-    )
+    follow_up_prompt: str = ""
     enabled: bool = True
 
 

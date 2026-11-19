@@ -195,9 +195,10 @@ def test_scanners_page_runs_ibkr_scanner(monkeypatch):
         r = c.post(f"/api/screeners/{sc['id']}/run").json()
         assert [m["ticker"] for m in r["matches"]] == ["CRWV", "NVDA", "AMD"]  # IBKR rank order
         ins, res = run_texts(c, r)
-        assert r["matches"][0]["rsi_14"] == 72.0 and r["hidden"] is True
+        assert r["matches"][0]["rsi_14"] == 72.0 and "prompt" not in r  # no LLM step: results only
         assert ins.startswith("Run scanner **IBKR: unusual option volume**\n\n- Scan: **Unusual option volume**")
-        assert "- Min price: **$5.00**" in ins and "- Min market cap: **$1,000M**" in ins and "**Task:**" in ins
+        assert "- Min price: **$5.00**" in ins and "- Min market cap: **$1,000M**" in ins and "**Task:**" not in ins
+        assert "### Suggested next steps\n- What news is driving today's moves in CRWV, NVDA and AMD?" in res
         assert res.startswith("IBKR returned 3 stocks:") and "| rank |" in res and "| rank |" not in ins
         chat = c.get(f"/api/sessions/{r['session_id']}").json()
         assert chat["title"].startswith("Scanner: IBKR: unusual option volume (3 results)")
@@ -225,14 +226,12 @@ def test_scanner_run_overrides_apply_to_this_run_only(monkeypatch):
     monkeypatch.setattr(engine, "fetch_snapshots", lambda tickers: {})
     with TestClient(app) as c:
         sc = next(s for s in c.get("/api/screeners").json() if s["slug"] == "ibkr_top_gainers")
-        haiku = next(t["id"] for t in c.get("/api/tools").json() if t["slug"] == "haiku")
         r = c.post(f"/api/screeners/{sc['id']}/run",
-                   json={"params": {"rows": 10, "above_price": 20, "scan_code": "IGNORED"}, "lead_model_tool_id": haiku}).json()
+                   json={"params": {"rows": 10, "above_price": 20, "scan_code": "IGNORED"}}).json()
         assert ib.calls[-1][1:5] == ("TOP_PERC_GAIN", "STK.US.MAJOR", 10, 20.0)  # scan code can't be overridden
-        assert c.get(f"/api/sessions/{r['session_id']}").json()["next_turn_model_tool_id"] == haiku
+        assert c.get(f"/api/sessions/{r['session_id']}").json()["next_turn_model_tool_id"] is None
         ins, _ = run_texts(c, r)
         assert "- Results requested: **10**" in ins and "- Min price: **$20.00**" in ins
-        assert "- Analysis model: **Claude Haiku 5.5**" in ins
         saved = next(s for s in c.get("/api/screeners").json() if s["slug"] == "ibkr_top_gainers")
         assert saved["params"] == sc["params"]  # saved scanner unchanged
 

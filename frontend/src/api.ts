@@ -59,7 +59,7 @@ export type StreamEvent =
   | { type: "error"; message: string }
   | ({ type: "confirm_needed" } & UnavailableReport)
   | { type: "done"; usage: Json }
-  | { type: "stage"; label: string };  // the next stage starts (e.g. a skill evaluating a scanner's analysis)
+  | { type: "stage"; label: string };  // a queued stage starts
 
 /** POST a message and read the Server-Sent Events stream. */
 export type UnavailableItem = {
