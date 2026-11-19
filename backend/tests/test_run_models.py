@@ -216,10 +216,58 @@ def test_lead_consults_each_specialist_at_most_twice_per_question(monkeypatch):
         sid = c.post("/api/sessions", json={}).json()["id"]
         send(c, sid, {"text": "What news is driving COLM, CRI and CGGR?"})
         lead_sys = next(k["system"] for k in fake.calls if "Your team" in k["system"])
-        assert "Ask each specialist once per question" in lead_sys and "at most 2 consults per specialist" in lead_sys
+        assert "Ask each specialist once per question" in lead_sys and "2 consult(s) per specialist, 5 in total" in lead_sys
         specialist_calls = [k for k in fake.calls if "Your team" not in k["system"]]
         assert len(specialist_calls) == 2  # the third consult wasn't run
         texts = [b["content"] if isinstance(b["content"], str) else b["content"][0]["text"] for b in fake.results]
-        assert sum("Not run: you've already consulted the News Analyst 2 times" in t for t in texts) == 1
+        assert sum("Not run: you've already consulted the News Analyst 2 time(s)" in t for t in texts) == 1
         runs = [r for r in c.get(f"/api/sessions/{sid}/runs").json() if r["role_slug"] == "news_analyst"]
         assert len(runs) == 2
+
+
+def test_local_lead_gets_stricter_limits_and_concise_reports(monkeypatch):
+    """A local Lead: each specialist once, 3 consults in total, concise (trimmed) reports."""
+    import httpx
+    from types import SimpleNamespace as NS
+    from app.llm import openai_loop, providers
+    from tests.test_local_models import fake_get
+    from tests.test_vendors import chunk
+
+    asks = [("news_analyst", "COLM"), ("news_analyst", "CRI"), ("technical_analyst", "all"),
+            ("finance_analyst", "all"), ("sector_mapper", "all")]
+    seen = {}
+
+    class Completions:
+        async def create(self, **kw):
+            seen.setdefault("calls", []).append(kw)
+            has_results = any(m["role"] == "tool" for m in kw["messages"])
+
+            async def stream():
+                if not has_results:
+                    for i, (role, t) in enumerate(asks):
+                        yield chunk(tool=(i, f"call_{i}", f"consult_{role}", json.dumps({"question": f"News on {t}?"})))
+                    yield chunk(finish="tool_calls")
+                else:
+                    seen["results"] = [m["content"] for m in kw["messages"] if m["role"] == "tool"]
+                    yield chunk(content="Summary.")
+                    yield chunk(finish="stop")
+            return stream()
+
+    monkeypatch.setattr(openai_loop, "openai_client", lambda provider: NS(chat=NS(completions=Completions())))
+    providers._reach_cache.clear(); providers._state_cache.clear()
+    monkeypatch.setattr(httpx, "get", fake_get({"http://localhost:1234/v1": ["qwen/qwen3.8-27b"]}))
+    fake = FakeClient()  # specialists stay on Claude (faked)
+    monkeypatch.setattr(loop, "client", lambda: fake)
+    with TestClient(app) as c:
+        tool = c.post("/api/local-models", json={"provider": "lmstudio", "model_id": "qwen/qwen3.8-27b"}).json()
+        sid = c.post("/api/sessions", json={"lead_model_tool_id": tool["id"]}).json()["id"]
+        send(c, sid, {"text": "What news is driving COLM, CRI and CGGR?"})
+        system = seen["calls"][0]["messages"][0]["content"]
+        assert "1 consult(s) per specialist, 3 in total" in system and "You run on a local model" in system
+        ran = [r["role_slug"] for r in c.get(f"/api/sessions/{sid}/runs").json() if r["parent_run_id"]]
+        assert sorted(ran) == ["finance_analyst", "news_analyst", "technical_analyst"]  # 2nd News + Sector Mapper skipped
+        assert sum(r.startswith("Not run:") for r in seen["results"]) == 2
+        questions = [r["input"] for r in c.get(f"/api/sessions/{sid}/runs").json() if r["parent_run_id"]]
+        assert all("Reply concisely" in q for q in questions)
+        c.delete(f"/api/tools/{tool['id']}")
+    providers._reach_cache.clear(); providers._state_cache.clear()

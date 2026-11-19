@@ -16,7 +16,7 @@ from app.agents.loop import Emit, ModelConfig, run_agent
 from app.db import engine
 from app.attachments import expand_refs
 from app.llm.mock_loop import mock_mode
-from app.llm.providers import model_available
+from app.llm.providers import model_available, provider_of
 from app.models import Attachment, ChatSession, Message, Role, Run, Tool, now
 from app.tools.registry import Toolbox, safe_name
 
@@ -56,13 +56,32 @@ Consult only the specialists the question needs. Simple questions may need none.
 Ask each specialist once per question: put every ticker and sub-question in that one consult (e.g. one
 News Analyst consult covering all three tickers, not one per ticker). Make all the consults you need in
 the same step, in parallel, then write your answer. Consult the same specialist again only if its first
-answer left a specific gap; at most {max_consults} consults per specialist per question.
+answer left a specific gap. Limits per question: {max_consults} consult(s) per specialist, {max_total} in total.
 Documents the user attaches are visible only to you. When a specialist needs their contents,
 put the relevant figures or excerpts in the consult context.
 This is research and education, not personalised financial advice."""
 
 
-MAX_CONSULTS_PER_ROLE = 2  # per question; keeps a model from fanning out one consult per ticker
+# Consult limits per question. Local Leads are stricter: each consult is another slow round on the
+# user's machine, and every specialist report must be re-read.
+MAX_CONSULTS_PER_ROLE = 2  # keeps a model from fanning out one consult per ticker
+MAX_CONSULTS_TOTAL = 5
+LOCAL_MAX_PER_ROLE = 1
+LOCAL_MAX_TOTAL = 3
+LOCAL_REPORT_CHARS = 6000  # specialist reports longer than this are trimmed before a local Lead reads them
+LOCAL_CONCISE = ("\n\nReply concisely: key findings, numbers and sources only, about 250 words. "
+                 "The Lead reads this on a slower local model.")
+LOCAL_LEAD_NOTE = ("\n\nYou run on a local model, so each extra step is slow: consult as few specialists as "
+                   "the question needs, all in one step, then answer.")
+
+
+def consult_limits(model: "ModelConfig") -> tuple[int, int, bool]:
+    """(per specialist, total, local) for a Lead running on `model`."""
+    try:
+        local = provider_of({"provider": model.provider}).local
+    except ValueError:
+        local = False
+    return (LOCAL_MAX_PER_ROLE, LOCAL_MAX_TOTAL, True) if local else (MAX_CONSULTS_PER_ROLE, MAX_CONSULTS_TOTAL, False)
 
 MOCK_MODEL = ModelConfig(model_id="mock", provider="mock", effort=None, max_tokens=1000)
 
@@ -297,18 +316,26 @@ async def _run_prepared(session_id: int, user_text: str, tools: dict[int, Tool],
         try:
             async with Toolbox([tools[i] for i in lead.tool_ids if i in tools]) as toolbox:
                 consults: dict[str, int] = {}
+                per_role, max_total, local_lead = consult_limits(model)
                 for spec in specialists:
                     async def run_spec(args: dict, _spec=spec) -> str:
                         consults[_spec.slug] = consults.get(_spec.slug, 0) + 1
-                        if consults[_spec.slug] > MAX_CONSULTS_PER_ROLE:
-                            log.info("Session %s: skipped consult %d of %s (limit %d)", session_id,
-                                     consults[_spec.slug], _spec.slug, MAX_CONSULTS_PER_ROLE)
-                            return (f"Not run: you've already consulted the {_spec.name} {MAX_CONSULTS_PER_ROLE} times "
-                                    "for this question. Use its earlier findings above and write your answer.")
+                        total = sum(consults.values())
+                        if consults[_spec.slug] > per_role or total > max_total:
+                            why = (f"you've already consulted the {_spec.name} {per_role} time(s)" if consults[_spec.slug] > per_role
+                                   else f"you've reached the limit of {max_total} consults")
+                            log.info("Session %s: skipped consult of %s (%s)", session_id, _spec.slug, why)
+                            consults[_spec.slug] -= 1
+                            return f"Not run: {why} for this question. Use the findings you have and write your answer."
                         q = args.get("question", "")
                         if args.get("context"):
                             q += f"\n\nContext from the Lead:\n{args['context']}"
-                        return await consult(_spec, q, session_id, tools, emit, run_id)
+                        if local_lead:
+                            q += LOCAL_CONCISE
+                        report = await consult(_spec, q, session_id, tools, emit, run_id)
+                        if local_lead and len(report) > LOCAL_REPORT_CHARS:
+                            report = report[:LOCAL_REPORT_CHARS] + "\n…[trimmed for the local Lead]"
+                        return report
 
                     toolbox.add({
                         "name": safe_name(f"consult_{spec.slug}"),
@@ -324,7 +351,9 @@ async def _run_prepared(session_id: int, user_text: str, tools: dict[int, Tool],
                     }, run_spec)
                 team = "\n".join(f"- consult_{s.slug}: {s.name}. {s.description}" for s in specialists) or "(none)"
                 system = lead.system_prompt + LEAD_SUFFIX.format(today=date.today().isoformat(), team=team,
-                                                                 max_consults=MAX_CONSULTS_PER_ROLE)
+                                                                 max_consults=per_role, max_total=max_total)
+                if local_lead:
+                    system += LOCAL_LEAD_NOTE
                 if note:
                     system += "\n\n" + note
                 if excluded:
