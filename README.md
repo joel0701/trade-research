@@ -59,12 +59,15 @@ cd frontend && npm install && npm run dev
 The database is created at `data/trade_research.db` and seeded with default roles, tools, skills
 and scanners on first start. Delete the file to reset.
 
-Logs: the backend writes `data/logs/backend.log` (everything it logs, with full tracebacks), and
-errors in the browser (uncaught errors, failed API calls, errors during a turn) go to
-`data/logs/frontend.log`. Both rotate at 5 MB. To follow them while you test:
+Logs go to `data/logs`: `backend_<date>_<time>.log` (everything the backend logs, with full
+tracebacks) and `frontend_<date>_<time>.log` (browser errors: uncaught errors, failed API calls,
+errors during a turn). The name is when the file was created. A new file starts at every app start,
+when the current one reaches 5 MB, and at midnight. Files older than 14 days are deleted, and the
+oldest go first once one kind's files pass 200 MB (`LOG_MAX_MB`, `LOG_KEEP_DAYS`, `LOG_MAX_TOTAL_MB`
+in `.env`). `backend-latest.log` and `frontend-latest.log` always point at the current files:
 
 ```bash
-tail -f data/logs/backend.log data/logs/frontend.log
+tail -F data/logs/backend-latest.log data/logs/frontend-latest.log
 ```
 
 Tests (no API calls; Claude is faked):
