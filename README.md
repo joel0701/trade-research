@@ -76,6 +76,37 @@ Tests (no API calls; Claude is faked):
 cd backend && uv run pytest
 ```
 
+## Scanners vs. skills
+
+A **scanner** filters market data using set criteria. A **skill** is a reusable set of instructions
+that guides the AI team through a multi-step task: analysis, calculations, or a research workflow.
+Use a scanner to find candidates, and a skill to reason about them.
+
+| | Scanner | Skill |
+|---|---|---|
+| **Purpose** | Surfaces tickers that match rules or filters: price action, volume, options metrics | Packages repeatable reasoning or a research workflow (evaluate setups, compare candidates, format research) for the AI team to run on demand |
+| **How it runs here** | IBKR's market scanners (via IB Gateway) or the rule engine over Yahoo data. **No AI model runs and nothing is charged**; you get a results table and suggested questions | The Lead Analyst runs the skill's prompt with the **skill's model**, consulting specialists and data sources as needed. Its answer ends with suggested next steps |
+| **Speed & data** | Fast, mechanical filtering across a large universe of stocks | Slower; depends on the model and the connected data sources. Better at context, synthesis and multi-step logic than raw filtering |
+| **Customization** | Predefined scan types, filters and JSON rules (Scanners page) | A natural-language prompt template with fields, a model, and optionally the data sources it may use (Skills page) |
+| **Cost & control** | Free; only surfaces matches. It never acts on its own | Costs whatever its model costs. Can call tools and consult specialists, within the app's guardrails: data access is read-only and order placement is always blocked |
+
+**Using them together:**
+- **Scanner, then your questions:** run a scanner, look at the table, then ask about the names you care
+  about (or press Tab to use a suggested question). Questions use the Research default model and the
+  full team, so you only pay for analysis you asked for.
+- **Skill built on a scanner** (Skills → *Scanner input*): for an evaluation you repeat, e.g. "rank
+  today's top gainers for swing setups". Running it does the scan (no AI), then the skill's prompt on
+  the results with the skill's model. Follow-up questions use the Research default.
+- **Skill on its own:** for analyses that start from a ticker or a question rather than a scan, e.g.
+  a full stock analysis or an earnings preview.
+
+Further reading:
+[agent skills guide](https://aerospike.com/blog/agent-skills-guide/) ·
+[skills vs. MCP tools](https://www.llamaindex.ai/blog/skills-vs-mcp-tools-for-agents-when-to-use-what) ·
+[workflows vs. skills](https://medium.com/@tarangtattva2/workflows-vs-skills-when-to-use-each-for-maximum-ai-productivity-ab9833c2a519) ·
+[AI screener vs. AI scanner](https://tickeron.com/trading-investing-101/faq-is-there-a-difference-between-the-ai-screener-and-ai-scanner/) ·
+[AI vs. traditional stock screeners](https://bananafarmer.app/learn/ai-stock-screener-vs-traditional)
+
 ## Configuring
 
 | Screen | What it controls |
