@@ -476,3 +476,7 @@ select.model-select { border-left-width: 4px; border-left-style: solid; }
 .dt tbody tr.active td { background: color-mix(in srgb, var(--accent) 30%, transparent); color: var(--text); }
 .dt tbody tr.active td:first-child { box-shadow: inset 4px 0 0 var(--accent); }
 .dt tbody tr.active td.pos { color: var(--pos); } .dt tbody tr.active td.neg { color: var(--neg); }
+
+/* Tool result sizes in the trace */
+.tool-size { font-size: 11px; color: var(--muted); margin-left: 6px; border: 1px solid var(--border); border-radius: 5px; padding: 0 5px; }
+.tool-size.big { color: var(--tone-amber); border-color: color-mix(in srgb, var(--tone-amber) 50%, transparent); }

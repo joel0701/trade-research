@@ -6,7 +6,8 @@ import { Json } from "./api";
 export type Run = {
   id: number; role_slug: string; parent_run_id: number | null; model: string | null;
   input: string; output: string; status: "running" | "ok" | "error"; error: string | null;
-  tool_calls: { name: string; input: Json; is_error: boolean; output_preview: string }[];
+  tool_calls: { name: string; input: Json; is_error: boolean; output_preview: string;
+                chars?: number; raw_chars?: number; server?: boolean }[];
   usage: { input_tokens?: number; output_tokens?: number; cache_read_input_tokens?: number; cache_creation_input_tokens?: number };
   started_at: string; finished_at: string | null;
 };
@@ -52,13 +53,31 @@ function Status({ r }: { r: Run }) {
   return <span className={`status ${r.status}`}>{label}</span>;
 }
 
+/** About 4 characters per token for English text and JSON. */
+const tokens = (chars: number) => Math.round(chars / 4);
+
+function Size({ c }: { c: Run["tool_calls"][number] }) {
+  if (c.chars == null) return null;
+  const saved = c.raw_chars && c.raw_chars > c.chars ? Math.round((1 - c.chars / c.raw_chars) * 100) : 0;
+  const big = tokens(c.chars) >= 4000;
+  return (
+    <span className={`tool-size ${big ? "big" : ""}`}
+          title={`${c.chars.toLocaleString()} characters sent to the model${c.raw_chars && c.raw_chars !== c.chars
+            ? ` (tool returned ${c.raw_chars.toLocaleString()})` : ""}${c.server ? "; fetched by Anthropic" : ""}`}>
+      ≈{k(tokens(c.chars))} tok{saved > 0 && <span className="muted"> · −{saved}%</span>}
+    </span>
+  );
+}
+
 function ToolCalls({ calls }: { calls: Run["tool_calls"] }) {
   if (!calls?.length) return null;
+  const total = calls.reduce((s, c) => s + (c.chars ?? 0), 0);
   return (
     <div className="trace-tools">
+      {total > 0 && <div className="trace-label">Tool results ≈{k(tokens(total))} tokens</div>}
       {calls.map((c, i) => (
         <details key={i} className={c.is_error ? "tool-error" : ""}>
-          <summary>🔧 {c.name}{c.is_error && " (failed)"}</summary>
+          <summary>🔧 {c.name}{c.server && <span className="muted"> (Anthropic)</span>}{c.is_error && " (failed)"} <Size c={c} /></summary>
           <pre>{JSON.stringify(c.input, null, 2)}</pre>
           <pre className="preview">{c.output_preview}</pre>
         </details>

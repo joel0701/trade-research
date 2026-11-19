@@ -99,8 +99,26 @@ def html_to_text(raw: str) -> str:
     return re.sub(r"\n\s*\n+", "\n\n", text).strip()
 
 
-async def sec_filing_text(url: str, find: str = "", max_chars: int = 20000) -> str:
-    """Read a filing document as plain text, optionally starting at a phrase like 'Risk Factors'."""
+ITEM_HEADING = re.compile(r"^\s*(item\s+\d+[a-z]?\.?[^\n]{0,90}|part\s+[ivx]+\b[^\n]{0,60})$", re.I | re.M)
+
+
+def filing_sections(text: str, limit: int = 40) -> list[str]:
+    """Distinct section headings (Item 1A. Risk Factors, Part II, …) in reading order."""
+    seen, out = set(), []
+    for m in ITEM_HEADING.finditer(text):
+        h = " ".join(m.group(1).split())
+        key = h.lower()[:40]
+        if key not in seen:
+            seen.add(key)
+            out.append(h)
+        if len(out) >= limit:
+            break
+    return out
+
+
+async def sec_filing_text(url: str, find: str = "", max_chars: int = 20000, offset: int = 0) -> str:
+    """Read a filing document as plain text: from a phrase like 'Risk Factors', or from an offset.
+    Without either, it starts with a list of the filing's sections."""
     if not url.startswith("https://www.sec.gov/"):
         return "Only https://www.sec.gov/ document URLs (from sec_filings) can be read."
     async with httpx.AsyncClient() as client:
@@ -108,14 +126,24 @@ async def sec_filing_text(url: str, find: str = "", max_chars: int = 20000) -> s
             text = html_to_text((await _get(client, url)).text)
         except EdgarError as e:
             return str(e)
-    start = 0
+    start, head = max(0, int(offset or 0)), ""
     if find:
         hits = [m.start() for m in re.finditer(re.escape(find), text, re.I)]
         # The first hit is usually the table of contents; prefer a later one if there is one.
-        start = hits[1] if len(hits) > 1 else (hits[0] if hits else 0)
-    chunk = text[start:start + max(1000, min(max_chars, 60000))]
-    note = "" if not find or start else f"(phrase '{find}' not found; showing the start)\n"
-    return f"{note}{chunk}" + ("\n…[truncated]" if start + len(chunk) < len(text) else "")
+        start = hits[1] if len(hits) > 1 else (hits[0] if hits else start)
+        if not hits:
+            head = f"(phrase '{find}' not found; showing from offset {start:,})\n"
+    elif not offset:
+        sections = filing_sections(text)
+        if sections:
+            head = ("Sections in this filing (read one with find=\"<heading>\"):\n- " + "\n- ".join(sections)
+                    + f"\n\nDocument length: {len(text):,} characters. Start of the document:\n\n")
+    size = max(1000, min(int(max_chars or 20000), 60000))
+    chunk = text[start:start + size]
+    end = start + len(chunk)
+    more = (f"\n…[characters {start:,}-{end:,} of {len(text):,}. Continue with offset={end}, "
+            "or jump to a section with find.]" if end < len(text) else "")
+    return f"{head}{chunk}{more}"
 
 
 def _v(el: ET.Element | None, path: str) -> str | None:

@@ -237,12 +237,14 @@ PYTHON_TOOLS: dict[str, PythonTool] = {
         sec_edgar.sec_filings,
     ),
     "sec_filing_text": PythonTool(
-        "Read an SEC filing document as plain text, optionally starting at a section such as "
-        "'Risk Factors' or 'Management's Discussion'. Takes a URL returned by sec_filings.",
+        "Read an SEC filing document as plain text. Without find/offset it lists the filing's sections first; "
+        "use find='Risk Factors' (or another heading) to jump to a section, and offset to continue reading. "
+        "Takes a URL returned by sec_filings.",
         {"type": "object", "properties": {
             "url": {"type": "string", "description": "An https://www.sec.gov/Archives/... document URL"},
             "find": {"type": "string", "description": "Phrase to start reading from (optional)"},
             "max_chars": {"type": "integer", "description": "How much text to return (default 20000)"},
+            "offset": {"type": "integer", "description": "Character offset to continue reading from"},
         }, "required": ["url"]},
         sec_edgar.sec_filing_text,
     ),

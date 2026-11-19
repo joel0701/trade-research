@@ -128,12 +128,14 @@ async def run_agent_openai(*, provider: Provider, model: "ModelConfig", system: 
 
         async def run_one(t: dict[str, Any]) -> dict[str, Any]:
             await emit({"type": "tool_call", "source": source, "name": t["name"], "input": t["input"]})
+            meta: dict[str, Any] = {}
             if "_invalid_json" in t["input"]:
                 out, is_error = "Tool arguments were not valid JSON; please retry.", True
             else:
-                out, is_error = await toolbox.execute(t["name"], t["input"])
+                out, is_error = await toolbox.execute(t["name"], t["input"], meta)
             result.tool_calls.append({"name": t["name"], "input": t["input"], "is_error": is_error,
-                                      "output_preview": out[:500]})
+                                      "output_preview": out[:500], "chars": len(out),
+                                      "raw_chars": meta.get("raw_chars", len(out))})
             return {"type": "tool_result", "tool_use_id": t["id"], "content": out, "is_error": is_error}
 
         tool_results = list(await asyncio.gather(*(run_one(t) for t in tool_uses)))

@@ -20,7 +20,18 @@ from app.tools.python_tools import PYTHON_TOOLS
 log = logging.getLogger(__name__)
 
 Executor = Callable[[dict[str, Any]], Awaitable[str]]
-MAX_RESULT_CHARS = 40_000  # keep any single tool result from flooding context
+from app.tools.compact import PAGE_CHARS, compact_text, find_in, page  # noqa: E402
+
+READ_MORE = {
+    "name": "read_more",
+    "description": ("Read more of a long tool result that was split into pages (its note gives the result_id). "
+                    "Use offset to read the next page, or find to get the passages that mention a keyword."),
+    "input_schema": {"type": "object", "properties": {
+        "result_id": {"type": "string"},
+        "offset": {"type": "integer", "description": "Character offset to read from"},
+        "find": {"type": "string", "description": "Keyword or phrase to search for in the full result"}},
+        "required": ["result_id"]},
+}
 
 # Anything that can place, change or cancel orders (or move money) is never exposed to the
 # agents, whatever a source's allowed_tools says. Trading needs a per-order confirmation flow first.
@@ -79,6 +90,7 @@ class Toolbox:
         self.executors: dict[str, Executor] = {}
         self.skipped: list[tuple[str, str]] = []  # (tool name, reason) for the trace/logs
         self._stack = AsyncExitStack()
+        self._results: dict[str, str] = {}  # long results, kept whole so read_more can page through them
 
     def add(self, definition: dict[str, Any], executor: Executor | None = None) -> None:
         self.definitions.append(definition)
@@ -120,20 +132,38 @@ class Toolbox:
             except Exception:
                 log.exception("Failed to connect to MCP server for %s", [t.slug for t in group])
                 self.skipped.extend((t.name, "connection failed") for t in group)
+        self.add(READ_MORE, self._read_more)
         return self
+
+    async def _read_more(self, args: dict[str, Any]) -> str:
+        full = self._results.get(str(args.get("result_id", "")))
+        if full is None:
+            return "Unknown result_id. Use the id given in a long result's note."
+        if args.get("find"):
+            return find_in(full, str(args["find"]))
+        return page(full, str(args["result_id"]), int(args.get("offset") or 0))
 
     async def __aexit__(self, *exc: object) -> None:
         await self._stack.aclose()
 
-    async def execute(self, name: str, args: dict[str, Any]) -> tuple[str, bool]:
-        """Run a client-side tool. Returns (result_text, is_error)."""
+    async def execute(self, name: str, args: dict[str, Any], meta: dict[str, Any] | None = None) -> tuple[str, bool]:
+        """Run a client-side tool. Returns (result_text, is_error). JSON results are compacted, and
+        long results are split into pages (read_more) instead of being cut off. meta gets the sizes:
+        raw_chars (as the tool returned it) and chars (what the model receives)."""
         fn = self.executors.get(name)
         if fn is None:
             return f"Unknown tool: {name}", True
         try:
-            out = await fn(args)
-            if len(out) > MAX_RESULT_CHARS:
-                out = out[:MAX_RESULT_CHARS] + "\n...[truncated]"
+            raw = await fn(args)
+            out = raw
+            if name != "read_more":
+                out = compact_text(raw)
+                if len(out) > PAGE_CHARS:
+                    rid = f"r{len(self._results) + 1}"
+                    self._results[rid] = out
+                    out = page(out, rid)
+            if meta is not None:
+                meta.update(raw_chars=len(raw), chars=len(out))
             return out, False
         except Exception as e:  # report tool failures to the model rather than crashing
             log.exception("Tool %s failed", name)

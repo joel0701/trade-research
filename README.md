@@ -240,6 +240,27 @@ should use it. For a local MCP server, use `{"transport": "stdio", "command": ".
 Add a function and schema to `PYTHON_TOOLS` in `backend/app/tools/python_tools.py`, then add a
 Tool with kind `python` and `{"function": "<name>"}`.
 
+### Tool results: size, compaction and paging
+
+Tool results are what makes specialists expensive: each step of a specialist re-sends everything so far,
+so a large result is paid for again on every later step. To keep them small without losing information:
+
+- **Compaction (lossless):** JSON results such as price bars, option chains and fundamentals are sent as
+  compact tables (field names once, not on every row), without empty fields, with floats rounded to
+  4 decimals (4 significant digits below 1).
+- **Paging instead of cutting:** a result longer than about 4,000 tokens is sent as its first page with a
+  note saying how much is left. The agent can read on, or search the whole result for a keyword, with the
+  `read_more` tool. Nothing is cut off silently.
+- **SEC filings:** reading a filing starts with a list of its sections (Item 1A. Risk Factors, Item 7…);
+  the agent jumps to the one it needs with `find`, or continues with `offset`.
+- **Measurement:** the trace shows each tool result's size in tokens (amber when large) and how much
+  compaction saved, with a total per run. Claude's own web search and fetch results are measured too;
+  those are fetched by Anthropic, so the app can't page them.
+
+**Strict team mode** (Tools → Models, per model; off by default) makes a Lead consult each specialist at
+most once and 3 times in total, with short specialist reports. It's faster on slow local models but may
+reduce quality. By default every Lead may consult each specialist up to twice and 5 times in total.
+
 ## Data sources
 
 Built-in market data uses Yahoo Finance via `yfinance`: free and good enough for research, but

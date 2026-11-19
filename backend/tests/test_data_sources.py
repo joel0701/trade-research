@@ -45,7 +45,7 @@ async def test_sources_share_one_connection(monkeypatch):
     async with Toolbox([quotes, account], {1: conn}) as tb:
         names = sorted(d["name"] for d in tb.definitions)
         assert opened == [("https://example.test/mcp", "IBKR_MCP_TOKEN")]  # one session for both sources
-        assert names == ["ibkr__get_account_positions", "ibkr__get_price_snapshot"]  # order tool blocked
+        assert [n for n in names if n != "read_more"] == ["ibkr__get_account_positions", "ibkr__get_price_snapshot"]  # order tool blocked
         assert await tb.execute("ibkr__get_price_snapshot", {"symbol": "EQT"}) == ("get_price_snapshot ok", False)
 
 
@@ -55,7 +55,7 @@ async def test_unavailable_sources_are_skipped(monkeypatch):
                       config={"url": "https://example.test/mcp"})
     tool = Tool(id=10, slug="q", name="IBKR quotes", kind="mcp_server", connection_id=1)
     async with Toolbox([tool], {1: conn}) as tb:
-        assert tb.definitions == [] and tb.skipped == [("IBKR quotes", "set IBKR_MCP_TOKEN in .env")]
+        assert [d["name"] for d in tb.definitions] == ["read_more"] and tb.skipped == [("IBKR quotes", "set IBKR_MCP_TOKEN in .env")]
 
 
 def test_trading_tools_detected():

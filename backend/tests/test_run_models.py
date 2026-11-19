@@ -46,7 +46,7 @@ def test_skill_sources_limit_its_run_but_not_follow_ups(monkeypatch):
         r = c.post(f"/api/skills/{skill['id']}/run", json={"params": {"ticker": "CRWV"}}).json()
         send(c, r["session_id"], {"text": r["prompt"]})
         leads = [k for k in fake.calls if "Your team" in k["system"]]
-        first = {x["name"] for x in leads[0]["tools"]}
+        first = {x["name"] for x in leads[0]["tools"]} - {"read_more"}
         assert first == {"consult_technical_analyst"}  # only the role holding the skill's source
         n = len(leads)
         send(c, r["session_id"], {"text": "And the fundamentals?"})
@@ -225,8 +225,8 @@ def test_lead_consults_each_specialist_at_most_twice_per_question(monkeypatch):
         assert len(runs) == 2
 
 
-def test_local_lead_gets_stricter_limits_and_concise_reports(monkeypatch):
-    """A local Lead: each specialist once, 3 consults in total, concise (trimmed) reports."""
+def test_strict_team_mode_on_a_local_lead(monkeypatch):
+    """Local Leads get the default limits; with strict team mode on: 1 per specialist, 3 in total, concise reports."""
     import httpx
     from types import SimpleNamespace as NS
     from app.llm import openai_loop, providers
@@ -260,10 +260,18 @@ def test_local_lead_gets_stricter_limits_and_concise_reports(monkeypatch):
     monkeypatch.setattr(loop, "client", lambda: fake)
     with TestClient(app) as c:
         tool = c.post("/api/local-models", json={"provider": "lmstudio", "model_id": "qwen/qwen3.8-27b"}).json()
+        # Default: the same limits as any Lead (all five asks are within 2 per specialist / 5 in total).
+        sid = c.post("/api/sessions", json={"lead_model_tool_id": tool["id"]}).json()["id"]
+        send(c, sid, {"text": "What news is driving COLM, CRI and CGGR?"})
+        assert "2 consult(s) per specialist, 5 in total" in seen["calls"][0]["messages"][0]["content"]
+        assert len([r for r in c.get(f"/api/sessions/{sid}/runs").json() if r["parent_run_id"]]) == 5
+        # Strict team mode on for this model.
+        c.put(f"/api/tools/{tool['id']}", json={"config": {**tool["config"], "strict_team": True}})
+        seen.clear()
         sid = c.post("/api/sessions", json={"lead_model_tool_id": tool["id"]}).json()["id"]
         send(c, sid, {"text": "What news is driving COLM, CRI and CGGR?"})
         system = seen["calls"][0]["messages"][0]["content"]
-        assert "1 consult(s) per specialist, 3 in total" in system and "You run on a local model" in system
+        assert "1 consult(s) per specialist, 3 in total" in system and "Strict team mode" in system
         ran = [r["role_slug"] for r in c.get(f"/api/sessions/{sid}/runs").json() if r["parent_run_id"]]
         assert sorted(ran) == ["finance_analyst", "news_analyst", "technical_analyst"]  # 2nd News + Sector Mapper skipped
         assert sum(r.startswith("Not run:") for r in seen["results"]) == 2

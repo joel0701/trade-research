@@ -68,8 +68,10 @@ async def _call_tools(calls: list[dict[str, Any]], toolbox: "Toolbox", emit: "Em
                       result: "LoopResult") -> list[dict[str, Any]]:
     async def one(c: dict[str, Any]) -> dict[str, Any]:
         await emit({"type": "tool_call", "source": source, "name": c["name"], "input": c["input"]})
-        out, is_error = await toolbox.execute(c["name"], c["input"])
-        result.tool_calls.append({"name": c["name"], "input": c["input"], "is_error": is_error, "output_preview": out[:500]})
+        meta: dict[str, Any] = {}
+        out, is_error = await toolbox.execute(c["name"], c["input"], meta)
+        result.tool_calls.append({"name": c["name"], "input": c["input"], "is_error": is_error, "output_preview": out[:500],
+                                  "chars": len(out), "raw_chars": meta.get("raw_chars", len(out))})
         return {"type": "tool_result", "tool_use_id": c["id"], "content": out, "is_error": is_error}
     return list(await asyncio.gather(*(one(c) for c in calls)))
 

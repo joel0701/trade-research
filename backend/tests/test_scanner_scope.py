@@ -85,10 +85,10 @@ def test_scope_limits_team_and_gives_unheld_sources_to_lead(monkeypatch):
             lead_call = next(k for k in fake.calls if "Your team" in k["system"])
             tool_names = {d["name"] for d in lead_call["tools"]}
             # Only specialists holding a scoped source (both hold Yahoo technical snapshot); FINRA ATS -> Lead.
-            assert tool_names == {"consult_technical_analyst", "consult_strategy_optimizer", "finra_ats_weekly"}
+            assert tool_names - {"read_more"} == {"consult_technical_analyst", "consult_strategy_optimizer", "finra_ats_weekly"}
             assert "limited to these data sources" in lead_call["system"]
             spec_call = next(k for k in fake.calls if k["model"] == "claude-sonnet-5-5")
-            assert {d["name"] for d in spec_call["tools"]} == {"technical_snapshot"}
+            assert {d["name"] for d in spec_call["tools"]} - {"read_more"} == {"technical_snapshot"}
             # Role settings themselves are untouched.
             assert next(r for r in c.get("/api/roles").json() if r["slug"] == "technical_analyst")["tool_ids"]
         finally:

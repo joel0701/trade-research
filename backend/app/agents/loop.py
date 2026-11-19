@@ -6,6 +6,7 @@ calls (in parallel), feed results back, repeat until the model is done. Kept man
 every message, and dispatch to specialist sub-agents.
 """
 import asyncio
+import json
 import logging
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
@@ -43,6 +44,9 @@ class ModelConfig:
     fallbacks: Any = None  # Claude only: "default" -> server-side refusal fallback
     show_thinking: bool = False  # Claude only
     params: dict[str, Any] = field(default_factory=dict)  # extra request params (other vendors)
+    # As the Lead: 1 consult per specialist, 3 in total, concise specialist reports. Faster (useful for
+    # slow local models) but may reduce quality. Off by default.
+    strict_team: bool = False
 
     @classmethod
     def from_tool_config(cls, cfg: dict[str, Any]) -> "ModelConfig":
@@ -120,6 +124,11 @@ async def run_agent(
 
         _add_usage(result.usage, final.usage)
         content = [b.to_dict() for b in final.content]
+        for b in content:  # server-side tool results (Claude web search / fetch): measure them too
+            if b.get("type", "").endswith("_tool_result") and b.get("type") != "tool_result":
+                size = len(json.dumps(b, default=str))
+                result.tool_calls.append({"name": b["type"].removesuffix("_tool_result"), "input": {}, "server": True,
+                                          "is_error": False, "output_preview": "", "chars": size, "raw_chars": size})
         text = "".join(b.text for b in final.content if b.type == "text")
         tool_uses = [b for b in final.content if b.type == "tool_use"]
         messages.append({"role": "assistant", "content": content})
@@ -142,9 +151,11 @@ async def run_agent(
 
         async def run_one(block: Any) -> dict[str, Any]:
             await emit({"type": "tool_call", "source": source, "name": block.name, "input": block.input})
-            out, is_error = await toolbox.execute(block.name, block.input if isinstance(block.input, dict) else {})
+            meta: dict[str, Any] = {}
+            out, is_error = await toolbox.execute(block.name, block.input if isinstance(block.input, dict) else {}, meta)
             result.tool_calls.append({"name": block.name, "input": block.input, "is_error": is_error,
-                                      "output_preview": out[:500]})
+                                      "output_preview": out[:500], "chars": len(out),
+                                      "raw_chars": meta.get("raw_chars", len(out))})
             return {"type": "tool_result", "tool_use_id": block.id, "content": out, "is_error": is_error}
 
         # All results go back in ONE user message (keeps parallel tool use working).

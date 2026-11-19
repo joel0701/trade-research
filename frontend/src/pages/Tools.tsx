@@ -206,6 +206,13 @@ export default function Tools() {
             <p className="muted small">{MODEL_HELP}</p>
             <Field label="Description" value={t.description} onChange={(description) => set({ description })} multiline rows={2} />
             <JsonField label="Config" value={t.config} onChange={(config) => set({ config })} />
+            <Toggle label="Strict team mode when this model is the Lead" value={!!t.config?.strict_team}
+                    onChange={(on) => set({ config: { ...t.config, strict_team: on } })} />
+            <p className="muted small" style={{ marginTop: 2 }}>
+              Off (default): up to 2 consults per specialist and 5 in total per question. On: 1 per specialist, 3 in
+              total, and specialists keep their reports short. Faster, useful for slow local models, but may reduce
+              quality.
+            </p>
             {models[t.id] && (models[t.id].available
               ? (models[t.id].local && models[t.id].loaded === false
                   ? <p className="error small">Not loaded: load it in {models[t.id].provider_name} first (or turn on just-in-time loading there).</p>
