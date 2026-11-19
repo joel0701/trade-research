@@ -25,7 +25,7 @@ def fake_get(running: dict[str, list[str]]):
 
 def test_discover_and_add_local_models(monkeypatch):
     providers._reach_cache.clear()
-    monkeypatch.setattr(httpx, "get", fake_get({"http://localhost:11434/v1": ["llama3.1:8b", "qwen2.5:14b"],
+    monkeypatch.setattr(httpx, "get", fake_get({"http://localhost:11434/v1": ["llama3.1:8b", "qwen2.5:14b", "nomic-embed-text"],
                                                 "http://localhost:8080/v1": ["mlx-community/Qwen2.5-7B-Instruct-4bit"]}))
     with TestClient(app) as c:
         servers = {s["provider"]: s for s in c.get("/api/local-models").json()}

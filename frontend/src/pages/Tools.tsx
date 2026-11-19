@@ -68,9 +68,10 @@ function LocalModels({ onAdded }: { onAdded: () => void }) {
                     {s.models.map((m: Json) => (
                       <span key={m.model_id} className="local-model">
                         <code>{m.model_id}</code>
-                        {m.tool_id ? <span className="muted small">added</span> :
-                          <button className="act" disabled={busy === `${s.provider}:${m.model_id}`}
-                                  onClick={() => add(s.provider, m.model_id)}>+ Add</button>}
+                        {m.tool_id ? <span className="local-added">✓ in your models</span> :
+                          <button className="act act-accent" disabled={busy === `${s.provider}:${m.model_id}`}
+                                  title="Add it to your models so it appears in the model picker"
+                                  onClick={() => add(s.provider, m.model_id)}>+ Add to models</button>}
                       </span>
                     ))}
                   </div>
@@ -78,6 +79,10 @@ function LocalModels({ onAdded }: { onAdded: () => void }) {
               </li>
             ))}
           </ul>
+          {running.some((s) => s.models.some((m: Json) => !m.tool_id)) && (
+            <p className="muted small">A green dot means the server is running. Click <strong>+ Add to models</strong> to
+              make a model selectable in Research, Roles, Skills and Scanners.</p>
+          )}
           {running.length === 0 && (
             <p className="muted small">No local server is running. Start Ollama (<code>ollama serve</code>, then
               <code> ollama pull qwen2.5:14b</code>), LM Studio's local server, or MLX

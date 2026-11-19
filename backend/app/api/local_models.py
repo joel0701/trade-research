@@ -13,6 +13,7 @@ from app.llm.providers import PROVIDERS, server_up
 from app.models import Tool
 
 router = APIRouter()
+EMBEDDING = re.compile(r"embed|bge-|e5-|minilm|rerank", re.I)
 LOCAL = [p for p in PROVIDERS.values() if p.local]
 
 
@@ -21,7 +22,8 @@ def _installed(base_url: str) -> list[str]:
         data = httpx.get(base_url.rstrip("/") + "/models", timeout=2).json()
     except (httpx.HTTPError, ValueError):
         return []
-    return sorted(m.get("id", "") for m in data.get("data", []) if m.get("id"))
+    # Embedding models can't chat, so they're not offered.
+    return sorted(m["id"] for m in data.get("data", []) if m.get("id") and not EMBEDDING.search(m["id"]))
 
 
 @router.get("/local-models")

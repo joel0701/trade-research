@@ -465,3 +465,4 @@ select.model-select { border-left-width: 4px; border-left-style: solid; }
 .local-model { display: inline-flex; align-items: center; gap: 8px; padding: 3px 4px 3px 8px; border: 1px solid var(--border);
                border-radius: 8px; background: var(--raised); }
 .local-model .act { padding: 2px 8px; font-size: 12px; }
+.local-added { font-size: 12px; color: var(--ok-fg); padding-right: 6px; }

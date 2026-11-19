@@ -223,7 +223,7 @@ export default function Composer({ placeholder, busy, models, modelId, defaultMo
                   })}
                 </div>
               ))}
-              <div className="muted small pop-foot">Only vendors with an API key in .env are listed. Specialists keep the models set in Roles.</div>
+              <div className="muted small pop-foot">Listed: vendors with an API key in .env, and local models you added (while their server runs). Specialists keep the models set in Roles.</div>
             </div>
           )}
         </div>
