@@ -1,5 +1,5 @@
 /** Interactive tables for markdown answers: sticky header, sorting, row highlight, filter, copy as CSV. */
-import { ReactNode, useMemo, useRef, useState } from "react";
+import { memo, ReactNode, useMemo, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 
@@ -162,11 +162,15 @@ export function DataTable({ node }: { node: HastNode }) {
   );
 }
 
-/** Markdown with interactive tables (used for answers and the trace). */
-export function Markdown({ text }: { text: string }) {
-  return (
-    <ReactMarkdown remarkPlugins={[remarkGfm]} components={{ table: ({ node }) => <DataTable node={node as any} /> }}>
-      {text}
-    </ReactMarkdown>
-  );
+// Defined once: a component created inside render would be a new type on every render, so React
+// would rebuild each table (losing its scroll position, sort and selected row) whenever the page updates.
+function MarkdownTable({ node }: { node?: unknown }) {
+  return <DataTable node={node as HastNode} />;
 }
+const COMPONENTS = { table: MarkdownTable };
+const PLUGINS = [remarkGfm];
+
+/** Markdown with interactive tables (used for answers and the trace). Re-renders only when the text changes. */
+export const Markdown = memo(function Markdown({ text }: { text: string }) {
+  return <ReactMarkdown remarkPlugins={PLUGINS} components={COMPONENTS}>{text}</ReactMarkdown>;
+});
