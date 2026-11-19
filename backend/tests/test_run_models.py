@@ -191,3 +191,35 @@ def test_plain_skill_answer_gets_next_steps(monkeypatch):
         send(c, r["session_id"], {"text": "And the risks?"})
         assert not any("### Suggested next steps" in k["system"] for k in fake.calls[n:] if "Your team" in k["system"])
 
+
+
+def test_lead_consults_each_specialist_at_most_twice_per_question(monkeypatch):
+    """A Lead that asks the same specialist once per ticker is capped; the extra consult isn't run."""
+    from tests.test_orchestrator import msg
+
+    class PerTickerLead(FakeClient):
+        def respond(self, kw):
+            is_lead = "Your team" in kw["system"]
+            last = kw["messages"][-1]["content"]
+            got_results = isinstance(last, list) and any(b.get("type") == "tool_result" for b in last)
+            if is_lead and not got_results:
+                return msg([{"type": "tool_use", "id": f"tu_{t}", "name": "consult_news_analyst",
+                             "input": {"question": f"News on {t}?"}} for t in ("COLM", "CRI", "CGGR")], "tool_use")
+            if is_lead:
+                self.results = last
+                return msg([{"type": "text", "text": "Done."}], "end_turn")
+            return msg([{"type": "text", "text": "Some news."}], "end_turn", "claude-sonnet-5-5")
+
+    fake = PerTickerLead()
+    monkeypatch.setattr(loop, "client", lambda: fake)
+    with TestClient(app) as c:
+        sid = c.post("/api/sessions", json={}).json()["id"]
+        send(c, sid, {"text": "What news is driving COLM, CRI and CGGR?"})
+        lead_sys = next(k["system"] for k in fake.calls if "Your team" in k["system"])
+        assert "Ask each specialist once per question" in lead_sys and "at most 2 consults per specialist" in lead_sys
+        specialist_calls = [k for k in fake.calls if "Your team" not in k["system"]]
+        assert len(specialist_calls) == 2  # the third consult wasn't run
+        texts = [b["content"] if isinstance(b["content"], str) else b["content"][0]["text"] for b in fake.results]
+        assert sum("Not run: you've already consulted the News Analyst 2 times" in t for t in texts) == 1
+        runs = [r for r in c.get(f"/api/sessions/{sid}/runs").json() if r["role_slug"] == "news_analyst"]
+        assert len(runs) == 2
