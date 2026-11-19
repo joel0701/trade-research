@@ -100,13 +100,6 @@ Use a scanner to find candidates, and a skill to reason about them.
 - **Skill on its own:** for analyses that start from a ticker or a question rather than a scan, e.g.
   a full stock analysis or an earnings preview.
 
-Further reading:
-[agent skills guide](https://aerospike.com/blog/agent-skills-guide/) ·
-[skills vs. MCP tools](https://www.llamaindex.ai/blog/skills-vs-mcp-tools-for-agents-when-to-use-what) ·
-[workflows vs. skills](https://medium.com/@tarangtattva2/workflows-vs-skills-when-to-use-each-for-maximum-ai-productivity-ab9833c2a519) ·
-[AI screener vs. AI scanner](https://tickeron.com/trading-investing-101/faq-is-there-a-difference-between-the-ai-screener-and-ai-scanner/) ·
-[AI vs. traditional stock screeners](https://bananafarmer.app/learn/ai-stock-screener-vs-traditional)
-
 ## Configuring
 
 | Screen | What it controls |
