@@ -263,6 +263,11 @@ class StockList(SQLModel, table=True):
     symbol: str = ""        # index or ETF symbol / name used to find the source
     url: str = ""
     source_note: str = ""   # how and when the source was found (e.g. "Wikipedia search, 2026-11-20")
+    # Backup source, used when the main one fails (e.g. the ETF's holdings file first, Wikipedia second).
+    fallback_url: str = ""
+    fallback_column: str = "Symbol"
+    last_source: str = ""   # "main" or "backup": which source the current tickers came from
+    source_checked_at: datetime | None = Field(default=None, sa_type=UTCDateTime)  # last automatic ETF search
     column: str = "Symbol"
     refresh: str = "weekly"
     tickers: list[str] = Field(default_factory=list, sa_column=Column(JSON))

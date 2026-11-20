@@ -41,24 +41,26 @@ export default function StockLists({ header }: { header: React.ReactNode }) {
       <p className="muted small" style={{ maxWidth: 820 }}>Named ticker lists, such as an index, for rule-based scanners and for
         questions and skills (the Lead looks them up with the stock list tool). A list is refreshed only when something uses
         it and it's older than its schedule allows. Refreshing downloads the list (no AI model, no cost).</p></>}
-      blank={{ slug: "", name: "", description: "", symbol: "", source: "web", url: "", column: "Symbol", refresh: "weekly", tickers: [], enabled: true }}
+      blank={{ slug: "", name: "", description: "", symbol: "", source: "web", url: "", column: "Ticker", fallback_url: "",
+               fallback_column: "Symbol", refresh: "weekly", tickers: [], enabled: true }}
       rowExtra={(sl) => <span className="muted small nowrap">{sl.tickers?.length ? `${sl.tickers.length} · ` : ""}{sl.refresh}</span>}>
       {(sl, set) => (
         <>
-          <Field label="Name (how questions and skills refer to it, e.g. &quot;S&P 500&quot;)" value={sl.name} onChange={(name) => set({ name })} />
+          <Field label="Name (e.g. &quot;S&P 500 (SPY)&quot;; questions can use the name, the part before the brackets, or the ETF symbol)"
+                 value={sl.name} onChange={(name) => set({ name })} />
           <Field label="Slug (unique id)" value={sl.slug} onChange={(slug) => set({ slug })} />
           <Field label="Description" value={sl.description} onChange={(description) => set({ description })} />
           <label>Source</label>
           <select value={sl.source === "wikipedia" ? "web" : sl.source}
                   onChange={(e) => set({ source: e.target.value, refresh: e.target.value === "manual" ? "manual" : (sl.refresh === "manual" ? "weekly" : sl.refresh) })}>
-            <option value="web">Web page or CSV file (downloaded on refresh)</option>
+            <option value="web">Downloaded: ETF holdings file or web page (CSV, Excel or HTML table)</option>
             <option value="manual">Manual: tickers you maintain</option>
           </select>
           {sl.source !== "manual" && (
             <>
               <div className="find-source">
                 <div style={{ flex: 1 }}>
-                  <Field label="Index or ETF symbol (or name), e.g. SPX, QQQ, XLK, Russell 1000" value={sl.symbol ?? ""}
+                  <Field label="ETF symbol, e.g. SPY (S&P 500), QQQ (Nasdaq-100), DIA (Dow 30), XLK" value={sl.symbol ?? ""}
                          onChange={(symbol) => set({ symbol })} />
                 </div>
                 <button className="act act-accent" disabled={finding || !(sl.symbol || sl.name)} onClick={() => findSource(sl)}
@@ -66,12 +68,22 @@ export default function StockLists({ header }: { header: React.ReactNode }) {
                   {finding ? "Finding…" : "Find source"}
                 </button>
               </div>
-              <p className="muted small">Find source searches Wikipedia first (free). If that finds nothing (typical for ETFs),
-                the cheapest Claude model searches the web for the fund's holdings page or file (about a cent or two). Only a
-                source that downloads and parses correctly is saved. Use it again if a source moves.</p>
+              <p className="muted small">Find source looks for the ETF's official daily holdings file (main source) using the
+                cheapest Claude model with web search (about a cent or two), and a Wikipedia members table as backup (free).
+                Only sources that download and parse correctly are saved. Use it again if a source moves.</p>
               {sl.source_note && <p className="small" style={{ color: "var(--ok-fg)" }}>✓ {sl.source_note}</p>}
-              <Field label="Page or file address" value={sl.url} onChange={(url) => set({ url })} />
-              <Field label="Ticker column name (in the page's table or the file)" value={sl.column} onChange={(column) => set({ column })} />
+              <div className="src-block">
+                <div className="src-title">Main source <span className="muted small">· ETF holdings file or page (CSV, Excel or HTML table)</span>
+                  {sl.last_source === "main" && <span className="badge badge-ok">current tickers</span>}</div>
+                <Field label="Address" value={sl.url} onChange={(url) => set({ url })} />
+                <Field label="Ticker column name" value={sl.column} onChange={(column) => set({ column })} />
+              </div>
+              <div className="src-block">
+                <div className="src-title">Backup source <span className="muted small">· used if the main source fails (e.g. a Wikipedia table)</span>
+                  {sl.last_source === "backup" && <span className="badge badge-warn">current tickers</span>}</div>
+                <Field label="Address" value={sl.fallback_url ?? ""} onChange={(fallback_url) => set({ fallback_url })} />
+                <Field label="Ticker column name" value={sl.fallback_column ?? "Symbol"} onChange={(fallback_column) => set({ fallback_column })} />
+              </div>
               <label>Refresh schedule</label>
               <select value={sl.refresh} onChange={(e) => set({ refresh: e.target.value })}>
                 {SCHEDULES.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
@@ -86,7 +98,7 @@ export default function StockLists({ header }: { header: React.ReactNode }) {
           {sl.id && sl.source !== "manual" && (
             <p className="small">
               {sl.refreshed_at ? <span className="muted">Last refreshed {fmt(sl.refreshed_at)}. </span> : <span className="muted">Not downloaded yet. </span>}
-              {sl.last_error && <span className="error">Last refresh failed: {sl.last_error} </span>}
+              {sl.last_error && <span className="error">{sl.last_source === "backup" ? "" : "Last refresh failed: "}{sl.last_error} </span>}
               <button className="link" disabled={busy} onClick={() => refreshNow(sl)}>{busy ? "Refreshing…" : "Refresh now"}</button>
               {msg && !finding && <span className="muted"> {msg}</span>}
             </p>

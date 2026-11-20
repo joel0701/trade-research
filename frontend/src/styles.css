@@ -496,3 +496,5 @@ select.model-select { border-left-width: 4px; border-left-style: solid; }
 .menu-item:disabled { cursor: default; opacity: .75; }
 .find-source { display: flex; gap: 10px; align-items: flex-end; }
 .find-source .act { margin-bottom: 1px; white-space: nowrap; height: 34px; }
+.src-block { border: 1px solid var(--border); border-radius: 8px; padding: 4px 12px 10px; margin: 10px 0; background: var(--raised); }
+.src-title { font-size: 13px; font-weight: 600; margin-top: 8px; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }

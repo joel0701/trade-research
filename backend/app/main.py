@@ -89,11 +89,11 @@ def refresh_stock_list(list_id: int) -> dict[str, Any]:
 
 @app.post("/api/stock-lists/{list_id}/find-source")
 async def find_stock_list_source(list_id: int) -> dict[str, Any]:
-    """Work out where to download the list from (its symbol, else its name), verify it, and save it."""
+    """Find the ETF's holdings file (main source) and a Wikipedia table (backup), verify them, save them."""
     from fastapi import HTTPException
 
     from app.models import now
-    from app.screeners.discover import find_source
+    from app.screeners.discover import find_sources
     from app.screeners.universes import UniverseError
 
     with Session(engine) as db:
@@ -101,12 +101,27 @@ async def find_stock_list_source(list_id: int) -> dict[str, Any]:
         if sl is None:
             raise HTTPException(404)
         try:
-            found = await find_source(db, sl.symbol or sl.name, sl.column if sl.source in ("web", "wikipedia") else "")
+            found = await find_sources(db, sl.symbol, sl.name)
         except UniverseError as e:
             raise HTTPException(422, str(e)) from e
-        sl.source, sl.url, sl.column = "web", found["url"], found["column"]
-        sl.tickers, sl.refreshed_at, sl.last_error = found["tickers"], now(), None
-        sl.source_note = f"Found by {found['found_by']} on {now().date().isoformat()}"
+        day, notes = now().date().isoformat(), []
+        main, backup = found["main"], found["backup"]
+        if main:
+            sl.url, sl.column = main["url"], main["column"]
+            notes.append(f"ETF holdings found by {main['found_by']}")
+        elif found["main_error"]:
+            notes.append(f"no ETF holdings file found ({found['main_error']})")
+        if backup:
+            sl.fallback_url, sl.fallback_column = backup["url"], backup["column"]
+            notes.append(f"backup found by {backup['found_by']}")
+        best = main or backup
+        sl.source, sl.tickers, sl.refreshed_at, sl.last_error = "web", best["tickers"], now(), None
+        sl.last_source = "main" if main else "backup"
+        if not main:  # only a backup: keep it as the source used
+            sl.url, sl.column = sl.url or "", sl.column
+        text = "; ".join(notes)
+        sl.source_note = text[:1].upper() + text[1:] + f" ({day})"
+        sl.source_checked_at = now()
         if sl.refresh == "manual":
             sl.refresh = "weekly"
         db.add(sl)

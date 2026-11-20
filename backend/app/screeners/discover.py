@@ -1,11 +1,11 @@
 """Find where to download a stock list's members ("Find source" in Tools → Stock lists).
 
-1. Free: search Wikipedia for the index (its search API) and look for a table with a ticker column.
-2. If that finds nothing (typical for ETFs, whose holdings are on the fund issuer's site): ask the
-   cheapest available Claude model, with web search, for candidate pages or holdings files.
+- Main source: the ETF's official holdings file (or page) from the fund issuer, found by the cheapest
+  available Claude model with web search (issuer sites aren't searchable for free).
+- Backup source: a Wikipedia table of the index's members, found with Wikipedia's free search API.
 
 Every candidate is verified by downloading and parsing it; only a source that yields a plausible
-ticker list is used. Refreshing later is plain code, so the model is only used when you ask.
+ticker list is used. Refreshing later is plain code: the model is used only to find a source.
 """
 import json
 import logging
@@ -22,13 +22,13 @@ log = logging.getLogger(__name__)
 WIKI_API = "https://en.wikipedia.org/w/api.php"
 MODEL_ORDER = ["haiku", "sonnet", "opus", "fable"]  # cheapest first
 
-PROMPT = """Find a web page or downloadable file that lists ALL current members (constituents or holdings) of
-"{query}" with their ticker symbols, so a program can download it and read the tickers.
+PROMPT = """Find the official, downloadable list of ALL current holdings of the ETF "{query}" (or, if it's an
+index, of the main ETF that tracks it), with ticker symbols, so a program can download it daily.
 
 Prefer, in order:
-1. For an ETF: the fund issuer's official holdings download (a CSV file) or holdings page.
-2. For an index: a Wikipedia "list of constituents/components" page with a table of tickers.
-3. Another stable, public page with a full table of tickers.
+1. The fund issuer's daily holdings download: a CSV or Excel (.xlsx) file at a stable address.
+2. The issuer's holdings page, if it contains a full HTML table of tickers.
+Don't use Wikipedia or news sites.
 
 Reply with only a JSON object, no other text:
 {{"candidates": [{{"url": "https://...", "column": "<name of the ticker column>", "expected_count": <number or null>}}]}}
@@ -105,23 +105,41 @@ async def model_candidates(db: Session, query: str) -> tuple[list[dict[str, Any]
     return [c for c in cands if isinstance(c, dict) and str(c.get("url", "")).startswith("http")], name
 
 
-async def find_source(db: Session, query: str, column_hint: str = "") -> dict[str, Any]:
-    """{url, column, tickers, found_by}: the first verified source for the query. Raises UniverseError."""
-    query = query.strip()
-    if not query:
-        raise UniverseError("Enter the index or ETF symbol (or name) first.")
-    columns = [c for c in (column_hint, *TICKER_COLUMNS) if c]
-    for url in wikipedia_candidates(query):
-        got = _try(url, columns, min_count=10)
-        if got:
-            return {"url": url, "column": got[1], "tickers": got[0], "found_by": "Wikipedia search"}
-    cands, model_name = await model_candidates(db, query)
+async def find_etf_source(db: Session, symbol: str) -> dict[str, Any]:
+    """{url, column, tickers, found_by}: the ETF's verified holdings file/page. Raises UniverseError."""
+    cands, model_name = await model_candidates(db, symbol)
+    if model_name is None:
+        raise UniverseError("no Claude model is available to search for the ETF's holdings file")
     for c in cands:
-        got = _try(c["url"], [str(c.get("column") or ""), *columns], min_count=5)
+        got = _try(c["url"], [str(c.get("column") or ""), *TICKER_COLUMNS], min_count=5)
         if got:
             return {"url": c["url"], "column": got[1], "tickers": got[0], "found_by": f"web search ({model_name})"}
-    if model_name is None:
-        raise UniverseError(f"Couldn't find a members table for {query!r} on Wikipedia, and no Claude model is "
-                            "available to search the web. Enter the page or file address yourself.")
-    raise UniverseError(f"Couldn't find a downloadable members list for {query!r}. Enter the page or file address "
-                        "yourself (a page with a ticker table, or a holdings CSV).")
+    raise UniverseError(f"no downloadable holdings list found for {symbol!r}")
+
+
+def find_wikipedia_source(query: str) -> dict[str, Any] | None:
+    """{url, column, tickers, found_by} for a Wikipedia members table, or None (free)."""
+    for url in wikipedia_candidates(query):
+        got = _try(url, list(TICKER_COLUMNS), min_count=10)
+        if got:
+            return {"url": url, "column": got[1], "tickers": got[0], "found_by": "Wikipedia search"}
+    return None
+
+
+async def find_sources(db: Session, symbol: str, index_name: str = "") -> dict[str, Any]:
+    """{"main": ... or None, "backup": ... or None, "main_error": str | None}. Raises if neither is found."""
+    symbol = symbol.strip()
+    if not symbol and not index_name.strip():
+        raise UniverseError("Enter the ETF symbol (or index name) first.")
+    main, main_error = None, None
+    if symbol:
+        try:
+            main = await find_etf_source(db, symbol)
+        except UniverseError as e:
+            main_error = str(e)
+    query = re.sub(r"\(.*?\)", "", index_name).strip() or symbol
+    backup = find_wikipedia_source(query)
+    if not main and not backup:
+        raise UniverseError(f"Couldn't find a source for {symbol or query!r} ({main_error or 'nothing on Wikipedia'}). "
+                            "Enter the page or file address yourself.")
+    return {"main": main, "backup": backup, "main_error": main_error}
