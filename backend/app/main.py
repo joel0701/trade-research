@@ -43,6 +43,17 @@ async def lifespan(_: FastAPI):
 
 
 app = FastAPI(title="Trade Research", lifespan=lifespan)
+
+
+@app.exception_handler(Exception)
+async def unexpected_error(request, exc: Exception):
+    """Any unexpected error comes back as a readable message (not a plain-text 500, which the UI would
+    mistake for the backend being down), with the full traceback in the backend log."""
+    from fastapi.responses import JSONResponse
+
+    logging.getLogger("app.errors").exception("%s %s failed", request.method, request.url.path)
+    return JSONResponse(status_code=500, content={"detail": f"Something went wrong: {type(exc).__name__}: {exc}. "
+                                                            "Details are in data/logs/backend-latest.log."})
 app.add_middleware(CORSMiddleware, allow_origins=CORS_ORIGINS, allow_methods=["*"], allow_headers=["*"])
 
 for model, prefix in [(Tool, "/tools"), (Connection, "/connections"), (Role, "/team"), (Skill, "/skills"),

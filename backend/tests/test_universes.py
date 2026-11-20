@@ -225,3 +225,14 @@ def test_excel_holdings_file():
     pd.DataFrame(rows).to_excel(buf, header=False, index=False)
     assert universes.parse_source(buf.getvalue(), "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                                   "https://issuer.test/holdings-dia.xlsx", "Ticker")[:3] == ["T0", "T1", "T2"]
+
+
+def test_unexpected_errors_come_back_as_readable_json(monkeypatch):
+    def boom(*a, **kw):
+        raise RuntimeError("disk on fire")
+    monkeypatch.setattr(universes, "get_list", boom)
+    with TestClient(app, raise_server_exceptions=False) as c:
+        sc = next(s for s in c.get("/api/screeners").json() if s["slug"] == "oversold_uptrend")
+        r = c.post(f"/api/screeners/{sc['id']}/run", json={"universe_index": "sp500", "universe": []})
+        assert r.status_code == 500 and r.headers["content-type"].startswith("application/json")
+        assert "RuntimeError: disk on fire" in r.json()["detail"] and "backend-latest.log" in r.json()["detail"]

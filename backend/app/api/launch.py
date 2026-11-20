@@ -101,7 +101,7 @@ async def run_skill(skill_id: int, body: SkillRun, db: Session = Depends(get_ses
 
     # Built on a scanner: the scan (no LLM), then the skill's prompt evaluates the results with the
     # skill's model. Follow-up questions use the Research default.
-    universe, lines, note = ([], [], None) if scr.source == "ibkr" else resolve_universe(db, scr)
+    universe, lines, note = ([], [], None) if scr.source == "ibkr" else await _resolve_off_loop(scr.id)
     settings, results, scan_label, rows = await scan(scr, dict(scr.params), universe, lines, note)
     chat = ChatSession(title=f"{skill.name}: {label}".strip(": ") + f" ({len(rows)} results)", origin=f"skill:{skill.id}",
                        next_turn_model_tool_id=model_id,
@@ -147,6 +147,20 @@ def resolve_universe(db: Session, scr: Screener, tickers: list[str] | None = Non
     if added:
         lines.append(f"Extra tickers: **{', '.join(added[:30])}**" + (f" (+{len(added) - 30} more)" if len(added) > 30 else ""))
     return combined, lines, note
+
+
+async def _resolve_off_loop(screener_id: int, tickers: list[str] | None = None, index: str | None = None,
+                            index_set: bool = False) -> tuple[list[str], list[str], str | None]:
+    """resolve_universe on a worker thread with its own session: refreshing a stock list can take a
+    while (downloads, maybe a model call), and the server must keep answering other requests."""
+    import asyncio
+
+    from app.db import engine
+
+    def work():
+        with Session(engine) as db2:
+            return resolve_universe(db2, db2.get(Screener, screener_id), tickers, index, index_set)
+    return await asyncio.to_thread(work)
 
 
 @router.get("/universes")
@@ -248,8 +262,8 @@ async def run_screen(screener_id: int, body: ScannerRun | None = None,
         raise HTTPException(404)
     body = body or ScannerRun()
     params = {**scr.params, **{k: v for k, v in body.params.items() if k in RUN_PARAM_KEYS and v not in ("", None)}}
-    universe, lines, note = ([], [], None) if scr.source == "ibkr" else resolve_universe(
-        db, scr, body.universe, body.universe_index, "universe_index" in body.model_fields_set)
+    universe, lines, note = ([], [], None) if scr.source == "ibkr" else await _resolve_off_loop(
+        scr.id, body.universe, body.universe_index, "universe_index" in body.model_fields_set)
     if scr.source != "ibkr" and not universe:
         raise HTTPException(422, "Add at least one ticker to scan, or choose an index.")
     settings, results, label, rows = await scan(scr, params, universe, lines, note)
