@@ -68,6 +68,8 @@ export default function StockLists({ header }: { header: React.ReactNode }) {
                   {finding ? "Finding…" : "Find source"}
                 </button>
               </div>
+              {finding && <p className="muted small"><span className="spinner small" /> Searching for the ETF's holdings file and a
+                backup, and checking each one. This can take a minute or two.</p>}
               <p className="muted small">Find source looks for the ETF's official daily holdings file (main source) using the
                 cheapest Claude model with web search (about a cent or two), and a Wikipedia members table as backup (free).
                 Only sources that download and parse correctly are saved. Use it again if a source moves.</p>

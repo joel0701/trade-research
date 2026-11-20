@@ -150,7 +150,7 @@ def test_find_source_etf_main_and_wikipedia_backup(monkeypatch):
     class R:
         def __init__(self, text, ctype="text/html"):
             self.text, self.headers = text, {"content-type": ctype}
-            self.content = text.encode()
+            self.content, self.status_code = text.encode(), 200
 
         def raise_for_status(self):
             pass
@@ -273,3 +273,43 @@ def test_find_source_explains_why_no_model_searched(monkeypatch):
         out = c.post(f"/api/stock-lists/{r['id']}/find-source")
         assert "ANTHROPIC_API_KEY isn't set" in out.json()["detail"]
         c.delete(f"/api/stock-lists/{r['id']}")
+
+
+def test_find_source_reports_why_each_candidate_failed_and_reads_excel(monkeypatch):
+    import io
+    import pandas as pd
+    from app.screeners import discover
+
+    buf = io.BytesIO()
+    pd.DataFrame([["Fund Name:", "SPDR"], ["Name", "Ticker"]] + [[f"Co {i}", f"T{i}"] for i in range(503)]).to_excel(
+        buf, header=False, index=False)
+    xlsx = buf.getvalue()
+
+    class R:
+        def __init__(self, status, content=b"", ctype="text/html"):
+            self.status_code, self.content, self.headers = status, content, {"content-type": ctype}
+
+    def fake_get(url, **kw):
+        if "refused" in url:
+            return R(403)
+        if "top10" in url:
+            return R(200, ("<table><tr><th>Ticker</th></tr>" + "".join(f"<tr><td>A{i}</td></tr>" for i in range(10))
+                           + "</table>").encode())
+        return R(200, xlsx, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+    monkeypatch.setattr(discover.httpx, "get", fake_get)
+
+    async def two_bad(db, q):
+        return [{"url": "https://issuer.test/refused.xlsx"}, {"url": "https://issuer.test/top10"}], "Claude Haiku 5.5"
+    monkeypatch.setattr(discover, "model_candidates", two_bad)
+    try:
+        asyncio.run(discover.find_etf_source(None, "SPY", 480))
+        raise AssertionError("expected an error")
+    except universes.UniverseError as e:
+        assert "refused.xlsx: HTTP 403 (the site doesn't allow automated downloads)" in str(e)
+        assert "top10: only 10 tickers, expected at least 480" in str(e)
+
+    async def good(db, q):
+        return [{"url": "https://issuer.test/holdings-daily-us-en-spy.xlsx", "column": "Ticker"}], "Claude Haiku 5.5"
+    monkeypatch.setattr(discover, "model_candidates", good)
+    found = asyncio.run(discover.find_etf_source(None, "SPY", 480))
+    assert len(found["tickers"]) == 503 and found["column"] == "Ticker"  # Excel read from the raw bytes
