@@ -105,28 +105,28 @@ async def model_candidates(db: Session, query: str) -> tuple[list[dict[str, Any]
     return [c for c in cands if isinstance(c, dict) and str(c.get("url", "")).startswith("http")], name
 
 
-async def find_etf_source(db: Session, symbol: str) -> dict[str, Any]:
+async def find_etf_source(db: Session, symbol: str, min_count: int = 0) -> dict[str, Any]:
     """{url, column, tickers, found_by}: the ETF's verified holdings file/page. Raises UniverseError."""
     cands, model_name = await model_candidates(db, symbol)
     if model_name is None:
         raise UniverseError("no Claude model is available to search for the ETF's holdings file")
     for c in cands:
-        got = _try(c["url"], [str(c.get("column") or ""), *TICKER_COLUMNS], min_count=5)
+        got = _try(c["url"], [str(c.get("column") or ""), *TICKER_COLUMNS], min_count=max(5, min_count))
         if got:
             return {"url": c["url"], "column": got[1], "tickers": got[0], "found_by": f"web search ({model_name})"}
     raise UniverseError(f"no downloadable holdings list found for {symbol!r}")
 
 
-def find_wikipedia_source(query: str) -> dict[str, Any] | None:
+def find_wikipedia_source(query: str, min_count: int = 0) -> dict[str, Any] | None:
     """{url, column, tickers, found_by} for a Wikipedia members table, or None (free)."""
     for url in wikipedia_candidates(query):
-        got = _try(url, list(TICKER_COLUMNS), min_count=10)
+        got = _try(url, list(TICKER_COLUMNS), min_count=max(10, min_count))
         if got:
             return {"url": url, "column": got[1], "tickers": got[0], "found_by": "Wikipedia search"}
     return None
 
 
-async def find_sources(db: Session, symbol: str, index_name: str = "") -> dict[str, Any]:
+async def find_sources(db: Session, symbol: str, index_name: str = "", min_count: int = 0) -> dict[str, Any]:
     """{"main": ... or None, "backup": ... or None, "main_error": str | None}. Raises if neither is found."""
     symbol = symbol.strip()
     if not symbol and not index_name.strip():
@@ -134,11 +134,11 @@ async def find_sources(db: Session, symbol: str, index_name: str = "") -> dict[s
     main, main_error = None, None
     if symbol:
         try:
-            main = await find_etf_source(db, symbol)
+            main = await find_etf_source(db, symbol, min_count)
         except UniverseError as e:
             main_error = str(e)
     query = re.sub(r"\(.*?\)", "", index_name).strip() or symbol
-    backup = find_wikipedia_source(query)
+    backup = find_wikipedia_source(query, min_count)
     if not main and not backup:
         raise UniverseError(f"Couldn't find a source for {symbol or query!r} ({main_error or 'nothing on Wikipedia'}). "
                             "Enter the page or file address yourself.")

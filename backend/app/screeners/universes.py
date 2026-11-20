@@ -24,16 +24,16 @@ REFRESH_DAYS = {"daily": 1, "weekly": 7, "monthly": 30}
 
 # Built-in lists (added on startup unless you deleted them).
 DEFAULT_LISTS = [
-    dict(slug="sp500", name="S&P 500 (SPY)", symbol="SPY", source="web", refresh="weekly", url="", column="Ticker",
+    dict(slug="sp500", min_count=480, name="S&P 500 (SPY)", symbol="SPY", source="web", refresh="weekly", url="", column="Ticker",
          fallback_url="https://en.wikipedia.org/wiki/List_of_S%26P_500_companies", fallback_column="Symbol",
          description="The 500 largest US companies, via the SPDR S&P 500 ETF's holdings."),
-    dict(slug="nasdaq100", name="Nasdaq-100 (QQQ)", symbol="QQQ", source="web", refresh="weekly", url="", column="Ticker",
+    dict(slug="nasdaq100", min_count=95, name="Nasdaq-100 (QQQ)", symbol="QQQ", source="web", refresh="weekly", url="", column="Ticker",
          fallback_url="https://en.wikipedia.org/wiki/Nasdaq-100", fallback_column="Ticker",
          description="The 100 largest non-financial Nasdaq companies, via the Invesco QQQ ETF's holdings."),
-    dict(slug="dow30", name="Dow 30 (DIA)", symbol="DIA", source="web", refresh="monthly", url="", column="Ticker",
+    dict(slug="dow30", min_count=29, name="Dow 30 (DIA)", symbol="DIA", source="web", refresh="monthly", url="", column="Ticker",
          fallback_url="https://en.wikipedia.org/wiki/Dow_Jones_Industrial_Average", fallback_column="Symbol",
          description="The Dow Jones Industrial Average, via the SPDR Dow Jones Industrial Average ETF's holdings."),
-    dict(slug="schd", name="Dow Jones U.S. Dividend 100 (SCHD)", symbol="SCHD", source="web", refresh="monthly",
+    dict(slug="schd", min_count=90, name="Dow Jones U.S. Dividend 100 (SCHD)", symbol="SCHD", source="web", refresh="monthly",
          url="", column="Symbol", fallback_url="", fallback_column="Symbol",
          description="100 high-dividend US stocks, via the Schwab U.S. Dividend Equity ETF's holdings."),
 ]
@@ -126,17 +126,25 @@ def fetch_from(url: str, column: str) -> list[str]:
     return parse_source(resp.content, resp.headers.get("content-type", ""), url, column or "Symbol")
 
 
+def _complete(tickers: list[str], sl: StockList) -> list[str]:
+    if sl.min_count and len(tickers) < sl.min_count:
+        raise UniverseError(f"only {len(tickers)} tickers, expected at least {sl.min_count} (the page may show only "
+                            "part of the list)")
+    return tickers
+
+
 def fetch_list(sl: StockList) -> tuple[list[str], str]:
-    """(tickers, "main" | "backup"): the main source first, then the backup. Raises if both fail."""
+    """(tickers, "main" | "backup"): the main source first, then the backup. A source with fewer tickers
+    than the list's expected minimum counts as failed. Raises if both fail."""
     errors = []
     if sl.source in ("web", "wikipedia") and sl.url:
         try:
-            return fetch_from(sl.url, sl.column), "main"
+            return _complete(fetch_from(sl.url, sl.column), sl), "main"
         except Exception as e:
             errors.append(f"main source: {type(e).__name__}: {e}")
     if sl.fallback_url:
         try:
-            return fetch_from(sl.fallback_url, sl.fallback_column), "backup"
+            return _complete(fetch_from(sl.fallback_url, sl.fallback_column), sl), "backup"
         except Exception as e:
             errors.append(f"backup source: {type(e).__name__}: {e}")
     raise UniverseError("; ".join(errors) or "this list has no source to refresh from")
@@ -153,7 +161,7 @@ def is_due(sl: StockList) -> bool:
     return now() - sl.refreshed_at >= timedelta(days=REFRESH_DAYS.get(sl.refresh, 7))
 
 
-def _run_in_thread(symbol: str) -> dict:
+def _run_in_thread(symbol: str, min_count: int = 0) -> dict:
     """Run the async ETF search to completion on its own thread (callers may already be inside an
     event loop, e.g. a scanner run), with its own database session."""
     import asyncio
@@ -164,7 +172,7 @@ def _run_in_thread(symbol: str) -> dict:
 
     def go() -> dict:
         with Session(engine) as db2:
-            return asyncio.run(find_etf_source(db2, symbol))
+            return asyncio.run(find_etf_source(db2, symbol, min_count))
     with ThreadPoolExecutor(max_workers=1) as pool:
         return pool.submit(go).result(timeout=120)
 
@@ -180,7 +188,7 @@ def _auto_find(db: Session, sl: StockList) -> None:
     db.add(sl)
     db.commit()
     try:
-        found = _run_in_thread(sl.symbol)
+        found = _run_in_thread(sl.symbol, sl.min_count)
     except Exception as e:  # no model available, or nothing found
         log.info("No ETF holdings source found for %s: %s", sl.symbol, e)
         return
@@ -246,6 +254,8 @@ def _upgrade(db: Session, sl: StockList, spec: dict) -> None:
     """Built-in lists from before ETF sources: the ETF becomes the main source (found on first use) and
     the Wikipedia table the backup. Tickers are kept; names you changed are left alone."""
     changed = False
+    if not sl.min_count and spec.get("min_count"):
+        sl.min_count, changed = spec["min_count"], True
     if sl.name == OLD_NAMES.get(sl.slug):
         sl.name, changed = spec["name"], True
     if sl.symbol in ("", "SPX", "NDX", "DJI"):

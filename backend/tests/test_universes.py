@@ -25,7 +25,7 @@ def test_parse_constituents_picks_the_biggest_table_with_the_column():
 
 
 def no_auto_find(monkeypatch):
-    def nothing(symbol):
+    def nothing(symbol, min_count=0):
         raise universes.UniverseError("not in tests")
     monkeypatch.setattr(universes, "_run_in_thread", nothing)
 
@@ -198,7 +198,7 @@ def test_find_source_etf_main_and_wikipedia_backup(monkeypatch):
 def test_auto_find_looks_for_the_etf_once(monkeypatch):
     calls = []
 
-    def finder(symbol):
+    def finder(symbol, min_count=0):
         calls.append(symbol)
         return {"url": "https://issuer.test/dia.xlsx", "column": "Ticker", "tickers": [], "found_by": "web search (test)"}
     monkeypatch.setattr(universes, "_run_in_thread", finder)
@@ -236,3 +236,22 @@ def test_unexpected_errors_come_back_as_readable_json(monkeypatch):
         r = c.post(f"/api/screeners/{sc['id']}/run", json={"universe_index": "sp500", "universe": []})
         assert r.status_code == 500 and r.headers["content-type"].startswith("application/json")
         assert "RuntimeError: disk on fire" in r.json()["detail"] and "backend-latest.log" in r.json()["detail"]
+
+
+def test_incomplete_source_falls_back_to_the_backup(monkeypatch):
+    """A main source with only part of the list (e.g. a top-holdings page) doesn't replace a full list."""
+    def fetch_from(url, column):
+        return [f"P{i}" for i in range(387)] if "partial" in url else [f"F{i}" for i in range(503)]
+    monkeypatch.setattr(universes, "fetch_from", fetch_from)
+    sl = StockList(slug="x", name="X", source="web", url="https://issuer.test/partial", min_count=480,
+                   fallback_url="https://en.wikipedia.org/wiki/X")
+    tickers, used = universes.fetch_list(sl)
+    assert used == "backup" and len(tickers) == 503
+    sl.fallback_url = ""
+    try:
+        universes.fetch_list(sl)
+        raise AssertionError("expected an error")
+    except universes.UniverseError as e:
+        assert "only 387 tickers, expected at least 480" in str(e)
+    with TestClient(app) as c:
+        assert next(x for x in c.get("/api/stock-lists").json() if x["slug"] == "sp500")["min_count"] == 480

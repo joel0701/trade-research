@@ -270,6 +270,7 @@ class StockList(SQLModel, table=True):
     # Backup source, used when the main one fails (e.g. the ETF's holdings file first, Wikipedia second).
     fallback_url: str = ""
     fallback_column: str = "Symbol"
+    min_count: int = 0      # a source returning fewer tickers is incomplete (e.g. a top-holdings page); 0 = no check
     last_source: str = ""   # "main" or "backup": which source the current tickers came from
     source_checked_at: datetime | None = Field(default=None, sa_type=UTCDateTime)  # last automatic ETF search
     column: str = "Symbol"

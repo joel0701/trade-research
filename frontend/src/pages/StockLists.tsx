@@ -42,7 +42,7 @@ export default function StockLists({ header }: { header: React.ReactNode }) {
         questions and skills (the Lead looks them up with the stock list tool). A list is refreshed only when something uses
         it and it's older than its schedule allows. Refreshing downloads the list (no AI model, no cost).</p></>}
       blank={{ slug: "", name: "", description: "", symbol: "", source: "web", url: "", column: "Ticker", fallback_url: "",
-               fallback_column: "Symbol", refresh: "weekly", tickers: [], enabled: true }}
+               fallback_column: "Symbol", min_count: 0, refresh: "weekly", tickers: [], enabled: true }}
       rowExtra={(sl) => <span className="muted small nowrap">{sl.tickers?.length ? `${sl.tickers.length} · ` : ""}{sl.refresh}</span>}>
       {(sl, set) => (
         <>
@@ -84,6 +84,10 @@ export default function StockLists({ header }: { header: React.ReactNode }) {
                 <Field label="Address" value={sl.fallback_url ?? ""} onChange={(fallback_url) => set({ fallback_url })} />
                 <Field label="Ticker column name" value={sl.fallback_column ?? "Symbol"} onChange={(fallback_column) => set({ fallback_column })} />
               </div>
+              <label>Expected at least (tickers)</label>
+              <input type="number" min={0} value={sl.min_count ?? 0} onChange={(e) => set({ min_count: Number(e.target.value) || 0 })} />
+              <p className="muted small">A source that returns fewer is treated as incomplete (e.g. a page that shows only the top
+                holdings) and the backup is used instead. 0 = no check.</p>
               <label>Refresh schedule</label>
               <select value={sl.refresh} onChange={(e) => set({ refresh: e.target.value })}>
                 {SCHEDULES.map(([v, l]) => <option key={v} value={v}>{l}</option>)}

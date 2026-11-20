@@ -116,7 +116,7 @@ async def find_stock_list_source(list_id: int) -> dict[str, Any]:
         if sl is None:
             raise HTTPException(404)
         try:
-            found = await find_sources(db, sl.symbol, sl.name)
+            found = await find_sources(db, sl.symbol, sl.name, sl.min_count)
         except UniverseError as e:
             raise HTTPException(422, str(e)) from e
         day, notes = now().date().isoformat(), []
