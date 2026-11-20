@@ -31,7 +31,8 @@ DEFAULT_LISTS = [
          fallback_url="https://en.wikipedia.org/wiki/Nasdaq-100", fallback_column="Ticker",
          description="The 100 largest non-financial Nasdaq companies, via the Invesco QQQ ETF's holdings."),
     dict(slug="dow30", min_count=29, name="Dow 30 (DIA)", symbol="DIA", source="web", refresh="monthly", url="", column="Ticker",
-         fallback_url="https://en.wikipedia.org/wiki/Dow_Jones_Industrial_Average", fallback_column="Symbol",
+         fallback_url="https://en.wikipedia.org/wiki/List_of_Dow_Jones_Industrial_Average_companies",
+         fallback_column="Symbol",
          description="The Dow Jones Industrial Average, via the SPDR Dow Jones Industrial Average ETF's holdings."),
     dict(slug="schd", min_count=90, name="Dow Jones U.S. Dividend 100 (SCHD)", symbol="SCHD", source="web", refresh="monthly",
          url="", column="Symbol", fallback_url="", fallback_column="Symbol",
@@ -126,10 +127,19 @@ def fetch_from(url: str, column: str) -> list[str]:
     return parse_source(resp.content, resp.headers.get("content-type", ""), url, column or "Symbol")
 
 
+def max_count_for(min_count: int) -> int:
+    """The most tickers a list with this expected minimum plausibly has (0 = no limit). A source with far
+    more is probably a different, bigger list (e.g. a global index instead of the Dow 30)."""
+    return max(int(min_count * 1.6), min_count + 15) if min_count else 0
+
+
 def _complete(tickers: list[str], sl: StockList) -> list[str]:
     if sl.min_count and len(tickers) < sl.min_count:
         raise UniverseError(f"only {len(tickers)} tickers, expected at least {sl.min_count} (the page may show only "
                             "part of the list)")
+    if sl.min_count and len(tickers) > max_count_for(sl.min_count):
+        raise UniverseError(f"{len(tickers)} tickers, far more than expected (about {sl.min_count}): probably a "
+                            "different list")
     return tickers
 
 
@@ -263,8 +273,23 @@ def _upgrade(db: Session, sl: StockList, spec: dict) -> None:
     if sl.url and sl.url == spec["fallback_url"] and not sl.fallback_url:
         sl.fallback_url, sl.fallback_column = sl.url, sl.column
         sl.url, sl.column, changed = "", spec["column"], True
+    # Dow 30: the dedicated companies list is the right backup (a search could pick a different Dow index).
+    dow_page = "https://en.wikipedia.org/wiki/List_of_Dow_Jones_Industrial_Average_companies"
+    if sl.slug == "dow30" and sl.fallback_url != dow_page and "dow30_backup_page" not in _done(db):
+        sl.fallback_url, sl.fallback_column, changed = dow_page, "Symbol", True
+        _mark(db, "dow30_backup_page")
     if changed:
         db.add(sl)
+
+
+def _done(db: Session) -> set[str]:
+    from app.models import DismissedDefault
+    return {d.slug for d in db.exec(select(DismissedDefault).where(DismissedDefault.kind == "migration")).all()}
+
+
+def _mark(db: Session, name: str) -> None:
+    from app.models import DismissedDefault
+    db.add(DismissedDefault(kind="migration", slug=name))
 
 
 def ensure_stock_lists(db: Session, dismissed: set[str]) -> None:

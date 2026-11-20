@@ -16,7 +16,7 @@ import httpx
 from sqlmodel import Session, select
 
 from app.models import Tool
-from app.screeners.universes import HEADERS, TICKER_COLUMNS, UniverseError, parse_source
+from app.screeners.universes import HEADERS, TICKER_COLUMNS, UniverseError, max_count_for, parse_source
 
 log = logging.getLogger(__name__)
 WIKI_API = "https://en.wikipedia.org/w/api.php"
@@ -35,7 +35,8 @@ Reply with only a JSON object, no other text:
 Give up to 4 candidates, best first. Use exact URLs you found in search results."""
 
 
-def _try(url: str, columns: list[str], min_count: int, why: list[str] | None = None) -> tuple[list[str], str] | None:
+def _try(url: str, columns: list[str], min_count: int, why: list[str] | None = None,
+         max_count: int = 0) -> tuple[list[str], str] | None:
     """(tickers, column) if the URL yields a plausible list with one of the columns. Reasons for failure
     are appended to `why` (shown to the user and logged)."""
     short = url if len(url) <= 90 else url[:87] + "…"
@@ -59,16 +60,26 @@ def _try(url: str, columns: list[str], min_count: int, why: list[str] | None = N
             tickers = parse_source(resp.content, resp.headers.get("content-type", ""), url, col)
         except Exception:
             continue
+        if max_count and len(tickers) > max_count:
+            most = max(most, len(tickers))
+            continue
         most = max(most, len(tickers))
         if len(tickers) >= min_count and (best is None or len(tickers) > len(best[0])):
             best = (tickers, col)
     if best is None:
-        fail(f"only {most} tickers, expected at least {min_count}" if most else "no ticker table or column found")
+        if max_count and most > max_count:
+            fail(f"{most} tickers, far more than expected (at most about {max_count}): probably a different list")
+        else:
+            fail(f"only {most} tickers, expected at least {min_count}" if most else "no ticker table or column found")
     return best
 
 
+def _words(text: str) -> set[str]:
+    return {w for w in re.findall(r"[a-z0-9]+", text.lower()) if w not in {"list", "of", "the", "companies", "index", "s"}}
+
+
 def wikipedia_candidates(query: str) -> list[str]:
-    """Wikipedia page addresses for the query (free search API)."""
+    """Wikipedia page addresses for the query (free search API), best title match first."""
     urls: list[str] = []
     for q in (f"{query} constituents", f"list of {query} components", query):
         try:
@@ -80,6 +91,9 @@ def wikipedia_candidates(query: str) -> list[str]:
             url = "https://en.wikipedia.org/wiki/" + hit["title"].replace(" ", "_")
             if url not in urls:
                 urls.append(url)
+    want = _words(query)
+    title = lambda u: _words(u.rsplit("/", 1)[-1].replace("_", " "))  # noqa: E731
+    urls.sort(key=lambda u: (-len(want & title(u)), len(title(u) - want)))  # most query words, fewest extras
     return urls[:6]
 
 
@@ -148,15 +162,16 @@ async def find_etf_source(db: Session, symbol: str, min_count: int = 0) -> dict[
 
 
 def find_wikipedia_source(query: str, min_count: int = 0) -> dict[str, Any] | None:
-    """{url, column, tickers, found_by} for a Wikipedia members table, or None (free)."""
+    """{url, column, tickers, found_by} for a Wikipedia members table of about the expected size, or None."""
     for url in wikipedia_candidates(query):
-        got = _try(url, list(TICKER_COLUMNS), max(10, min_count))
+        got = _try(url, list(TICKER_COLUMNS), max(10, min_count), max_count=max_count_for(min_count))
         if got:
             return {"url": url, "column": got[1], "tickers": got[0], "found_by": "Wikipedia search"}
     return None
 
 
-async def find_sources(db: Session, symbol: str, index_name: str = "", min_count: int = 0) -> dict[str, Any]:
+async def find_sources(db: Session, symbol: str, index_name: str = "", min_count: int = 0,
+                       backup_url: str = "", backup_column: str = "") -> dict[str, Any]:
     """{"main": ... or None, "backup": ... or None, "main_error": str | None}. Raises if neither is found."""
     symbol = symbol.strip()
     if not symbol and not index_name.strip():
@@ -170,7 +185,14 @@ async def find_sources(db: Session, symbol: str, index_name: str = "", min_count
     query = re.sub(r"\(.*?\)", "", index_name).strip() or symbol
     import asyncio
 
-    backup = await asyncio.to_thread(find_wikipedia_source, query, min_count)
+    backup = None
+    if backup_url:  # keep a backup that still works; search only if it doesn't
+        got = await asyncio.to_thread(_try, backup_url, [backup_column, *TICKER_COLUMNS], max(5, min_count), None,
+                                      max_count_for(min_count))
+        if got:
+            backup = {"url": backup_url, "column": got[1], "tickers": got[0], "found_by": "the existing backup (still works)"}
+    if backup is None:
+        backup = await asyncio.to_thread(find_wikipedia_source, query, min_count)
     if not main and not backup:
         raise UniverseError(f"Couldn't find a source for {symbol or query!r} ({main_error or 'nothing on Wikipedia'}). "
                             "Enter the page or file address yourself.")

@@ -313,3 +313,48 @@ def test_find_source_reports_why_each_candidate_failed_and_reads_excel(monkeypat
     monkeypatch.setattr(discover, "model_candidates", good)
     found = asyncio.run(discover.find_etf_source(None, "SPY", 480))
     assert len(found["tickers"]) == 503 and found["column"] == "Ticker"  # Excel read from the raw bytes
+
+
+def test_dow30_backup_is_the_djia_companies_page():
+    with TestClient(app) as c:
+        dow = next(x for x in c.get("/api/stock-lists").json() if x["slug"] == "dow30")
+        assert dow["fallback_url"] == "https://en.wikipedia.org/wiki/List_of_Dow_Jones_Industrial_Average_companies"
+
+
+def test_wikipedia_search_rejects_a_bigger_different_list_and_keeps_a_working_backup(monkeypatch):
+    from app.screeners import discover
+
+    class R:
+        def __init__(self, text, status=200):
+            self.status_code, self.headers, self.content, self.text = status, {"content-type": "text/html"}, text.encode(), text
+
+        def json(self):
+            return json.loads(self.text)
+
+    def table(n, prefix):
+        return "<table><tr><th>Symbol</th></tr>" + "".join(f"<tr><td>{prefix}{i}</td></tr>" for i in range(n)) + "</table>"
+
+    def fake_get(url, params=None, **kw):
+        if url == discover.WIKI_API:
+            return R(json.dumps({"query": {"search": [{"title": "Dow Jones Global Titans 50"},
+                                                      {"title": "List of Dow Jones Industrial Average companies"}]}}))
+        if "Global_Titans" in url:
+            return R(table(50, "G"))
+        if "Industrial_Average_companies" in url:
+            return R(table(30, "D"))
+        return R("", 404)
+    monkeypatch.setattr(discover.httpx, "get", fake_get)
+    found = discover.find_wikipedia_source("Dow 30", 29)
+    assert "Industrial_Average_companies" in found["url"] and len(found["tickers"]) == 30
+    assert discover.wikipedia_candidates("Dow Jones Industrial Average")[0].endswith("Industrial_Average_companies")
+
+    calls = []
+    real_find = discover.find_wikipedia_source
+    monkeypatch.setattr(discover, "find_wikipedia_source", lambda q, m=0: calls.append(q) or real_find(q, m))
+
+    async def no_model(db, q):
+        raise universes.UniverseError("no model in tests")
+    monkeypatch.setattr(discover, "model_candidates", no_model)
+    out = asyncio.run(discover.find_sources(None, "DIA", "Dow 30 (DIA)", 29,
+                                            "https://en.wikipedia.org/wiki/List_of_Dow_Jones_Industrial_Average_companies", "Symbol"))
+    assert out["backup"]["found_by"] == "the existing backup (still works)" and calls == []  # no search needed

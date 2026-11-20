@@ -117,7 +117,8 @@ async def find_stock_list_source(list_id: int) -> dict[str, Any]:
             raise HTTPException(404)
         try:
             import asyncio
-            found = await asyncio.wait_for(find_sources(db, sl.symbol, sl.name, sl.min_count), timeout=180)
+            found = await asyncio.wait_for(find_sources(db, sl.symbol, sl.name, sl.min_count, sl.fallback_url,
+                                                        sl.fallback_column), timeout=180)
         except asyncio.TimeoutError as e:
             raise HTTPException(504, "Find source took longer than 3 minutes and was stopped. The sites may be "
                                      "slow; try again, or enter the address yourself.") from e
