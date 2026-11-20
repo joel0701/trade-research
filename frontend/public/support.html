@@ -112,7 +112,7 @@
   <a href="#run-logic">How a question runs</a>
   <a href="#limits">Team limits</a>
   <a href="#tool-results">Tool results &amp; compaction</a>
-  <a href="#mock">Mock mode (no cost)</a>
+  <a href="#mock">Test mode (no cost)</a>
   <a href="#logs">Logs</a>
   <a href="#safety">Safety &amp; privacy</a>
   <a href="#troubleshooting">Troubleshooting</a>
@@ -412,7 +412,7 @@ cd frontend &amp;&amp; npm install &amp;&amp; npm run dev   # http://localhost:5
 
 <section id="settings">
   <h2>Profile &amp; settings</h2>
-  <p>Click your avatar (top right) for the menu: <b>Profile &amp; settings</b>, <b>Team</b>, <b>Tools</b>, and light/dark mode. The <b>Support</b> link next to it opens this page.</p>
+  <p>Click your avatar (top right) for the menu: <b>Profile &amp; settings</b>, <b>Team</b>, <b>Tools</b>, light/dark mode and <b>Test mode</b>. The <b>Support</b> link next to it opens this page.</p>
   <ul>
     <li><b>Profile:</b> name, photo, email.</li>
     <li><b>Time zone</b> and <b>12/24-hour clock</b>: how times are shown (they are stored in UTC).</li>
@@ -434,7 +434,7 @@ cd frontend &amp;&amp; npm install &amp;&amp; npm run dev   # http://localhost:5
     <tr><td><code>BIGDATA_API_KEY</code>, <code>IBKR_MCP_TOKEN</code></td><td>MCP server keys.</td><td>empty</td></tr>
     <tr><td><code>OLLAMA_BASE_URL</code>, <code>LMSTUDIO_BASE_URL</code>, <code>MLX_BASE_URL</code></td><td>Local model servers.</td><td>:11434, :1234, :8080 (<code>/v1</code>)</td></tr>
     <tr><td><code>LOCAL_LLM_BASE_URL</code>, <code>LOCAL_LLM_API_KEY</code></td><td>Any other OpenAI-compatible server.</td><td>unset</td></tr>
-    <tr><td><code>MOCK_LLM</code></td><td><code>1</code> = every team member uses the free mock.</td><td>off</td></tr>
+    <tr><td><code>MOCK_LLM</code></td><td><code>1</code> = Test mode always on (otherwise use the toggle in the profile menu).</td><td>off</td></tr>
     <tr><td><code>DATABASE_URL</code></td><td>Database location.</td><td>data/trade_research.db</td></tr>
     <tr><td><code>CORS_ORIGINS</code></td><td>Allowed frontend origins.</td><td>http://localhost:5173</td></tr>
     <tr><td><code>MAX_LOOP_ITERATIONS</code></td><td>Hard cap on steps per agent run.</td><td>25</td></tr>
@@ -485,8 +485,14 @@ cd frontend &amp;&amp; npm install &amp;&amp; npm run dev   # http://localhost:5
 </section>
 
 <section id="mock">
-  <h2>Mock mode (no cost)</h2>
-  <p>Set <code>MOCK_LLM=1</code> in <code>.env</code> and restart: every team member uses a free mock. The Lead consults the most relevant specialists, specialists really call a data tool, and answers are canned but stream and appear in the trace, footer and timeline with $0 cost. A <b>MOCK LLM</b> badge shows in the header. To mock just one session, pick <i>Mock LLM (no cost)</i> in the model picker.</p>
+  <h2>Test mode (no cost)</h2>
+  <p>Turn on <b>Test mode</b> in the profile menu (or under Profile &amp; settings): every team member gives canned answers instead of calling an AI model, so nothing is charged. It takes effect immediately, with no restart, and is remembered.</p>
+  <ul>
+    <li>The Lead consults the most relevant specialists, specialists really call a data tool, and answers (marked "Test mode response") stream and appear in the trace, footer and timeline with $0 cost.</li>
+    <li>A <b>TEST MODE</b> badge shows in the header while it's on.</li>
+    <li>To test just one session's Lead, pick <i>Test mode (no cost)</i> in the model picker instead.</li>
+    <li><code>MOCK_LLM=1</code> in <code>.env</code> also turns it on; the toggle then shows it as set in .env and can't turn it off.</li>
+  </ul>
 </section>
 
 <section id="logs">

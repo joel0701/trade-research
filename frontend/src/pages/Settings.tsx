@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { api } from "../api";
-import { Avatar, browserZone, useSettings } from "../settings";
+import { Avatar, browserZone, testMode, useSettings } from "../settings";
 
 type Provider = { slug: string; name: string; key_env: string; configured: boolean };
 
@@ -69,6 +69,19 @@ export default function Settings() {
           <label className="inline"><input type="radio" checked={profile.hour12} onChange={() => run(() => save({ hour12: true }))} /> 12-hour</label>
         </div>
         <p className="muted small">Now: {fmt()} ({zone.replace(/_/g, " ")})</p>
+      </section>
+
+      <section className="card">
+        <h3>Test mode</h3>
+        <p className="muted small">Every team member gives canned answers instead of calling an AI model, so nothing is
+          charged. Data tools still run, and answers still appear in the chat, trace and timeline. Use it to try the app
+          or test a change for free.</p>
+        <label className="inline">
+          <input type="checkbox" checked={testMode(profile)} disabled={!!profile.mock_llm_env}
+                 onChange={(e) => run(() => save({ mock_llm: e.target.checked }))} /> Test mode (canned answers, no AI cost)
+        </label>
+        {profile.mock_llm_env && <p className="muted small">On because MOCK_LLM=1 is set in .env. Remove it there and
+          restart the backend to control Test mode here.</p>}
       </section>
 
       <section className="card">

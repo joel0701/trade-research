@@ -65,3 +65,6 @@ export const Wrench = () => (
 export const Help = () => (
   <svg {...base}><circle cx="12" cy="12" r="9.5" /><path d="M9.3 9.2a2.8 2.8 0 0 1 5.4 1c0 1.9-2.7 2.4-2.7 4" /><circle cx="12" cy="17.3" r=".6" fill="currentColor" /></svg>
 );
+export const Flask = () => (
+  <svg {...base}><path d="M9 3h6M10 3v6.5L4.6 18.4A1.7 1.7 0 0 0 6 21h12a1.7 1.7 0 0 0 1.4-2.6L14 9.5V3" /><path d="M7.5 15h9" /></svg>
+);

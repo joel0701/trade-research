@@ -30,6 +30,10 @@ async def lifespan(_: FastAPI):
     init_db()
     with Session(engine) as db:
         seed(db)
+        from app.api.profile import get_profile
+        from app.llm.mock_loop import set_mock
+
+        set_mock(get_profile(db).mock_llm)  # the profile's Test mode toggle
     mark_interrupted_runs()
     yield
 
@@ -123,4 +127,6 @@ def python_functions() -> list[dict[str, str]]:
 def health() -> dict[str, Any]:
     from app.llm.mock_loop import mock_mode
 
-    return {"status": "ok", "mock_llm": mock_mode()}
+    from app.llm.mock_loop import mock_env
+
+    return {"status": "ok", "mock_llm": mock_mode(), "mock_llm_env": mock_env()}

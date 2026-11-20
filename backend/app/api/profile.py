@@ -25,6 +25,7 @@ class ProfileUpdate(BaseModel):
     email: str | None = None
     timezone: str | None = None
     hour12: bool | None = None
+    mock_llm: bool | None = None
 
 
 def get_profile(db: Session) -> UserProfile:
@@ -38,7 +39,10 @@ def get_profile(db: Session) -> UserProfile:
 
 
 def _out(p: UserProfile) -> dict[str, Any]:
+    from app.llm.mock_loop import mock_env
+
     data = p.model_dump(mode="json", exclude={"avatar_path"})
+    data["mock_llm_env"] = mock_env()  # MOCK_LLM=1 in .env forces it on (the toggle can't turn it off)
     # Cache-busting query so a new photo shows immediately.
     data["avatar_url"] = f"/api/profile/avatar?v={int(p.updated_at.timestamp())}" if p.avatar_path else None
     return data
@@ -69,6 +73,11 @@ def update(body: ProfileUpdate, db: Session = Depends(get_session)) -> dict[str,
         p.timezone = tz
     if body.hour12 is not None:
         p.hour12 = body.hour12
+    if body.mock_llm is not None:
+        from app.llm.mock_loop import set_mock
+
+        p.mock_llm = body.mock_llm
+        set_mock(p.mock_llm)  # takes effect immediately
     p.updated_at = now()
     db.add(p)
     db.commit()

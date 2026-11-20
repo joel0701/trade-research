@@ -1,6 +1,8 @@
-"""Mock LLM: canned responses that exercise the whole app without calling (or paying for) a model.
+"""Test mode (internally "mock"): canned responses that exercise the whole app without calling (or
+paying for) a model.
 
-Turned on for every role with MOCK_LLM=1 in .env, or per session by choosing the "Mock LLM" model.
+Turned on for every team member by the Test mode toggle (profile menu or Settings), or MOCK_LLM=1 in
+.env; or for one session's Lead by choosing the "Test mode (no cost)" model.
 - The Lead writes a short note, consults up to two specialists (really running their loops),
   then streams a canned final answer that says it is a mock and quotes what specialists found.
 - Specialists really call one of their data tools (so data connections are exercised) and return
@@ -22,9 +24,21 @@ NOT_TICKERS = {"I", "A", "AN", "AND", "THE", "OR", "OF", "TO", "IN", "ON", "FOR"
                "NYSE", "AMEX", "OTC", "TRF", "OK", "Q1", "Q2", "Q3", "Q4", "FY", "DCF", "API", "LLM", "RUN", "TASK"}
 
 
-def mock_mode() -> bool:
-    """MOCK_LLM=1 in .env: every role uses the mock, whatever model is configured."""
+_runtime = {"on": False}  # the Test mode toggle in the profile (no restart needed)
+
+
+def mock_env() -> bool:
+    """MOCK_LLM=1 in .env forces mock mode on."""
     return os.getenv("MOCK_LLM", "").strip().lower() in ("1", "true", "yes", "on")
+
+
+def set_mock(on: bool) -> None:
+    _runtime["on"] = bool(on)
+
+
+def mock_mode() -> bool:
+    """Every team member uses the free mock: the profile toggle, or MOCK_LLM=1 in .env."""
+    return _runtime["on"] or mock_env()
 
 
 def _text_of(content: Any) -> str:
@@ -108,7 +122,7 @@ async def run_agent_mock(*, model: "ModelConfig", system: str, messages: list[di
     consults = pick_specialists(question, toolbox, 2)
 
     if consults:  # the Lead
-        note = "Checking with the team (mock run, no LLM call). "
+        note = "Checking with the team (test mode, no AI model call). "
         calls = [{"type": "tool_use", "id": f"mock_{i}_{abs(hash(question)) % 10**6}", "name": name,
                   "input": {"question": f"(mock) Look into {ticker} for this question: {question[:300]}"}}
                  for i, name in enumerate(consults)]
@@ -137,13 +151,13 @@ async def run_agent_mock(*, model: "ModelConfig", system: str, messages: list[di
                       f"- What news is driving the price action in {ticker} today?\n"
                       f"- How does {ticker}'s options positioning look ahead of its next catalyst?")
     if consults:
-        final = (f"🧪 **Mock response** (no LLM was called, so this costs nothing).\n\n"
+        final = (f"🧪 **Test mode response** (no AI model was called, so this costs nothing).\n\n"
                  f"**Question:** {question[:400]}\n\n"
                  f"**What the team found (real tool data, canned wording):**\n{findings}\n\n"
                  f"| Item | Value |\n|---|---|\n| Ticker | {ticker} |\n| Specialists consulted | {len(consults)} |\n"
-                 f"| Model | mock |\n\nSwitch off MOCK_LLM (or choose a real model) for a real analysis.{next_steps}")
+                 f"| Model | mock |\n\nTurn off Test mode in the profile menu (or choose a real model) for a real analysis.{next_steps}")
     else:
-        final = (f"(mock specialist, no LLM call) Summary for {ticker}. "
+        final = (f"(test mode specialist, no AI model call) Summary for {ticker}. "
                  f"{findings or 'No data tool was available to call.'}")
     await _stream(final, emit, source, stream_text)
     _record(messages, on_message, "assistant", [{"type": "text", "text": final}], True)
@@ -156,7 +170,7 @@ def mock_skill_draft(transcript: str) -> dict[str, Any]:
     first = next((ln.split(":", 1)[1].strip() for ln in transcript.splitlines() if ln.startswith("User")), "Analyse AAPL")
     ticker = guess_ticker(first)
     template = first.replace("*", "").replace(ticker, "{ticker}") if ticker != "SPY" else first.replace("*", "")
-    return {"name": "Mock Drafted Skill", "description": "Drafted by the mock LLM (no cost).",
+    return {"name": "Test Mode Drafted Skill", "description": "Drafted in Test mode (no cost).",
             "prompt_template": template, "params": [{"name": "ticker", "label": "Ticker", "default": ""}]
             if "{ticker}" in template else []}
 

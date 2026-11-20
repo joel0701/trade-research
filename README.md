@@ -133,13 +133,15 @@ Default models: Lead and Strategy Optimizer on Claude Opus 5.5; most specialists
 Sector Mapper on Haiku 5.5. Opus, Sonnet and Fable use server-side refusal fallbacks
 (`"fallbacks": "default"` in the model config); remove it to opt out.
 
-### Testing without LLM costs (mock mode)
+### Testing without AI costs (Test mode)
 
-Set `MOCK_LLM=1` in `.env` and restart: every team member uses a free mock instead of a real model. The
-Lead consults the most relevant specialists, specialists really call one of their data tools, and
-answers are canned (clearly marked) but stream, appear in the trace, footer and timeline as usual,
-with $0 cost. A **MOCK LLM** badge shows in the top bar. To mock only one session's Lead, pick
-**Mock LLM (no cost)** in the model picker instead.
+Turn on **Test mode** in the profile menu (or under Profile & settings): every team member gives canned
+answers instead of calling an AI model, so nothing is charged. It takes effect immediately, with no
+restart, and is remembered. The Lead consults the most relevant specialists, specialists really call
+one of their data tools, and answers (clearly marked) stream and appear in the trace, footer and
+timeline as usual, with $0 cost. A **TEST MODE** badge shows in the header while it's on. To test just
+one session's Lead, pick **Test mode (no cost)** in the model picker instead. `MOCK_LLM=1` in `.env`
+also turns it on, and then the toggle can't turn it off.
 
 ### LLM vendors
 

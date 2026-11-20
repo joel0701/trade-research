@@ -1,4 +1,4 @@
-"""Mock LLM: the whole flow runs with canned responses and no model calls or keys."""
+"""Test mode: the whole flow runs with canned responses and no model calls or keys."""
 import json
 
 from fastapi.testclient import TestClient
@@ -39,7 +39,7 @@ def test_mock_mode_runs_full_flow_for_free(monkeypatch):
         assert types[-1] == "done" and "specialist_start" in types and "text" in types, types
         msgs = c.get(f"/api/sessions/{sid}").json()["messages"]
         answer = msgs[-1]
-        assert answer["role"] == "assistant" and answer["model"] == "mock" and "Mock response" in answer["text"]
+        assert answer["role"] == "assistant" and answer["model"] == "mock" and "Test mode response" in answer["text"]
         assert "NVDA" in answer["text"]
         runs = c.get(f"/api/sessions/{sid}/runs").json()
         assert all(r["model"] == "mock" and r["status"] == "ok" for r in runs) and len(runs) >= 2

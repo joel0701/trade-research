@@ -356,9 +356,9 @@ MODELS = [
     dict(slug="haiku", name="Claude Haiku 5.5", description="Cheapest; simple lookups and summaries.",
          config={"provider": "anthropic", "model_id": "claude-haiku-5-5", "effort": "low", "max_tokens": 8000,
                  "price_input": 0.1, "price_output": 0.5, "price_cache_read": 0.01}),
-    dict(slug="mock", name="Mock LLM (no cost)",
-         description="Canned responses for testing the app; consults specialists and calls real data tools, "
-                     "but makes no LLM calls.",
+    dict(slug="mock", name="Test mode (no cost)",
+         description="Canned answers for testing the app; consults specialists and calls real data tools, "
+                     "but makes no AI model calls.",
          config={"provider": "mock", "model_id": "mock", "max_tokens": 1000, "price_input": 0, "price_output": 0}),
     dict(slug="gpt", name="OpenAI GPT-5", description="OpenAI's flagship model.",
          config={"provider": "openai", "model_id": "gpt-5", "max_tokens": 32000, "params": {}}),
@@ -396,6 +396,9 @@ def ensure_models(db: Session) -> None:
             if m["slug"] not in gone:
                 db.add(Tool(kind="model", **m))
             continue
+        if m["slug"] == "mock" and tool.name == "Mock LLM (no cost)":  # renamed to "Test mode" (unless you renamed it)
+            tool.name, tool.description = m["name"], m["description"]
+            db.add(tool)
         missing = {k: v for k, v in m["config"].items() if k not in tool.config}
         if missing:
             tool.config = {**tool.config, **missing}

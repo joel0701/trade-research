@@ -7,9 +7,14 @@ export type Profile = {
   name: string; email: string; avatar_url: string | null;
   timezone: string; // IANA zone, or "auto" for the browser's zone
   hour12: boolean;
+  mock_llm: boolean;      // Test mode: canned answers, no AI cost
+  mock_llm_env?: boolean; // MOCK_LLM=1 in .env forces Test mode on
 };
 
-const EMPTY: Profile = { name: "", email: "", avatar_url: null, timezone: "auto", hour12: false };
+const EMPTY: Profile = { name: "", email: "", avatar_url: null, timezone: "auto", hour12: false, mock_llm: false };
+
+/** Test mode is on: the profile toggle, or MOCK_LLM=1 in .env. */
+export const testMode = (p: Profile) => !!(p.mock_llm || p.mock_llm_env);
 
 type Ctx = {
   profile: Profile;

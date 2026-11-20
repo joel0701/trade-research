@@ -1,12 +1,12 @@
-import React, { useEffect, useState } from "react";
-import { api, reportError } from "./api";
+import React from "react";
+import { reportError } from "./api";
 
 // Uncaught browser errors go to data/logs/frontend.log too.
 window.addEventListener("error", (e) => reportError(e.message || "Uncaught error",
   `${e.filename ?? ""}:${e.lineno ?? ""}:${e.colno ?? ""}\n${e.error?.stack ?? ""}`));
 window.addEventListener("unhandledrejection", (e) => reportError(`Unhandled promise rejection: ${e.reason?.message ?? e.reason}`,
   e.reason?.stack ?? ""));
-import { Chevron, Gear, Help, Moon, Sun, Users, Wrench } from "./icons";
+import { Chevron, Flask, Gear, Help, Moon, Sun, Users, Wrench } from "./icons";
 import Logo from "./Logo";
 import { usePopover } from "./Composer";
 import ReactDOM from "react-dom/client";
@@ -17,7 +17,7 @@ import Scanners from "./pages/Scanners";
 import Team from "./pages/Team";
 import Tools from "./pages/Tools";
 import Settings from "./pages/Settings";
-import { Avatar, SettingsProvider, useSettings } from "./settings";
+import { Avatar, SettingsProvider, testMode, useSettings } from "./settings";
 import { ConfirmProvider } from "./confirm";
 import "./styles.css";
 
@@ -30,7 +30,7 @@ function lastSessionPath(): string {
 
 /** Profile icon menu: settings, plus the workspace screens (Team, Tools) and the theme. */
 function ProfileMenu() {
-  const { theme, toggleTheme, profile } = useSettings();
+  const { theme, toggleTheme, profile, save } = useSettings();
   const pop = usePopover();
   const navigate = useNavigate();
   const { pathname } = useLocation();
@@ -62,6 +62,14 @@ function ProfileMenu() {
             <span className="menu-icon">{theme === "dark" ? <Sun /> : <Moon />}</span>
             <span><strong>{theme === "dark" ? "Light mode" : "Dark mode"}</strong></span>
           </button>
+          <button role="menuitemcheckbox" aria-checked={testMode(profile)} className="menu-item"
+                  disabled={!!profile.mock_llm_env}
+                  title={profile.mock_llm_env ? "On because MOCK_LLM=1 is set in .env" : "Canned answers instead of AI models; nothing is charged"}
+                  onClick={() => save({ mock_llm: !profile.mock_llm }).catch(() => {})}>
+            <span className="menu-icon"><Flask /></span>
+            <span><strong>Test mode</strong><small>{profile.mock_llm_env ? "On (set in .env)" : "Canned answers, no AI cost"}</small></span>
+            <span className={`switch ${testMode(profile) ? "on" : ""}`} aria-hidden="true" />
+          </button>
         </div>
       )}
     </div>
@@ -70,8 +78,8 @@ function ProfileMenu() {
 
 function App() {
   const navigate = useNavigate();
-  const [mock, setMock] = useState(false);
-  useEffect(() => { api.get("/health").then((h) => setMock(!!h.mock_llm)).catch(() => {}); }, []);
+  const { profile } = useSettings();
+  const mock = testMode(profile);
   const links = [["/research", "Research"], ["/skills", "Skills"], ["/scanners", "Scanners"]];
   return (
     <div className="app">
@@ -81,8 +89,8 @@ function App() {
             <Logo size={30} /><span>Trade <b>Research</b></span>
           </a>
           {mock && (
-            <span className="mock-badge" title="MOCK_LLM=1 in .env: answers are canned and free; data tools still run">
-              MOCK LLM
+            <span className="mock-badge" title="Test mode: answers are canned and free; data tools still run. Turn it off in the profile menu.">
+              TEST MODE
             </span>
           )}
           <a className="support-link" href="/support.html" target="_blank" rel="noreferrer"

@@ -239,6 +239,7 @@ class UserProfile(SQLModel, table=True):
     avatar_path: str | None = None
     timezone: str = "auto"  # IANA name like "America/New_York", or "auto" = the browser's zone
     hour12: bool = False
+    mock_llm: bool = False  # every team member uses the free mock (testing without LLM cost)
     updated_at: datetime = Field(default_factory=now, sa_type=UTCDateTime)
 
 
