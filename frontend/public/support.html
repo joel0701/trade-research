@@ -243,10 +243,15 @@ cd frontend &amp;&amp; npm install &amp;&amp; npm run dev   # http://localhost:5
   <h3>Types</h3>
   <table>
     <tr><th>Type</th><th>How it scans</th><th>Settings</th></tr>
-    <tr><td><b>Rule-based</b></td><td>Computes indicators from Yahoo daily bars for each ticker in your list and applies your rules.</td><td>Universe (tickers), rules, sort, max results.</td></tr>
+    <tr><td><b>Rule-based</b></td><td>Computes indicators from Yahoo daily bars for each stock and applies your rules.</td><td>Stocks to scan: an index (S&amp;P 500, Nasdaq-100, Dow 30) plus optional extra tickers, or a custom ticker list; rules, sort, max results.</td></tr>
     <tr><td><b>IBKR market scanner</b></td><td>IBKR scans the whole market through IB Gateway, ranked by IBKR. Results get indicator columns from Yahoo; optional rules filter them further.</td><td>Scan type, market, results requested (max 50), min price, min volume, min market cap ($M), extra rules, sort.</td></tr>
   </table>
+  <h3>Scanning an index</h3>
+  <p>Rule-based scanners can scan the <b>S&amp;P 500</b>, <b>Nasdaq-100</b> or <b>Dow 30</b>. The member list is downloaded from Wikipedia's index lists and kept for a week; if a refresh fails, the last saved list is used and the run says so. A large index takes about a minute the first time (free Yahoo data, fetched in batches of 100; no AI cost). Each stock's indicators are reused for 15 minutes, so re-running is quick. The run card shows the index and its size rather than every ticker.</p>
+  <h3>Why not IBKR for indicator scans?</h3>
+  <p>IBKR's scanner ranks the whole market by its own criteria and returns at most 50 stocks; it has no RSI or moving-average filters. For scans like "oversold in an uptrend", scan an index with the rule engine. Alternatively, use an IBKR scan such as <i>Near 52-week low</i> with extra rules on its top 50.</p>
   <h3>IBKR scan types</h3>
+  <p>There is a ready-made scanner (named <i>IBKR: …</i>) for each type, with filters that keep out penny stocks and illiquid names (price over $5, and volume over 500,000 or market cap over $1B for options scans). Adjust them in the editor or per run.</p>
   <p>Top % gainers · Top % losers · Most active (shares) · Most active (dollar volume) · Hot by volume (vs average) · Most trades ·
     Near 52-week high · Near 52-week low · Widest price range · Unusual option volume · Most active options · Highest option implied
     volatility · Implied vs historical volatility (highest) · Biggest IV increase · Highest put/call volume ratio · Lowest put/call volume ratio.</p>

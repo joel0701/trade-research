@@ -7,6 +7,7 @@ os.environ["DATABASE_URL"] = f"sqlite:///{_tmp}/test.db"
 os.environ.setdefault("ANTHROPIC_API_KEY", "test-key")
 os.environ["UPLOAD_DIR"] = f"{_tmp}/uploads"
 os.environ["LOG_DIR"] = f"{_tmp}/logs"
+os.environ["CACHE_DIR"] = f"{_tmp}/cache"
 # Only Anthropic is "configured" in tests unless a test sets another vendor's key.
 for _k in ("OPENAI_API_KEY", "GOOGLE_API_KEY", "GEMINI_API_KEY", "LLAMA_API_KEY", "XAI_API_KEY",
            "MISTRAL_API_KEY", "DEEPSEEK_API_KEY", "ANTHROPIC_AUTH_TOKEN"):

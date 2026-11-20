@@ -59,10 +59,28 @@ function ScanData({ source }: { source: string }) {
   );
 }
 
+type Universe = { key: string; label: string; count: number | null };
+
+/** Choose an index to scan (or a custom list); the ticker field then holds extra tickers. */
+function IndexSelect({ universes, value, onChange }: { universes: Universe[]; value: string; onChange: (v: string) => void }) {
+  return (
+    <>
+      <label>Stocks to scan</label>
+      <select value={value} onChange={(e) => onChange(e.target.value)}>
+        <option value="">Custom ticker list</option>
+        {universes.map((u) => <option key={u.key} value={u.key}>{u.label}{u.count ? ` (${u.count} stocks)` : ""}</option>)}
+      </select>
+      {value && <p className="muted small">The current list is downloaded and kept for a week. A large index takes about
+        a minute to scan the first time (free Yahoo data, no AI cost); re-running within 15 minutes is quick.</p>}
+    </>
+  );
+}
+
 /** Asks for this run's settings (pre-filled from the scanner; not saved), then runs it into a new session. */
-function RunScannerDialog({ scanner, codes, locations, onClose }: {
-  scanner: Json; codes: Option[]; locations: Option[]; onClose: () => void;
+function RunScannerDialog({ scanner, codes, locations, universes, onClose }: {
+  scanner: Json; codes: Option[]; locations: Option[]; universes: Universe[]; onClose: () => void;
 }) {
+  const [index, setIndex] = useState<string>(scanner.universe_index ?? "");
   const navigate = useNavigate();
   const ibkr = scanner.source === "ibkr";
   const [p, setP] = useState<Record<string, any>>({ ...(scanner.params ?? {}) });
@@ -78,7 +96,7 @@ function RunScannerDialog({ scanner, codes, locations, onClose }: {
     try {
       const body = ibkr
         ? { params: { rows: p.rows, above_price: p.above_price, above_volume: p.above_volume, market_cap_above: p.market_cap_above } }
-        : { universe: tickers };
+        : { universe: tickers, universe_index: index };
       const r = await api.post(`/screeners/${scanner.id}/run`, body);
       navigate(`/research/${r.session_id}`);  // results only; you ask about them next
     } catch (e: any) { setError(errorText(e)); setRunning(false); }
@@ -98,13 +116,14 @@ function RunScannerDialog({ scanner, codes, locations, onClose }: {
           </div>
         ) : (
           <>
-            <label>Tickers to scan ({tickers.length})</label>
-            <textarea rows={4} value={universe} onChange={(e) => setUniverse(e.target.value)} />
+            <IndexSelect universes={universes} value={index} onChange={setIndex} />
+            <label>{index ? `Extra tickers (${tickers.length}, optional)` : `Tickers to scan (${tickers.length})`}</label>
+            <textarea rows={3} value={universe} onChange={(e) => setUniverse(e.target.value)} />
           </>
         )}
         {error && <p className="error">{error}</p>}
         <div className="actions">
-          <button className="primary" disabled={running || (!ibkr && tickers.length === 0)}>{running ? "Scanning…" : "Scan"}</button>
+          <button className="primary" disabled={running || (!ibkr && !index && tickers.length === 0)}>{running ? "Scanning…" : "Scan"}</button>
           <button type="button" onClick={onClose}>Cancel</button>
         </div>
       </form>
@@ -118,8 +137,10 @@ export default function Scanners() {
   const [codes, setCodes] = useState<Option[]>([]);
   const [locations, setLocations] = useState<Option[]>([]);
   const [running, setRunning] = useState(false);
+  const [universes, setUniverses] = useState<Universe[]>([]);
   useEffect(() => {
     api.get("/scanner-options").then((o) => { setCodes(o.scan_codes); setLocations(o.locations); }).catch(() => {});
+    api.get("/universes").then(setUniverses).catch(() => {});
   }, []);
   useEffect(() => { if (!crud.selected && crud.items.length) crud.setSelected(crud.items[0]); }, [crud.items]);
 
@@ -155,7 +176,7 @@ export default function Scanners() {
             <label>Type</label>
             <select value={s.source ?? "rules"} onChange={(e) => set({ source: e.target.value,
               params: e.target.value === "ibkr" && !p.scan_code ? { scan_code: "TOP_PERC_GAIN", location: "STK.US.MAJOR", rows: 25 } : p })}>
-              <option value="rules">Rule-based: your rules over a list of tickers (Yahoo data)</option>
+              <option value="rules">Rule-based: your rules over an index or a list of tickers (Yahoo data)</option>
               <option value="ibkr">IBKR market scanner: IBKR scans the whole market (needs IB Gateway)</option>
             </select>
 
@@ -182,7 +203,10 @@ export default function Scanners() {
               </>
             ) : (
               <>
-                <Field label="Universe (comma-separated tickers)" value={(s.universe ?? []).join(", ")} multiline rows={3}
+                <IndexSelect universes={universes} value={s.universe_index ?? ""}
+                             onChange={(v) => set({ universe_index: v || null })} />
+                <Field label={s.universe_index ? "Extra tickers to include (optional, comma-separated)" : "Tickers (comma-separated)"}
+                       value={(s.universe ?? []).join(", ")} multiline rows={3}
                        onChange={(v) => set({ universe: v.split(/[\s,]+/).map((x) => x.trim().toUpperCase()).filter(Boolean) })} />
                 <JsonField label="Rules" value={s.rules} onChange={(rules) => set({ rules })} rows={10} />
                 <p className="muted small">{RULES_HELP}</p>
@@ -203,7 +227,7 @@ export default function Scanners() {
         </div>
       )}
       {running && s?.id && (
-        <RunScannerDialog scanner={crud.items.find((x) => x.id === s.id) ?? s}
+        <RunScannerDialog scanner={crud.items.find((x) => x.id === s.id) ?? s} universes={universes}
                           codes={codes} locations={locations} onClose={() => setRunning(false)} />
       )}
     </TwoPane>

@@ -12,6 +12,7 @@ Fields: see app.tools.indicators.snapshot (close, sma_50, rsi_14, rel_volume, ..
 import asyncio
 import logging
 import operator
+import time
 from collections.abc import Callable
 from typing import Any
 
@@ -49,12 +50,14 @@ def evaluate(rule: dict[str, Any], row: Snapshot) -> bool:
     return bool(op(left, right))
 
 
-def fetch_snapshots(tickers: list[str]) -> dict[str, Snapshot]:
-    """Download two years of daily bars in one batch and compute snapshot fields."""
+BATCH = 100            # tickers per Yahoo download (large lists in one request get throttled)
+SNAPSHOT_TTL = 15 * 60  # seconds a ticker's computed snapshot is reused (re-running a scan is instant)
+_snap_cache: dict[str, tuple[float, Snapshot]] = {}
+
+
+def _download(tickers: list[str]) -> dict[str, Snapshot]:
     import yfinance as yf
 
-    if not tickers:
-        return {}
     data = yf.download(tickers, period="2y", interval="1d", group_by="ticker",
                        auto_adjust=True, progress=False, threads=True)
     out: dict[str, Snapshot] = {}
@@ -66,6 +69,27 @@ def fetch_snapshots(tickers: list[str]) -> dict[str, Snapshot]:
                 out[t] = snapshot(df)
         except Exception:
             log.warning("No data for %s", t)
+    return out
+
+
+def fetch_snapshots(tickers: list[str]) -> dict[str, Snapshot]:
+    """Two years of daily bars per ticker (Yahoo, in batches), turned into snapshot fields. Results are
+    reused for SNAPSHOT_TTL, so running a large scan again is quick."""
+    if not tickers:
+        return {}
+    now = time.monotonic()
+    out = {t: s for t in tickers if (hit := _snap_cache.get(t)) and now - hit[0] < SNAPSHOT_TTL for s in [hit[1]]}
+    todo = [t for t in dict.fromkeys(tickers) if t not in out]
+    for i in range(0, len(todo), BATCH):
+        batch = todo[i:i + BATCH]
+        try:
+            got = _download(batch)
+        except Exception:
+            log.warning("Yahoo download failed for %d tickers starting %s", len(batch), batch[0], exc_info=True)
+            continue
+        for t, s in got.items():
+            _snap_cache[t] = (time.monotonic(), s)
+        out.update(got)
     return out
 
 

@@ -406,19 +406,49 @@ def ensure_models(db: Session) -> None:
     db.commit()
 
 
+def _ibkr(slug: str, name: str, code: str, description: str, **filters) -> dict:
+    """A built-in IBKR scanner: US listed stocks, 25 results, the given filters."""
+    return dict(slug=slug, name=f"IBKR: {name}", source="ibkr", description=description,
+                params={"scan_code": code, "location": "STK.US.MAJOR", "rows": 25, **filters})
+
+
+# One built-in scanner for each IBKR scan type (filters keep out penny stocks and illiquid names).
+LIQUID = {"above_price": 5, "above_volume": 500000}
+OPTIONABLE = {"above_price": 5, "market_cap_above": 1000}  # $ millions
 IBKR_SCANNERS = [
-    dict(slug="ibkr_top_gainers", name="IBKR: top % gainers", source="ibkr",
-         description="Biggest % gainers today among US listed stocks over $5 with real volume.",
-         params={"scan_code": "TOP_PERC_GAIN", "location": "STK.US.MAJOR", "rows": 25, "above_price": 5,
-                 "above_volume": 500000}),
-    dict(slug="ibkr_unusual_options", name="IBKR: unusual option volume", source="ibkr",
-         description="Stocks with unusually high option volume versus normal, over $5 and $1B market cap.",
-         params={"scan_code": "HOT_BY_OPT_VOLUME", "location": "STK.US.MAJOR", "rows": 25, "above_price": 5,
-                 "market_cap_above": 1000}),
-    dict(slug="ibkr_iv_rich", name="IBKR: IV rich vs historical", source="ibkr",
-         description="Highest implied volatility relative to historical volatility (options look expensive).",
-         params={"scan_code": "HIGH_OPT_IMP_VOLAT_OVER_HIST", "location": "STK.US.MAJOR", "rows": 25,
-                 "above_price": 10, "market_cap_above": 2000}),
+    _ibkr("ibkr_top_gainers", "top % gainers", "TOP_PERC_GAIN",
+          "Biggest % gainers today among US listed stocks over $5 with real volume.", **LIQUID),
+    _ibkr("ibkr_top_losers", "top % losers", "TOP_PERC_LOSE",
+          "Biggest % losers today among US listed stocks over $5 with real volume.", **LIQUID),
+    _ibkr("ibkr_most_active", "most active (shares)", "MOST_ACTIVE",
+          "Most shares traded today, stocks over $5.", above_price=5),
+    _ibkr("ibkr_most_active_usd", "most active (dollar volume)", "MOST_ACTIVE_USD",
+          "Most dollar volume traded today: where the money is.", above_price=5),
+    _ibkr("ibkr_hot_by_volume", "hot by volume", "HOT_BY_VOLUME",
+          "Volume far above normal for this time of day: unusual interest.", **LIQUID),
+    _ibkr("ibkr_most_trades", "most trades", "TOP_TRADE_COUNT",
+          "Most individual trades today.", **LIQUID),
+    _ibkr("ibkr_near_52w_high", "near 52-week high", "HIGH_VS_52W_HL",
+          "Closest to their 52-week high: strength and possible breakouts.", **LIQUID),
+    _ibkr("ibkr_near_52w_low", "near 52-week low", "LOW_VS_52W_HL",
+          "Closest to their 52-week low: weakness, or candidates for a bounce.", **LIQUID),
+    _ibkr("ibkr_widest_range", "widest price range", "TOP_PRICE_RANGE",
+          "Widest high-low range today: the most volatile names.", **LIQUID),
+    _ibkr("ibkr_unusual_options", "unusual option volume", "HOT_BY_OPT_VOLUME",
+          "Stocks with unusually high option volume versus normal, over $5 and $1B market cap.", **OPTIONABLE),
+    _ibkr("ibkr_most_active_options", "most active options", "OPT_VOLUME_MOST_ACTIVE",
+          "Most option contracts traded today.", **OPTIONABLE),
+    _ibkr("ibkr_high_iv", "highest implied volatility", "HIGH_OPT_IMP_VOLAT",
+          "Highest option implied volatility: the market expects big moves.", **OPTIONABLE),
+    _ibkr("ibkr_iv_rich", "IV rich vs historical", "HIGH_OPT_IMP_VOLAT_OVER_HIST",
+          "Highest implied volatility relative to historical volatility (options look expensive).",
+          above_price=10, market_cap_above=2000),
+    _ibkr("ibkr_iv_gain", "biggest IV increase", "TOP_OPT_IMP_VOLAT_GAIN",
+          "Biggest rise in implied volatility today: something may be brewing.", **OPTIONABLE),
+    _ibkr("ibkr_high_put_call", "highest put/call ratio", "HIGH_OPT_VOLUME_PUT_CALL_RATIO",
+          "Most put volume relative to calls: bearish positioning or hedging.", **OPTIONABLE),
+    _ibkr("ibkr_low_put_call", "lowest put/call ratio", "LOW_OPT_VOLUME_PUT_CALL_RATIO",
+          "Most call volume relative to puts: bullish positioning.", **OPTIONABLE),
 ]
 
 

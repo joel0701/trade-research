@@ -204,6 +204,9 @@ class Screener(SQLModel, table=True):
     universe: list[str] = Field(default_factory=list, sa_column=Column(JSON))
     rules: dict[str, Any] = Field(default_factory=dict, sa_column=Column(JSON))
     source: str = "rules"
+    # Rule-based: scan an index (sp500, nasdaq100, dow30; see screeners/universes.py) instead of, or in
+    # addition to, the tickers in `universe`. None = only `universe`.
+    universe_index: str | None = None
     params: dict[str, Any] = Field(default_factory=dict, sa_column=Column(JSON))
     # A scanner only scans: a run shows the results (no LLM, no cost). You then ask about them like
     # any research question. To have the Lead evaluate results automatically, build a skill on it.
