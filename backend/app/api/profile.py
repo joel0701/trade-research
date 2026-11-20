@@ -26,6 +26,9 @@ class ProfileUpdate(BaseModel):
     timezone: str | None = None
     hour12: bool | None = None
     mock_llm: bool | None = None
+    model_low_id: int | None = None
+    model_mid_id: int | None = None
+    model_high_id: int | None = None
 
 
 def get_profile(db: Session) -> UserProfile:
@@ -78,6 +81,19 @@ def update(body: ProfileUpdate, db: Session = Depends(get_session)) -> dict[str,
 
         p.mock_llm = body.mock_llm
         set_mock(p.mock_llm)  # takes effect immediately
+    for field in ("model_low_id", "model_mid_id", "model_high_id"):
+        if field in body.model_fields_set:
+            tid = getattr(body, field)
+            if tid is not None:
+                from app.llm.tiers import is_tier
+                from app.models import Tool
+                t = db.get(Tool, tid)
+                if t is None or t.kind != "model" or is_tier(t.config):
+                    raise HTTPException(422, "A default must point at a real model (not another default).")
+            setattr(p, field, tid)
+    from app.llm.tiers import set_targets
+
+    set_targets(p.model_low_id, p.model_mid_id, p.model_high_id)
     p.updated_at = now()
     db.add(p)
     db.commit()

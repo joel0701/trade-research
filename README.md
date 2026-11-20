@@ -120,6 +120,10 @@ top tickers, and no AI model runs. You then ask about the results like any resea
 (Research default model, full team). **Skills built on a scanner** (Skills → *Scanner input*) run
 the scan and then the skill's prompt on the results, with the skill's model, in one session.
 
+**Default models:** Settings → *Default models* sets a low-level (Haiku), mid-level (Sonnet) and
+high-level (Opus) model. They're listed first in every model picker; skills, team members and sessions
+set to a default follow it, so changing a default in Settings updates all of them at once.
+
 **Suggested next steps:** every answer ends with one to three specific follow-up questions that build on
 it, naming the tickers; scanner results end with ready-made questions about the top tickers. They show
 as clickable suggestions (clicking one puts it in the box to edit or send), and the latest answer's first

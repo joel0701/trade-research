@@ -120,7 +120,11 @@ PROVIDERS: dict[str, Provider] = {p.slug: p for p in [
 
 
 def provider_of(model_config: dict) -> Provider:
-    """Model tools without a provider are Claude models (older databases)."""
+    """Model tools without a provider are Claude models (older databases). A default (low/mid/high)
+    reports the provider of the model it points at."""
+    from app.llm.tiers import resolve
+
+    model_config = resolve(model_config)
     slug = model_config.get("provider", "anthropic")
     if slug not in PROVIDERS:
         raise ValueError(f"Unknown provider {slug!r}; expected one of {', '.join(PROVIDERS)}")
@@ -128,6 +132,9 @@ def provider_of(model_config: dict) -> Provider:
 
 
 def model_available(model_config: dict) -> bool:
+    from app.llm.tiers import resolve
+
+    model_config = resolve(model_config)
     try:
         return provider_of(model_config).available()
     except ValueError:

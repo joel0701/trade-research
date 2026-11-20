@@ -50,6 +50,9 @@ class ModelConfig:
 
     @classmethod
     def from_tool_config(cls, cfg: dict[str, Any]) -> "ModelConfig":
+        from app.llm.tiers import resolve
+
+        cfg = resolve(cfg)  # a default (low/mid/high) becomes the model it points at
         known = {k: v for k, v in cfg.items() if k in cls.__dataclass_fields__}
         return cls(**known)
 

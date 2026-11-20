@@ -18,3 +18,7 @@ export function byVendor<T extends ModelInfo>(models: T[]): [string, T[]][] {
   for (const m of models) groups.set(m.provider_name, [...(groups.get(m.provider_name) ?? []), m]);
   return [...groups.entries()];
 }
+
+/** How a model is named in pickers: defaults by their own name (which says what they point at). */
+export const modelLabel = (m: Json, withId = false) =>
+  m.tier ? m.name : `${m.provider_name}: ${m.name}${withId && m.config?.model_id ? ` (${m.config.model_id})` : ""}`;

@@ -22,6 +22,8 @@ export default function Settings() {
 
   useEffect(() => { setName(profile.name); setEmail(profile.email); }, [profile.name, profile.email]);
   useEffect(() => { api.get<Provider[]>("/providers").then(setProviders).catch(() => {}); }, []);
+  const [models, setModels] = useState<any[]>([]);
+  useEffect(() => { api.get<any[]>("/models").then(setModels).catch(() => {}); }, [profile.model_low_id, profile.model_mid_id, profile.model_high_id]);
 
   async function run(action: () => Promise<void>, done = "Saved") {
     setError(""); setStatus("");
@@ -69,6 +71,28 @@ export default function Settings() {
           <label className="inline"><input type="radio" checked={profile.hour12} onChange={() => run(() => save({ hour12: true }))} /> 12-hour</label>
         </div>
         <p className="muted small">Now: {fmt()} ({zone.replace(/_/g, " ")})</p>
+      </section>
+
+      <section className="card">
+        <h3>Default models</h3>
+        <p className="muted small">Skills, team members and sessions can use a default instead of a specific model. Change a
+          default here and everything set to it follows. Pick cheaper models for simple work and stronger ones for hard reasoning.</p>
+        {([["low", "model_low_id", "Low-level", "simple lookups and summaries"],
+           ["mid", "model_mid_id", "Mid-level", "the everyday workhorse"],
+           ["high", "model_high_id", "High-level", "hard reasoning and final answers"]] as const).map(([tier, field, label, hint]) => {
+          const current = models.find((m) => m.tier === tier);
+          return (
+            <div key={tier}>
+              <label>{label} <span className="muted small">· {hint}</span></label>
+              <select value={profile[field] ?? current?.target_id ?? ""}
+                      onChange={(e) => run(() => save({ [field]: e.target.value ? Number(e.target.value) : null }))}>
+                {models.filter((m) => !m.tier).map((m) => (
+                  <option key={m.id} value={m.id}>{m.provider_name}: {m.name}{m.available ? "" : " (not available)"}</option>
+                ))}
+              </select>
+            </div>
+          );
+        })}
       </section>
 
       <section className="card">

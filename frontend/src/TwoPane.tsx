@@ -1,7 +1,7 @@
 /** Two-pane layout like Research (without the trace): list + profile on the left, details on the right. */
 import { ReactNode, useEffect, useState } from "react";
 import { Json } from "./api";
-import { VENDOR_COLORS } from "./models";
+import { modelLabel, VENDOR_COLORS } from "./models";
 import ProfileCard from "./ProfileCard";
 import { ResizeHandle, usePanelWidth } from "./Resizable";
 
@@ -102,7 +102,7 @@ export function LeadModelSelect({ models, value, onChange, defaultLabel, label =
       <select className="model-select" style={{ borderLeftColor: VENDOR_COLORS[models.find((m) => m.id === value && m.available)?.provider] ?? "var(--accent)" }}
               value={value ?? ""} onChange={(e) => onChange(e.target.value ? Number(e.target.value) : null)}>
         <option value="">{defaultLabel}</option>
-        {models.filter((m) => m.available).map((m) => <option key={m.id} value={m.id}>{m.provider_name}: {m.name}</option>)}
+        {models.filter((m) => m.available).map((m) => <option key={m.id} value={m.id}>{modelLabel(m)}</option>)}
       </select>
     </>
   );

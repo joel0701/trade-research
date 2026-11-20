@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { api, Json } from "../api";
 import { Field, MasterDetail, Toggle, useCrud } from "../admin";
 import SourcePicker from "../SourcePicker";
+import { modelLabel } from "../models";
 
 /** The team: the Lead Analyst and the specialists it consults (stored as "roles" in the database). */
 export default function Team() {
@@ -25,7 +26,7 @@ export default function Team() {
           <select value={r.model_tool_id ?? ""} onChange={(e) => set({ model_tool_id: Number(e.target.value) })}>
             {models.map((m) => (
               <option key={m.id} value={m.id}>
-                {m.provider_name}: {m.name} ({m.config.model_id}){m.available ? "" : ` — no API key (${m.key_env})`}
+                {modelLabel(m, true)}{m.available ? "" : m.tier ? " — not available" : ` — no API key (${m.key_env})`}
               </option>
             ))}
           </select>

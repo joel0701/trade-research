@@ -192,7 +192,9 @@ export default function Composer({ placeholder, busy, models, modelId, defaultMo
           <button type="button" className="tool-btn model-btn" onClick={() => { if (!modelPop.open) onOpenModels?.(); modelPop.setOpen(!modelPop.open); }}
                   title="Model the Lead Analyst uses for this session">
             <ModelMark color={VENDOR_COLORS[effective?.provider ?? ""]} />
-            <strong className="model-name">{effective?.name.replace(/^Claude /, "") ?? "Model"}</strong>
+            <strong className="model-name">{!effective ? "Model" : effective.tier
+              ? `${{ low: "Low", mid: "Mid", high: "High" }[effective.tier as string] ?? "Default"} · ${(effective.target_name ?? "").replace(/^Claude /, "")}`
+              : effective.name.replace(/^Claude /, "")}</strong>
             {effective && !effective.available && <span className="error small">no API key</span>}
             <Chevron />
           </button>

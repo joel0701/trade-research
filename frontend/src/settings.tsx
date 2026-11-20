@@ -9,6 +9,9 @@ export type Profile = {
   hour12: boolean;
   mock_llm: boolean;      // Test mode: canned answers, no AI cost
   mock_llm_env?: boolean; // MOCK_LLM=1 in .env forces Test mode on
+  model_low_id?: number | null;  // Default models: the real model each default points at
+  model_mid_id?: number | null;
+  model_high_id?: number | null;
 };
 
 const EMPTY: Profile = { name: "", email: "", avatar_url: null, timezone: "auto", hour12: false, mock_llm: false };

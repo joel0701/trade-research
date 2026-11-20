@@ -4,7 +4,7 @@ import { Link } from "react-router-dom";
 import SourcePicker from "./SourcePicker";
 import { api, Json } from "./api";
 import { Field, JsonField } from "./admin";
-import { ModelInfo } from "./models";
+import { ModelInfo, modelLabel } from "./models";
 
 export default function SkillDraftDialog({ sessionId, models, onClose, onSaved }: {
   sessionId: number; models: ModelInfo[]; onClose: () => void; onSaved: () => void;
@@ -75,7 +75,7 @@ export default function SkillDraftDialog({ sessionId, models, onClose, onSaved }
                     onChange={(e) => set({ lead_model_tool_id: e.target.value ? Number(e.target.value) : null })}>
               <option value="">Research default</option>
               {models.filter((m) => m.available).map((m) => (
-                <option key={m.id} value={m.id}>{m.provider_name}: {m.name}</option>
+                <option key={m.id} value={m.id}>{modelLabel(m)}</option>
               ))}
             </select>
             {error && <p className="error">{error}</p>}

@@ -17,6 +17,7 @@ from app.models import Connection, Role, Screener, Skill, StockList, Tool
 from app.tools.registry import availability
 from app.seed import seed
 from app.llm.providers import PROVIDERS, local_model_states, provider_of
+from app.llm.tiers import is_tier, resolve, target_tool
 from app.tools.python_tools import PYTHON_TOOLS
 
 from app.logs import setup_logging
@@ -33,7 +34,10 @@ async def lifespan(_: FastAPI):
         from app.api.profile import get_profile
         from app.llm.mock_loop import set_mock
 
-        set_mock(get_profile(db).mock_llm)  # the profile's Test mode toggle
+        prof = get_profile(db)
+        set_mock(prof.mock_llm)  # the profile's Test mode toggle
+        from app.llm.tiers import set_targets
+        set_targets(prof.model_low_id, prof.model_mid_id, prof.model_high_id)  # default models
     mark_interrupted_runs()
     yield
 
@@ -140,14 +144,22 @@ def models() -> list[dict]:
                 p = provider_of(t.config)
                 info = {"provider": p.slug, "provider_name": p.name, "key_env": p.key_env, "available": p.available(),
                         "local": p.local, "base_url": p.url() if p.local else None}
+                if is_tier(t.config):  # a default: named and grouped as such, pointing at a real model
+                    target = target_tool(t.config.get("tier", "mid"))
+                    info.update(provider_name="Defaults (set in Settings)", tier=t.config.get("tier"),
+                                target_id=target.id if target else None, target_name=target.name if target else None)
                 if p.local and info["available"]:
-                    st = local_model_states(p).get(t.config.get("model_id"), {})
+                    st = local_model_states(p).get(resolve(t.config).get("model_id"), {})
                     info["loaded"] = st.get("loaded")  # None = the server doesn't say
                     info["context"] = st.get("context")
             except ValueError as e:
                 info = {"provider": t.config.get("provider"), "provider_name": "?", "key_env": None,
                         "available": False, "problem": str(e)}
-            out.append({**t.model_dump(), **info, "available": info["available"] and t.enabled})
+            row = {**t.model_dump(), **info, "available": info["available"] and t.enabled}
+            if info.get("tier"):
+                row["name"] = f"{t.name} ({info['target_name'] or 'not set'})"
+            out.append(row)
+        out.sort(key=lambda m: (not m.get("tier"), 0))  # defaults first, then the rest in order
         return out
 
 

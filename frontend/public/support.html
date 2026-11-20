@@ -323,6 +323,8 @@ cd frontend &amp;&amp; npm install &amp;&amp; npm run dev   # http://localhost:5
   </table>
   <h3>Model config</h3>
   <p>Each model's JSON config: <code>provider</code>, <code>model_id</code>, <code>max_tokens</code>, prices <code>price_input</code> / <code>price_output</code> / <code>price_cache_read</code> (USD per million tokens, for cost estimates). Claude only: <code>effort</code>, <code>fallbacks</code>, <code>show_thinking</code>. Other vendors: <code>params</code> (extra request fields).</p>
+  <h3>Default models</h3>
+  <p>Settings → <b>Default models</b> sets three defaults: <b>low-level</b> (simple lookups and summaries; Haiku unless changed), <b>mid-level</b> (the everyday workhorse; Sonnet) and <b>high-level</b> (hard reasoning and final answers; Opus). They appear first in every model picker (Research, Skills, Team) as "Default: high-level (Claude Opus 5.5)" and so on. Anything set to a default follows it: change mid-level in Settings and every skill and team member on mid-level switches at once. Choosing a specific model instead keeps that model. Out of the box, the Lead uses high-level, most specialists mid-level and the Sector Mapper low-level.</p>
   <h3>Strict team mode</h3>
   <p>A toggle per model: when that model is the Lead, it consults each specialist at most once and 3 times in total, with short specialist reports. Faster on slow local models, but may reduce quality. Off by default. See <a href="#limits">Team limits</a>.</p>
   <h3>Which model runs when</h3>
@@ -568,6 +570,7 @@ cd frontend &amp;&amp; npm install &amp;&amp; npm run dev   # http://localhost:5
     <tr><td>Token</td><td>A unit of text for models (~4 characters of English).</td></tr>
     <tr><td>Run card</td><td>The coloured first message of a skill or scanner session.</td></tr>
     <tr><td>Research default</td><td>The model used for questions: the session's pick, else the Lead Analyst's model.</td></tr>
+    <tr><td>Default models</td><td>Low-, mid- and high-level models set once in Settings; skills, team members and sessions set to a default follow it.</td></tr>
     <tr><td>Strict team mode</td><td>Tighter consult limits and short reports for a Lead model.</td></tr>
     <tr><td>Market session</td><td>Open, pre-market, after hours, closed or weekend (US, Eastern time).</td></tr>
   </table>

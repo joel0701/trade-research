@@ -243,6 +243,10 @@ class UserProfile(SQLModel, table=True):
     timezone: str = "auto"  # IANA name like "America/New_York", or "auto" = the browser's zone
     hour12: bool = False
     mock_llm: bool = False  # every team member uses the free mock (testing without LLM cost)
+    # Default models (Settings): the real model each default points at (Tool ids); None = Haiku/Sonnet/Opus.
+    model_low_id: int | None = None
+    model_mid_id: int | None = None
+    model_high_id: int | None = None
     updated_at: datetime = Field(default_factory=now, sa_type=UTCDateTime)
 
 

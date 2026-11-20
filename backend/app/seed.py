@@ -391,6 +391,45 @@ def dismissed(db: Session, kind: str) -> set[str]:
     return {d.slug for d in db.exec(select(DismissedDefault).where(DismissedDefault.kind == kind)).all()}
 
 
+TIER_MODELS = [
+    dict(slug="default_low", name="Default: low-level", description="Simple lookups and summaries. Set in Settings.",
+         config={"provider": "tier", "tier": "low"}),
+    dict(slug="default_mid", name="Default: mid-level", description="The everyday workhorse. Set in Settings.",
+         config={"provider": "tier", "tier": "mid"}),
+    dict(slug="default_high", name="Default: high-level", description="Hard reasoning and final answers. Set in Settings.",
+         config={"provider": "tier", "tier": "high"}),
+]
+
+
+def ensure_tiers(db: Session) -> None:
+    """Add the three default models, and once, point skills and team members that use Haiku, Sonnet
+    or Opus at the matching default (later choices of a specific model are left alone)."""
+    existing = {t.slug: t for t in db.exec(select(Tool).where(Tool.kind == "model")).all()}
+    gone = dismissed(db, "tool")
+    for m in TIER_MODELS:
+        if m["slug"] not in existing and m["slug"] not in gone:
+            t = Tool(kind="model", **m)
+            db.add(t)
+            db.flush()
+            existing[t.slug] = t
+    marker = db.exec(select(DismissedDefault).where(DismissedDefault.kind == "migration",
+                                                    DismissedDefault.slug == "model_tiers")).first()
+    if marker is None:
+        mapping = {existing[real].id: existing[tier].id for real, tier in
+                   (("haiku", "default_low"), ("sonnet", "default_mid"), ("opus", "default_high"))
+                   if real in existing and tier in existing}
+        for sk in db.exec(select(Skill)).all():
+            if sk.lead_model_tool_id in mapping:
+                sk.lead_model_tool_id = mapping[sk.lead_model_tool_id]
+                db.add(sk)
+        for role in db.exec(select(Role)).all():
+            if role.model_tool_id in mapping:
+                role.model_tool_id = mapping[role.model_tool_id]
+                db.add(role)
+        db.add(DismissedDefault(kind="migration", slug="model_tiers"))
+    db.commit()
+
+
 def ensure_models(db: Session) -> None:
     """Add default models missing from the database, and fill in config keys that older
     databases lack (provider, prices). Never overwrites values you have edited."""
@@ -489,6 +528,7 @@ def seed(db: Session) -> None:
         ensure_data_sources(db)
         ensure_scanners(db)
         ensure_lists(db)
+        ensure_tiers(db)
         return
     db.add_all(TOOLS)
     db.commit()
@@ -503,3 +543,4 @@ def seed(db: Session) -> None:
     ensure_data_sources(db)
     ensure_scanners(db)
     ensure_lists(db)
+    ensure_tiers(db)
