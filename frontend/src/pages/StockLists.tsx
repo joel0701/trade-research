@@ -13,6 +13,19 @@ export default function StockLists({ header }: { header: React.ReactNode }) {
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState("");
 
+  const [finding, setFinding] = useState(false);
+  async function findSource(sl: Json) {
+    setFinding(true); setMsg("");
+    try {
+      const saved = await crud.save(sl);  // save first, so the symbol and any edits are used
+      if (!saved) { setMsg("Fill in the name and slug, then try again."); return; }
+      const updated = await api.post(`/stock-lists/${saved.id}/find-source`);
+      await crud.reload();
+      crud.setSelected(updated);
+      setMsg(`Found ${updated.tickers.length} tickers. ${updated.source_note}.`);
+    } catch (e: any) { setMsg(errorText(e)); } finally { setFinding(false); }
+  }
+
   async function refreshNow(sl: Json) {
     setBusy(true); setMsg("");
     try {
@@ -28,7 +41,7 @@ export default function StockLists({ header }: { header: React.ReactNode }) {
       <p className="muted small" style={{ maxWidth: 820 }}>Named ticker lists, such as an index, for rule-based scanners and for
         questions and skills (the Lead looks them up with the stock list tool). A list is refreshed only when something uses
         it and it's older than its schedule allows. Refreshing downloads the list (no AI model, no cost).</p></>}
-      blank={{ slug: "", name: "", description: "", source: "manual", url: "", column: "Symbol", refresh: "manual", tickers: [], enabled: true }}
+      blank={{ slug: "", name: "", description: "", symbol: "", source: "web", url: "", column: "Symbol", refresh: "weekly", tickers: [], enabled: true }}
       rowExtra={(sl) => <span className="muted small nowrap">{sl.tickers?.length ? `${sl.tickers.length} · ` : ""}{sl.refresh}</span>}>
       {(sl, set) => (
         <>
@@ -36,14 +49,29 @@ export default function StockLists({ header }: { header: React.ReactNode }) {
           <Field label="Slug (unique id)" value={sl.slug} onChange={(slug) => set({ slug })} />
           <Field label="Description" value={sl.description} onChange={(description) => set({ description })} />
           <label>Source</label>
-          <select value={sl.source} onChange={(e) => set({ source: e.target.value, refresh: e.target.value === "manual" ? "manual" : (sl.refresh === "manual" ? "weekly" : sl.refresh) })}>
-            <option value="wikipedia">Wikipedia table (downloaded on refresh)</option>
+          <select value={sl.source === "wikipedia" ? "web" : sl.source}
+                  onChange={(e) => set({ source: e.target.value, refresh: e.target.value === "manual" ? "manual" : (sl.refresh === "manual" ? "weekly" : sl.refresh) })}>
+            <option value="web">Web page or CSV file (downloaded on refresh)</option>
             <option value="manual">Manual: tickers you maintain</option>
           </select>
-          {sl.source === "wikipedia" && (
+          {sl.source !== "manual" && (
             <>
-              <Field label="Wikipedia page address" value={sl.url} onChange={(url) => set({ url })} />
-              <Field label="Ticker column name in the page's table" value={sl.column} onChange={(column) => set({ column })} />
+              <div className="find-source">
+                <div style={{ flex: 1 }}>
+                  <Field label="Index or ETF symbol (or name), e.g. SPX, QQQ, XLK, Russell 1000" value={sl.symbol ?? ""}
+                         onChange={(symbol) => set({ symbol })} />
+                </div>
+                <button className="act act-accent" disabled={finding || !(sl.symbol || sl.name)} onClick={() => findSource(sl)}
+                        title="Find where to download the members, check it works, and save it">
+                  {finding ? "Finding…" : "Find source"}
+                </button>
+              </div>
+              <p className="muted small">Find source searches Wikipedia first (free). If that finds nothing (typical for ETFs),
+                the cheapest Claude model searches the web for the fund's holdings page or file (about a cent or two). Only a
+                source that downloads and parses correctly is saved. Use it again if a source moves.</p>
+              {sl.source_note && <p className="small" style={{ color: "var(--ok-fg)" }}>✓ {sl.source_note}</p>}
+              <Field label="Page or file address" value={sl.url} onChange={(url) => set({ url })} />
+              <Field label="Ticker column name (in the page's table or the file)" value={sl.column} onChange={(column) => set({ column })} />
               <label>Refresh schedule</label>
               <select value={sl.refresh} onChange={(e) => set({ refresh: e.target.value })}>
                 {SCHEDULES.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
@@ -52,15 +80,15 @@ export default function StockLists({ header }: { header: React.ReactNode }) {
                 Index members rarely change; weekly or monthly is usually enough.</p>
             </>
           )}
-          <label>Tickers ({sl.tickers?.length ?? 0}){sl.source === "wikipedia" ? " · filled in by refresh" : ""}</label>
+          <label>Tickers ({sl.tickers?.length ?? 0}){sl.source !== "manual" ? " · filled in by refresh" : ""}</label>
           <textarea rows={6} value={(sl.tickers ?? []).join(", ")} readOnly={sl.source !== "manual"}
                     onChange={(e) => set({ tickers: e.target.value.split(/[\s,]+/).map((x) => x.trim().toUpperCase()).filter(Boolean) })} />
-          {sl.id && sl.source === "wikipedia" && (
+          {sl.id && sl.source !== "manual" && (
             <p className="small">
               {sl.refreshed_at ? <span className="muted">Last refreshed {fmt(sl.refreshed_at)}. </span> : <span className="muted">Not downloaded yet. </span>}
               {sl.last_error && <span className="error">Last refresh failed: {sl.last_error} </span>}
               <button className="link" disabled={busy} onClick={() => refreshNow(sl)}>{busy ? "Refreshing…" : "Refresh now"}</button>
-              {msg && <span className="muted"> {msg}</span>}
+              {msg && !finding && <span className="muted"> {msg}</span>}
             </p>
           )}
           <Toggle label="Enabled" value={sl.enabled} onChange={(enabled) => set({ enabled })} />

@@ -12,13 +12,15 @@ export function useCrud(path: string) {
     .catch((e) => setError(e.message));
   useEffect(() => { reload(); }, [path]);
 
-  async function save(item: Json) {
+  /** Saves and returns the saved item (null if it failed; the error is shown). */
+  async function save(item: Json): Promise<Json | null> {
     setError("");
     try {
       const saved = item.id ? await api.put(`${path}/${item.id}`, item) : await api.post(path, item);
       await reload();
       setSelected(saved);
-    } catch (e: any) { setError(e.message); }
+      return saved;
+    } catch (e: any) { setError(e.message); return null; }
   }
   async function remove(item: Json) {
     if (!item.id) return;

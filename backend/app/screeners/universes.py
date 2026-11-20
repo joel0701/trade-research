@@ -24,13 +24,13 @@ REFRESH_DAYS = {"daily": 1, "weekly": 7, "monthly": 30}
 
 # Built-in lists (added on startup unless you deleted them).
 DEFAULT_LISTS = [
-    dict(slug="sp500", name="S&P 500", source="wikipedia", refresh="weekly", column="Symbol",
+    dict(slug="sp500", name="S&P 500", symbol="SPX", source="web", refresh="weekly", column="Symbol",
          url="https://en.wikipedia.org/wiki/List_of_S%26P_500_companies",
          description="The 500 largest US companies (S&P Dow Jones Indices)."),
-    dict(slug="nasdaq100", name="Nasdaq-100", source="wikipedia", refresh="weekly", column="Ticker",
+    dict(slug="nasdaq100", name="Nasdaq-100", symbol="NDX", source="web", refresh="weekly", column="Ticker",
          url="https://en.wikipedia.org/wiki/Nasdaq-100",
          description="The 100 largest non-financial companies on Nasdaq."),
-    dict(slug="dow30", name="Dow 30", source="wikipedia", refresh="monthly", column="Symbol",
+    dict(slug="dow30", name="Dow 30", symbol="DJI", source="web", refresh="monthly", column="Symbol",
          url="https://en.wikipedia.org/wiki/Dow_Jones_Industrial_Average",
          description="The Dow Jones Industrial Average: 30 large US companies."),
 ]
@@ -44,27 +44,63 @@ def to_yahoo(symbol: str) -> str:
     return symbol.strip().upper().replace(".", "-")
 
 
+TICKER_COLUMNS = ("Symbol", "Ticker", "Ticker symbol", "Ticker Symbol", "Code", "Stock Symbol")
+
+
+def _norm_col(c) -> str:
+    return " ".join(str(c[-1] if isinstance(c, tuple) else c).split())
+
+
+def _pick(values) -> list[str]:
+    tickers = [to_yahoo(str(v)) for v in values]
+    return list(dict.fromkeys(t for t in tickers if t and t not in ("NAN", "-", "--") and len(t) <= 12 and " " not in t))
+
+
 def parse_constituents(html: str, column: str, min_rows: int = 5) -> list[str]:
-    """The `column` values of the largest table on the page that has that column."""
+    """The `column` values of the largest table on the page that has that column (case-insensitive)."""
     import pandas as pd
 
     best: list[str] = []
+    want = column.strip().lower()
     for table in pd.read_html(io.StringIO(html)):
-        cols = [str(c[-1] if isinstance(c, tuple) else c).strip() for c in table.columns]
-        if column in cols and len(table) >= min_rows and len(table) > len(best):
-            values = [to_yahoo(str(v)) for v in table.iloc[:, cols.index(column)].tolist()]
-            best = list(dict.fromkeys(v for v in values if v and v != "NAN"))
+        cols = [_norm_col(c).lower() for c in table.columns]
+        if want in cols and len(table) >= min_rows and len(table) > len(best):
+            best = _pick(table.iloc[:, cols.index(want)].tolist())
     if not best:
         raise UniverseError(f"no table with a '{column}' column and at least {min_rows} rows on the page")
     return best
 
 
+def parse_csv(text: str, column: str, min_rows: int = 5) -> list[str]:
+    """The `column` values of a CSV file, skipping any lines before the header (ETF holdings files
+    often start with fund details)."""
+    import pandas as pd
+
+    want = column.strip().lower()
+    lines = text.splitlines()
+    for i, line in enumerate(lines[:60]):
+        cells = [c.strip().strip('"').lower() for c in line.split(",")]
+        if want in cells:
+            df = pd.read_csv(io.StringIO("\n".join(lines[i:])), dtype=str, on_bad_lines="skip")
+            cols = [str(c).strip().lower() for c in df.columns]
+            tickers = _pick(df.iloc[:, cols.index(want)].dropna().tolist())
+            if len(tickers) >= min_rows:
+                return tickers
+    raise UniverseError(f"no '{column}' column with at least {min_rows} rows in the file")
+
+
+def parse_source(content: str, content_type: str, url: str, column: str) -> list[str]:
+    if "csv" in content_type or url.lower().split("?")[0].endswith(".csv"):
+        return parse_csv(content, column)
+    return parse_constituents(content, column)
+
+
 def fetch_list(sl: StockList) -> list[str]:
-    if sl.source != "wikipedia" or not sl.url:
+    if sl.source not in ("web", "wikipedia") or not sl.url:
         raise UniverseError("this list has no source to refresh from")
     resp = httpx.get(sl.url, headers=HEADERS, timeout=20, follow_redirects=True)
     resp.raise_for_status()
-    return parse_constituents(resp.text, sl.column or "Symbol")
+    return parse_source(resp.text, resp.headers.get("content-type", ""), sl.url, sl.column or "Symbol")
 
 
 def is_due(sl: StockList) -> bool:
@@ -81,7 +117,7 @@ def refresh(db: Session, sl: StockList) -> StockList:
     try:
         tickers = fetch_list(sl)
     except Exception as e:
-        sl.last_error = f"{type(e).__name__}: {e}"[:300]
+        sl.last_error = (f"{type(e).__name__}: {e}"[:260] + " (the source may have moved: use Find source)")
         db.add(sl)
         db.commit()
         raise UniverseError(f"Couldn't refresh {sl.name}: {e}") from e
@@ -126,9 +162,15 @@ def get_list(db: Session, name: str) -> tuple[StockList, str | None]:
 def ensure_stock_lists(db: Session, dismissed: set[str]) -> None:
     """Add the built-in lists if missing (not ones you deleted). Lists saved by the earlier file cache
     (data/cache/index_<slug>.json) are carried over so they don't need downloading again."""
-    existing = {sl.slug for sl in db.exec(select(StockList)).all()}
+    existing = {sl.slug: sl for sl in db.exec(select(StockList)).all()}
     for spec in DEFAULT_LISTS:
-        if spec["slug"] in existing or spec["slug"] in dismissed:
+        if spec["slug"] in existing:  # fill in the symbol on lists created before symbols existed
+            sl = existing[spec["slug"]]
+            if not sl.symbol:
+                sl.symbol = spec["symbol"]
+                db.add(sl)
+            continue
+        if spec["slug"] in dismissed:
             continue
         sl = StockList(**spec)
         try:

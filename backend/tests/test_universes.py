@@ -125,3 +125,53 @@ def test_downloads_are_batched_and_cached(monkeypatch):
     assert len(engine.fetch_snapshots(tickers)) == 250 and batches == [100, 100, 50]
     assert len(engine.fetch_snapshots(tickers + ["NEW"])) == 251 and batches[-1] == 1
     engine._snap_cache.clear()
+
+
+def test_csv_holdings_file_with_preamble():
+    text = 'Fund Holdings as of Nov 19, 2026\n"Ticker","Name","Weight"\n"NVDA","Nvidia","8.1"\n"AAPL","Apple","7.0"\n' \
+           '"MSFT","Microsoft","6.5"\n"AVGO","Broadcom","5.0"\n"BRK.B","Berkshire","1.0"\n"-","Cash","0.1"\n'
+    assert universes.parse_csv(text, "ticker") == ["NVDA", "AAPL", "MSFT", "AVGO", "BRK-B"]
+
+
+def test_find_source_wikipedia_first_then_model(monkeypatch):
+    from app.screeners import discover
+
+    class R:
+        def __init__(self, text, ctype="text/html"):
+            self.text, self.headers = text, {"content-type": ctype}
+
+        def raise_for_status(self):
+            pass
+
+        def json(self):
+            return json.loads(self.text)
+
+    big = "<table><tr><th>Ticker</th><th>Company</th></tr>" + "".join(
+        f"<tr><td>T{i}</td><td>Co {i}</td></tr>" for i in range(400)) + "</table>"
+    csv = "Holdings\nTicker,Name\n" + "".join(f"E{i},Co\n" for i in range(30))
+
+    def fake_get(url, params=None, **kw):
+        if url == discover.WIKI_API:
+            q = params["srsearch"]
+            return R(json.dumps({"query": {"search": [{"title": "List of S&P 400 companies"}] if "400" in q else []}}))
+        if "S%26P" in url or "S&P_400" in url:
+            return R(big)
+        if url.endswith("holdings.csv"):
+            return R(csv, "text/csv")
+        raise discover.httpx.ConnectError("nope")
+    monkeypatch.setattr(discover.httpx, "get", fake_get)
+
+    async def model(db, query):
+        return [{"url": "https://issuer.test/fund/holdings.csv", "column": "Ticker"}], "Claude Haiku 5.5"
+    monkeypatch.setattr(discover, "model_candidates", model)
+    with TestClient(app) as c:
+        r = c.post("/api/stock-lists", json={"slug": "sp400", "name": "S&P MidCap 400", "symbol": "S&P 400",
+                                             "source": "manual", "refresh": "manual"}).json()
+        out = c.post(f"/api/stock-lists/{r['id']}/find-source").json()
+        assert out["source"] == "web" and out["column"] == "Ticker" and len(out["tickers"]) == 400
+        assert out["source_note"].startswith("Found by Wikipedia search") and out["refresh"] == "weekly"
+        e = c.post("/api/stock-lists", json={"slug": "xyzetf", "name": "XYZ ETF", "symbol": "XYZ"}).json()
+        out = c.post(f"/api/stock-lists/{e['id']}/find-source").json()  # not on Wikipedia: the model's CSV
+        assert out["url"].endswith("holdings.csv") and len(out["tickers"]) == 30 and "Claude Haiku" in out["source_note"]
+        for x in (r, e):
+            c.delete(f"/api/stock-lists/{x['id']}")

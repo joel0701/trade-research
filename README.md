@@ -111,7 +111,7 @@ Use a scanner to find candidates, and a skill to reason about them.
 |---|---|
 | **Tools** | Models (model id, effort, max tokens, refusal fallbacks), built-in Python functions, Claude web search/fetch, MCP servers |
 | **Team** (Profile menu) | The Lead Analyst and the specialists: each one's model, system prompt, data sources, iteration limit; which one is the Lead |
-| **Tools → Stock lists** | Named ticker lists (S&P 500, Nasdaq-100, Dow 30 built in, or your own): source (Wikipedia table or manual) and refresh schedule (daily/weekly/monthly/manual). Refreshed only when used and due; no AI cost. The Lead's stock list tool lets questions and skills use them |
+| **Tools → Stock lists** | Named ticker lists (S&P 500, Nasdaq-100, Dow 30 built in, or your own): source (a web page or CSV file, or manual) and refresh schedule (daily/weekly/monthly/manual). **Find source** takes an index or ETF symbol and finds and verifies the download (Wikipedia search first, free; then the cheapest Claude model with web search). Refreshed only when used and due; no AI cost. The Lead's stock list tool lets questions and skills use them |
 | **Skills** | Prompt templates with parameters, e.g. `{ticker}`; optional data sources; the model the skill runs with |
 | **Scanners** | Rule-based (a stock list such as the S&P 500, plus extra tickers, or a custom list; + rules) or IBKR market scanner (one built in for each of IBKR's 16 scan types) (scan type, market, price/volume/market-cap filters, optional rules); sort. A run only scans and shows the results (no AI model, no cost); you then ask about them |
 

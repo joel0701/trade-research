@@ -494,3 +494,5 @@ select.model-select { border-left-width: 4px; border-left-style: solid; }
 .switch.on { background: var(--tone-green); }
 .switch.on::after { transform: translateX(13px); }
 .menu-item:disabled { cursor: default; opacity: .75; }
+.find-source { display: flex; gap: 10px; align-items: flex-end; }
+.find-source .act { margin-bottom: 1px; white-space: nowrap; height: 34px; }

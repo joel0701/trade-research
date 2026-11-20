@@ -87,6 +87,34 @@ def refresh_stock_list(list_id: int) -> dict[str, Any]:
             raise HTTPException(502, str(e)) from e
 
 
+@app.post("/api/stock-lists/{list_id}/find-source")
+async def find_stock_list_source(list_id: int) -> dict[str, Any]:
+    """Work out where to download the list from (its symbol, else its name), verify it, and save it."""
+    from fastapi import HTTPException
+
+    from app.models import now
+    from app.screeners.discover import find_source
+    from app.screeners.universes import UniverseError
+
+    with Session(engine) as db:
+        sl = db.get(StockList, list_id)
+        if sl is None:
+            raise HTTPException(404)
+        try:
+            found = await find_source(db, sl.symbol or sl.name, sl.column if sl.source in ("web", "wikipedia") else "")
+        except UniverseError as e:
+            raise HTTPException(422, str(e)) from e
+        sl.source, sl.url, sl.column = "web", found["url"], found["column"]
+        sl.tickers, sl.refreshed_at, sl.last_error = found["tickers"], now(), None
+        sl.source_note = f"Found by {found['found_by']} on {now().date().isoformat()}"
+        if sl.refresh == "manual":
+            sl.refresh = "weekly"
+        db.add(sl)
+        db.commit()
+        db.refresh(sl)
+        return sl.model_dump(mode="json")
+
+
 @app.get("/api/models")
 def models() -> list[dict]:
     """Model tools with whether their vendor's API key is configured (keys are never returned)."""

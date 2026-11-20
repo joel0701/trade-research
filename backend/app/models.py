@@ -249,16 +249,20 @@ class UserProfile(SQLModel, table=True):
 class StockList(SQLModel, table=True):
     """A named list of tickers, such as an index (S&P 500), for scanners, skills and questions.
 
-    source: "wikipedia" (the ticker column of a table on a Wikipedia page: url + column) or "manual"
-    (tickers you maintain). refresh: daily / weekly / monthly / manual. A list is refreshed only when
-    something uses it and it's older than its schedule allows (no AI model involved)."""
+    source: "web" (the ticker column of a table on a web page, or of a CSV file: url + column;
+    "wikipedia" is the older name) or "manual" (tickers you maintain). refresh: daily / weekly / monthly /
+    manual. A list is refreshed only when something uses it and it's older than its schedule allows (no
+    AI model involved). symbol: the index or ETF it follows (e.g. SPX, QQQ); "Find source" uses it to
+    locate the download, which can move over time."""
 
     id: int | None = Field(default=None, primary_key=True)
     slug: str = Field(unique=True, index=True)
     name: str
     description: str = ""
     source: str = "manual"
+    symbol: str = ""        # index or ETF symbol / name used to find the source
     url: str = ""
+    source_note: str = ""   # how and when the source was found (e.g. "Wikipedia search, 2026-11-20")
     column: str = "Symbol"
     refresh: str = "weekly"
     tickers: list[str] = Field(default_factory=list, sa_column=Column(JSON))
