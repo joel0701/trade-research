@@ -255,3 +255,21 @@ def test_incomplete_source_falls_back_to_the_backup(monkeypatch):
         assert "only 387 tickers, expected at least 480" in str(e)
     with TestClient(app) as c:
         assert next(x for x in c.get("/api/stock-lists").json() if x["slug"] == "sp500")["min_count"] == 480
+
+
+def test_find_source_explains_why_no_model_searched(monkeypatch):
+    from app.llm import mock_loop
+    from app.screeners import discover
+    monkeypatch.setattr(discover, "find_wikipedia_source", lambda query, min_count=0: None)
+    with TestClient(app) as c:
+        r = c.post("/api/stock-lists", json={"slug": "qqqtest", "name": "QQQ test", "symbol": "QQQ"}).json()
+        mock_loop.set_mock(True)
+        try:
+            out = c.post(f"/api/stock-lists/{r['id']}/find-source")
+            assert out.status_code == 422 and "Test mode is on" in out.json()["detail"]
+        finally:
+            mock_loop.set_mock(False)
+        monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+        out = c.post(f"/api/stock-lists/{r['id']}/find-source")
+        assert "ANTHROPIC_API_KEY isn't set" in out.json()["detail"]
+        c.delete(f"/api/stock-lists/{r['id']}")

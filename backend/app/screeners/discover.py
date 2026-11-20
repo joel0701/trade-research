@@ -70,28 +70,35 @@ def wikipedia_candidates(query: str) -> list[str]:
     return urls[:6]
 
 
-def _cheapest_claude(db: Session):
+def _search_model(db: Session):
+    """(ModelConfig, name) for the web search: the low-level default if it's a Claude model, else the
+    cheapest available Claude model (the search uses Claude's web search tool). Raises UniverseError
+    saying why none can be used."""
     from app.agents.loop import ModelConfig
-    from app.llm.providers import model_available
+    from app.llm.mock_loop import mock_mode
+    from app.llm.providers import PROVIDERS, model_available
+    from app.llm.tiers import resolve, target_tool
 
+    if mock_mode():
+        raise UniverseError("Test mode is on, so no AI model is used; turn it off to search for the ETF's holdings file")
+    low = target_tool("low")
+    if low is not None and low.enabled and low.config.get("provider", "anthropic") == "anthropic" and model_available(low.config):
+        return ModelConfig.from_tool_config(low.config), low.name
     models = {t.slug: t for t in db.exec(select(Tool).where(Tool.kind == "model", Tool.enabled == True)).all()}  # noqa: E712
     for slug in MODEL_ORDER:
         t = models.get(slug)
-        if t is not None and t.config.get("provider", "anthropic") == "anthropic" and model_available(t.config):
+        if t is not None and resolve(t.config).get("provider", "anthropic") == "anthropic" and model_available(t.config):
             return ModelConfig.from_tool_config(t.config), t.name
-    return None, None
+    if not PROVIDERS["anthropic"].available():
+        raise UniverseError("the ETF search uses Claude's web search, and ANTHROPIC_API_KEY isn't set in .env")
+    raise UniverseError("the ETF search uses Claude's web search, and no Claude model is enabled in Tools → Models")
 
 
-async def model_candidates(db: Session, query: str) -> tuple[list[dict[str, Any]], str | None]:
-    """Candidates suggested by the cheapest Claude model with web search. ([], None) if none is available."""
+async def model_candidates(db: Session, query: str) -> tuple[list[dict[str, Any]], str]:
+    """Candidates suggested by a Claude model with web search. Raises UniverseError if no model can be used."""
     from app.agents.loop import client
-    from app.llm.mock_loop import mock_mode
 
-    if mock_mode():
-        return [], None
-    model, name = _cheapest_claude(db)
-    if model is None:
-        return [], None
+    model, name = _search_model(db)
     resp = await client().messages.create(
         model=model.model_id, max_tokens=1500,
         tools=[{"type": "web_search_20260209", "name": "web_search", "max_uses": 3}],
@@ -107,9 +114,7 @@ async def model_candidates(db: Session, query: str) -> tuple[list[dict[str, Any]
 
 async def find_etf_source(db: Session, symbol: str, min_count: int = 0) -> dict[str, Any]:
     """{url, column, tickers, found_by}: the ETF's verified holdings file/page. Raises UniverseError."""
-    cands, model_name = await model_candidates(db, symbol)
-    if model_name is None:
-        raise UniverseError("no Claude model is available to search for the ETF's holdings file")
+    cands, model_name = await model_candidates(db, symbol)  # raises if no model can be used
     for c in cands:
         got = _try(c["url"], [str(c.get("column") or ""), *TICKER_COLUMNS], min_count=max(5, min_count))
         if got:
