@@ -60,7 +60,7 @@ export default function Research() {
   });
   const [roleNames, setRoleNames] = useState<Record<string, string>>({});
   useEffect(() => {
-    api.get("/roles").then((rs) => {
+    api.get("/team").then((rs) => {
       setRoleNames(Object.fromEntries(rs.map((r: any) => [r.slug, r.name])));
       setDefaultModelId(rs.find((r: any) => r.is_lead)?.model_tool_id ?? null);
     }).catch(() => { /* names fall back to slugs */ });

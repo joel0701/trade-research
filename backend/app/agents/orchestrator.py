@@ -255,7 +255,7 @@ def _prepare_turn(session_id: int, user_text: str, attachment_ids: list[int] | N
         roles = db.exec(select(Role).where(Role.enabled == True)).all()  # noqa: E712
         lead = next((r for r in roles if r.is_lead), None)
         if lead is None:
-            raise ValueError("No enabled Lead role configured")
+            raise ValueError("No enabled Lead Analyst: enable one in Team (Profile menu → Team)")
         specialists = [r for r in roles if not r.is_lead]
         # A skill's data sources apply to its own run only; follow-ups use the full team.
         lead, specialists = apply_scope(chat.next_turn_tool_scope or chat.tool_scope, lead, specialists, tools)

@@ -37,7 +37,7 @@ async def lifespan(_: FastAPI):
 app = FastAPI(title="Trade Research", lifespan=lifespan)
 app.add_middleware(CORSMiddleware, allow_origins=CORS_ORIGINS, allow_methods=["*"], allow_headers=["*"])
 
-for model, prefix in [(Tool, "/tools"), (Connection, "/connections"), (Role, "/roles"), (Skill, "/skills"),
+for model, prefix in [(Tool, "/tools"), (Connection, "/connections"), (Role, "/team"), (Skill, "/skills"),
                       (Screener, "/screeners")]:
     app.include_router(crud_router(model, prefix), prefix="/api")
 app.include_router(sessions.router, prefix="/api")

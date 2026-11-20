@@ -6,8 +6,8 @@ News Analyst, Strategy Optimizer, Research Agent), each with its own LLM model (
 Every chat session is saved and can be reopened and continued. **Skills** (pre-built analyses) and
 **Scanners** (rule-based scans, or vendor specific (IBKR market scanners) each start a new session with their results.
 
-Roles, tools, skills and scanners are all data, editable in the app; no code change is needed to
-add a role or connect a tool.
+The team (the Lead and its specialists), tools, skills and scanners are all data, editable in the app;
+no code change is needed to add a specialist or connect a tool.
 
 **Support:** the **Support** link in the header (next to your profile icon) opens the full
 documentation: every screen, setting and configuration option, how a question runs, team limits,
@@ -19,11 +19,11 @@ with search and a table of contents; keep it updated when features change.
 ```
 React UI (Vite)  ──/api──►  FastAPI
                              ├─ Orchestrator: Lead Analyst agent loop
-                             │    └─ consult_<role> tools → specialist agent loops (run in parallel)
+                             │    └─ consult_<specialist> tools → specialist agent loops (run in parallel)
                              ├─ Tool registry: Claude models, Python functions,
                              │    Claude server tools (web search/fetch), MCP servers (IBKR, Bigdata.com…)
                              ├─ Scanner engine: rules over computed indicators, or IBKR market scanners
-                             └─ SQLite (SQLModel): sessions, messages, runs, tools, roles, skills, scanners
+                             └─ SQLite (SQLModel): sessions, messages, runs, tools, team, skills, scanners
 ```
 
 - **No agent framework.** `backend/app/agents/loop.py` is a small loop over the Anthropic Messages API.
@@ -61,7 +61,7 @@ Frontend (http://localhost:5173):
 cd frontend && npm install && npm run dev
 ```
 
-The database is created at `data/trade_research.db` and seeded with default roles, tools, skills
+The database is created at `data/trade_research.db` and seeded with the default team, tools, skills
 and scanners on first start. Delete the file to reset.
 
 Logs go to `data/logs`: `backend_<date>_<time>.log` (everything the backend logs, with full
@@ -110,7 +110,7 @@ Use a scanner to find candidates, and a skill to reason about them.
 | Screen | What it controls |
 |---|---|
 | **Tools** | Models (model id, effort, max tokens, refusal fallbacks), built-in Python functions, Claude web search/fetch, MCP servers |
-| **Roles** | Each analyst's model, system prompt, allowed tools, iteration limit; which role is the Lead |
+| **Team** (Profile menu) | The Lead Analyst and the specialists: each one's model, system prompt, data sources, iteration limit; which one is the Lead |
 | **Skills** | Prompt templates with parameters, e.g. `{ticker}`; optional data sources; the model the skill runs with |
 | **Scanners** | Rule-based (ticker universe + rules) or IBKR market scanner (scan type, market, price/volume/market-cap filters, optional rules); sort. A run only scans and shows the results (no AI model, no cost); you then ask about them |
 
@@ -126,7 +126,7 @@ suggestion appears as grey text in the empty box: press Tab to use it.
 
 **A skill's model** (and its data sources) apply to the skill's own run only, so a
 cheaper model such as Sonnet can handle steps that need little reasoning. Follow-up questions in
-the session always use the Research default: the Lead role's model (or the one picked in the
+the session always use the Research default: the Lead Analyst's model (or the one picked in the
 composer) and the full team.
 
 Default models: Lead and Strategy Optimizer on Claude Opus 5.5; most specialists on Sonnet 5.5;
@@ -135,7 +135,7 @@ Sector Mapper on Haiku 5.5. Opus, Sonnet and Fable use server-side refusal fallb
 
 ### Testing without LLM costs (mock mode)
 
-Set `MOCK_LLM=1` in `.env` and restart: every role uses a free mock instead of a real model. The
+Set `MOCK_LLM=1` in `.env` and restart: every team member uses a free mock instead of a real model. The
 Lead consults the most relevant specialists, specialists really call one of their data tools, and
 answers are canned (clearly marked) but stream, appear in the trace, footer and timeline as usual,
 with $0 cost. A **MOCK LLM** badge shows in the top bar. To mock only one session's Lead, pick
@@ -145,7 +145,7 @@ with $0 cost. A **MOCK LLM** badge shows in the top bar. To mock only one sessio
 
 Keys for each vendor go in `.env`, organized by vendor in `.env.example`: Anthropic, OpenAI,
 Google (Gemini), Meta (Llama API), xAI (Grok), Mistral and DeepSeek. **Only models whose vendor
-key is set appear in the model picker**; Roles and Tools flag models without a key.
+key is set appear in the model picker**; Team and Tools flag models without a key.
 
 Claude models use the Anthropic SDK. All other vendors are called through their
 OpenAI-compatible endpoints with the OpenAI SDK (`backend/app/llm/`). Sessions are stored in one
@@ -172,7 +172,7 @@ Ports can be changed in `.env` (see `.env.example`). Pick models that support **
 (e.g. Qwen 2.5/3, Llama 3.1+, Mistral Small) so the Lead can consult the team and specialists can use
 data tools. A model without tool calling still answers, but on its own, without the team or data.
 Local models are slower than hosted ones, and specialists run in parallel, so smaller models (7-14B)
-suit specialist roles best on a laptop.
+suit specialists best on a laptop.
 
 ### Data sources and connections
 
@@ -204,9 +204,9 @@ source get its notes as a **Data notes** callout in their prompt. A skill can na
 it uses (Skills → *Data sources this skill uses*); its sessions then use only those. Don't add a
 skill field for something a source fixes; put it in the source's notes instead.
 
-Sources that aren't set up are marked in Tools and Roles. **Before a question runs**, the app
-checks every source assigned to the active roles; if any are unavailable it holds the question and
-asks in the chat whether to continue, grouped by cause, with the impact: *high* when a role has no
+Sources that aren't set up are marked in Tools and Team. **Before a question runs**, the app
+checks every source assigned to the active team members; if any are unavailable it holds the question and
+asks in the chat whether to continue, grouped by cause, with the impact: *high* when a specialist has no
 other working source for that kind of data, *low* when another source covers it. You can continue,
 continue without being asked again in that session (until the set of unavailable sources changes),
 or cancel. Sources you've disabled yourself aren't reported. A skill that names its data sources uses only those for its own run (and only those are
@@ -237,7 +237,7 @@ otherwise IBKR returns delayed data and the result says so. To avoid daily login
 ### Connecting IBKR or Bigdata.com (MCP)
 
 Edit the tool in **Tools**: set `url` to the server's MCP endpoint, put the token in `.env` under the
-variable named in *Secret environment variable name*, then enable it and tick it on the roles that
+variable named in *Secret environment variable name*, then enable it and tick it on the specialists that
 should use it. For a local MCP server, use `{"transport": "stdio", "command": "...", "args": [...]}`.
 
 ### Adding a Python tool

@@ -89,7 +89,7 @@ export default function Composer({ placeholder, busy, models, modelId, defaultMo
   placeholder: string;
   busy: boolean;
   models: ModelTool[];
-  modelId: number | null;          // the session's choice (null = Lead role default)
+  modelId: number | null;          // the session's choice (null = Lead Analyst's default)
   defaultModelId: number | null;   // the Lead role's model
   onModelChange: (id: number | null) => void;
   ensureSession: () => Promise<number>; // uploads need a session; creates one if needed
@@ -225,7 +225,7 @@ export default function Composer({ placeholder, busy, models, modelId, defaultMo
                   })}
                 </div>
               ))}
-              <div className="muted small pop-foot">Listed: vendors with an API key in .env, and local models you added (while their server runs). Specialists keep the models set in Roles.</div>
+              <div className="muted small pop-foot">Listed: vendors with an API key in .env, and local models you added (while their server runs). Specialists keep the models set in Team.</div>
             </div>
           )}
         </div>

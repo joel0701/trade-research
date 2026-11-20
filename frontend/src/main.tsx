@@ -14,7 +14,7 @@ import { BrowserRouter, NavLink, Navigate, Route, Routes, useLocation, useNaviga
 import Research from "./pages/Research";
 import Skills from "./pages/Skills";
 import Scanners from "./pages/Scanners";
-import Roles from "./pages/Roles";
+import Team from "./pages/Team";
 import Tools from "./pages/Tools";
 import Settings from "./pages/Settings";
 import { Avatar, SettingsProvider, useSettings } from "./settings";
@@ -28,13 +28,13 @@ function lastSessionPath(): string {
   } catch { return "/research"; }
 }
 
-/** Profile icon menu: settings, plus the workspace screens (Roles, Tools) and the theme. */
+/** Profile icon menu: settings, plus the workspace screens (Team, Tools) and the theme. */
 function ProfileMenu() {
   const { theme, toggleTheme, profile } = useSettings();
   const pop = usePopover();
   const navigate = useNavigate();
   const { pathname } = useLocation();
-  const inMenu = ["/roles", "/tools", "/settings"].some((p) => pathname.startsWith(p));
+  const inMenu = ["/team", "/tools", "/settings"].some((p) => pathname.startsWith(p));
   const go = (to: string) => { pop.setOpen(false); navigate(to); };
   const item = (to: string, icon: React.ReactNode, label: string, hint: string) => (
     <button role="menuitem" className={`menu-item ${pathname.startsWith(to) ? "active" : ""}`} onClick={() => go(to)}>
@@ -44,7 +44,7 @@ function ProfileMenu() {
   return (
     <div className="pop-anchor" ref={pop.ref}>
       <button className={`profile-btn ${inMenu ? "on" : ""}`} onClick={() => pop.setOpen(!pop.open)} aria-haspopup="menu"
-              aria-expanded={pop.open} title="Profile, settings, roles and tools">
+              aria-expanded={pop.open} title="Profile, settings, team and tools">
         <Avatar size={28} /><Chevron />
       </button>
       {pop.open && (
@@ -55,7 +55,7 @@ function ProfileMenu() {
           </div>
           {item("/settings", <Gear />, "Profile & settings", "Name, time zone, clock, theme")}
           <div className="menu-sep">Workspace</div>
-          {item("/roles", <Users />, "Roles", "The Lead Analyst and specialists")}
+          {item("/team", <Users />, "Team", "The Lead Analyst and specialists")}
           {item("/tools", <Wrench />, "Tools", "Data sources, connections, models")}
           <div className="menu-sep" />
           <button role="menuitem" className="menu-item" onClick={toggleTheme}>
@@ -109,7 +109,8 @@ function App() {
           <Route path="/skills" element={<Skills />} />
           <Route path="/scanners" element={<Scanners />} />
           <Route path="/screeners" element={<Navigate to="/scanners" replace />} />
-          <Route path="/roles" element={<Roles />} />
+          <Route path="/team" element={<Team />} />
+          <Route path="/roles" element={<Navigate to="/team" replace />} />
           <Route path="/tools" element={<Tools />} />
           <Route path="/settings" element={<Settings />} />
         </Routes>

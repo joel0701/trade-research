@@ -126,8 +126,8 @@ def test_missing_key_for_specialist_fails_gracefully(monkeypatch):
     monkeypatch.setattr(loop, "client", lambda: claude)
     with TestClient(app) as c:
         t = ids(c)
-        role = next(r for r in c.get("/api/roles").json() if r["slug"] == "technical_analyst")
-        c.put(f"/api/roles/{role['id']}", json={"model_tool_id": t["grok"]})  # no XAI key
+        role = next(r for r in c.get("/api/team").json() if r["slug"] == "technical_analyst")
+        c.put(f"/api/team/{role['id']}", json={"model_tool_id": t["grok"]})  # no XAI key
         try:
             sid = c.post("/api/sessions", json={}).json()["id"]
             events = ask(c, sid, "How does NVDA look?")
@@ -135,7 +135,7 @@ def test_missing_key_for_specialist_fails_gracefully(monkeypatch):
             spec = next(r for r in c.get(f"/api/sessions/{sid}/runs").json() if r["role_slug"] == "technical_analyst")
             assert spec["status"] == "error" and "XAI_API_KEY" in spec["error"]
         finally:
-            c.put(f"/api/roles/{role['id']}", json={"model_tool_id": t["sonnet"]})
+            c.put(f"/api/team/{role['id']}", json={"model_tool_id": t["sonnet"]})
 
 
 def test_claude_history_converts_for_other_vendors():

@@ -62,5 +62,5 @@ def unavailable_report(db: Session, scope: list[int] | None = None) -> dict[str,
         "fingerprint": hashlib.sha1(key.encode()).hexdigest()[:16],
         "items": sorted(items, key=lambda i: (i["impact"] != "high", i["role"], i["tool"])),
         "summary": (f"{len(items)} data source{'s' if len(items) != 1 else ''} unavailable"
-                    + (f"; {high} leave{'s' if high == 1 else ''} a role with no other source for that data" if high else "")),
+                    + (f"; {high} leave{'s' if high == 1 else ''} a specialist with no other source for that data" if high else "")),
     }

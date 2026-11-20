@@ -92,5 +92,5 @@ def test_finra_sources_seeded_and_ready():
         assert all(t["capabilities"] == ["dark_pool"] for t in tools.values())
         status = {s["id"]: s for s in c.get("/api/tools-status").json()}
         assert all(status[t["id"]]["available"] for t in tools.values())  # free, no key
-        tech = next(r for r in c.get("/api/roles").json() if r["slug"] == "technical_analyst")
+        tech = next(r for r in c.get("/api/team").json() if r["slug"] == "technical_analyst")
         assert {t["id"] for t in tools.values()} <= set(tech["tool_ids"]) and "dark pool" in tech["description"]

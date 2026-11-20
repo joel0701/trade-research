@@ -1,4 +1,4 @@
-/** Shown instead of running a question when data sources assigned to roles are unavailable. */
+/** Shown instead of running a question when data sources assigned to the team are unavailable. */
 import { Link } from "react-router-dom";
 import { UnavailableItem, UnavailableReport } from "./api";
 

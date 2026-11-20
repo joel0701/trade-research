@@ -13,7 +13,7 @@ function RunSkillDialog({ skill, models, leadDefault, scanners, onClose }: {
   skill: Json; models: Json[]; leadDefault: string; scanners: Json[]; onClose: () => void;
 }) {
   const scanner = scanners.find((x) => x.id === skill.screener_id);
-  const modelName = (id: number | null | undefined) => models.find((m) => m.id === id)?.name ?? `Research default (${leadDefault || "Lead role model"})`;
+  const modelName = (id: number | null | undefined) => models.find((m) => m.id === id)?.name ?? `Research default (${leadDefault || "Lead Analyst's model"})`;
   const navigate = useNavigate();
   const [values, setValues] = useState<Record<string, string>>(
     Object.fromEntries((skill.params ?? []).map((p: Json) => [p.name, p.default ?? ""])));
@@ -49,7 +49,7 @@ function RunSkillDialog({ skill, models, leadDefault, scanners, onClose }: {
           </div>
         ))}
         <LeadModelSelect models={models} value={model} onChange={setModel} label="Model for this run"
-                         hint="follow-up questions use the Research default" defaultLabel={`Research default (${leadDefault || "Lead role model"})`} />
+                         hint="follow-up questions use the Research default" defaultLabel={`Research default (${leadDefault || "Lead Analyst's model"})`} />
         <DataNotes ids={skill.tool_ids ?? []} />
         {error && <p className="error">{error}</p>}
         <div className="actions">
@@ -75,7 +75,7 @@ export default function Skills() {
   useEffect(() => {
     api.get("/models").then(setModels);
     api.get("/screeners").then(setScanners);
-    api.get("/roles").then((rs) => {
+    api.get("/team").then((rs) => {
       const id = rs.find((r: Json) => r.is_lead)?.model_tool_id;
       api.get("/models").then((ms) => setLeadDefault(ms.find((m: Json) => m.id === id)?.name ?? ""));
     });
@@ -126,7 +126,7 @@ export default function Skills() {
               <LeadModelSelect models={models} value={draft.lead_model_tool_id ?? null}
                                onChange={(lead_model_tool_id) => set({ lead_model_tool_id })}
                                label="Model the skill runs with"
-                               defaultLabel={`Research default (${leadDefault || "Lead role model"})`} />
+                               defaultLabel={`Research default (${leadDefault || "Lead Analyst's model"})`} />
             </Section>
             <Section tone="teal" icon={<Database />} title="Data sources" hint="for the skill's run only">
               <p className="muted small">

@@ -5,7 +5,7 @@ from app.main import app
 
 def test_seeded_config_and_crud():
     with TestClient(app) as c:
-        roles = c.get("/api/roles").json()
+        roles = c.get("/api/team").json()
         assert {r["slug"] for r in roles} >= {"lead", "technical_analyst", "strategy_optimizer"}
         assert sum(r["is_lead"] for r in roles) == 1
         tools = {t["slug"]: t for t in c.get("/api/tools").json()}

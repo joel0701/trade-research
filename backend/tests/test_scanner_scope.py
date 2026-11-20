@@ -76,8 +76,8 @@ def test_scope_limits_team_and_gives_unheld_sources_to_lead(monkeypatch):
     with TestClient(app) as c:
         t = ids(c)
         # technical_snapshot is held by the Technical Analyst; finra_ats_weekly by nobody else here -> Lead.
-        tech = next(r for r in c.get("/api/roles").json() if r["slug"] == "technical_analyst")
-        c.put(f"/api/roles/{tech['id']}", json={"tool_ids": [x for x in tech["tool_ids"] if x != t["finra_ats_weekly"]]})
+        tech = next(r for r in c.get("/api/team").json() if r["slug"] == "technical_analyst")
+        c.put(f"/api/team/{tech['id']}", json={"tool_ids": [x for x in tech["tool_ids"] if x != t["finra_ats_weekly"]]})
         try:
             sid = c.post("/api/sessions", json={}).json()["id"]
             c.patch(f"/api/sessions/{sid}", json={"tool_scope": [t["technical_snapshot"], t["finra_ats_weekly"]]})
@@ -90,9 +90,9 @@ def test_scope_limits_team_and_gives_unheld_sources_to_lead(monkeypatch):
             spec_call = next(k for k in fake.calls if k["model"] == "claude-sonnet-5-5")
             assert {d["name"] for d in spec_call["tools"]} - {"read_more"} == {"technical_snapshot"}
             # Role settings themselves are untouched.
-            assert next(r for r in c.get("/api/roles").json() if r["slug"] == "technical_analyst")["tool_ids"]
+            assert next(r for r in c.get("/api/team").json() if r["slug"] == "technical_analyst")["tool_ids"]
         finally:
-            c.put(f"/api/roles/{tech['id']}", json={"tool_ids": tech["tool_ids"]})
+            c.put(f"/api/team/{tech['id']}", json={"tool_ids": tech["tool_ids"]})
 
 
 def test_edgar_is_configured_in_env_only(monkeypatch):

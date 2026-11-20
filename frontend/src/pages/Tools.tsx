@@ -86,7 +86,7 @@ function LocalModels({ onAdded }: { onAdded: () => void }) {
           </ul>
           {running.some((s) => s.models.some((m: Json) => !m.tool_id)) && (
             <p className="muted small">Green dot: loaded and ready. Click <strong>+ Add to models</strong> to make a model
-              selectable in Research, Roles, Skills and Scanners. Models that aren't loaded need loading in their app first
+              selectable in Research, Team, Skills and Scanners. Models that aren't loaded need loading in their app first
               (Ollama loads them automatically).</p>
           )}
           {running.length === 0 && (

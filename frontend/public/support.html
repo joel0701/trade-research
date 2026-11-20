@@ -100,7 +100,7 @@
   <a href="#scanners">Scanners</a>
   <a href="#scanners-vs-skills">Scanners vs. skills</a>
   <div class="grp">Configuration</div>
-  <a href="#roles">Roles (the team)</a>
+  <a href="#team">Team (Lead &amp; specialists)</a>
   <a href="#models">Models &amp; vendors</a>
   <a href="#local-models">Local models</a>
   <a href="#data-sources">Data sources &amp; connections</a>
@@ -133,7 +133,7 @@
     <tr><td><b>Research</b></td><td>Chat sessions with the Lead Analyst and the team.</td><td>Research tab</td></tr>
     <tr><td><b>Skills</b></td><td>Reusable prompts with fields (e.g. <code>{ticker}</code>), a model and optionally a scanner and data sources.</td><td>Skills tab</td></tr>
     <tr><td><b>Scanners</b></td><td>Rule-based or IBKR market scans that return a results table. No AI model runs.</td><td>Scanners tab</td></tr>
-    <tr><td><b>Roles</b></td><td>The Lead Analyst and the specialists: model, instructions, data sources.</td><td>Profile menu → Roles</td></tr>
+    <tr><td><b>Team</b></td><td>The Lead Analyst and the specialists: model, instructions, data sources.</td><td>Profile menu → Team</td></tr>
     <tr><td><b>Tools</b></td><td>Data sources, connections and models.</td><td>Profile menu → Tools</td></tr>
     <tr><td><b>Settings</b></td><td>Your name, photo, time zone, clock and theme.</td><td>Profile menu → Profile &amp; settings</td></tr>
   </table>
@@ -148,7 +148,7 @@
   <pre><code>cp -n .env.example .env        # then add your keys
 cd backend &amp;&amp; uv sync &amp;&amp; uv run uvicorn app.main:app --reload --port 8321
 cd frontend &amp;&amp; npm install &amp;&amp; npm run dev   # http://localhost:5173</code></pre>
-  <p>The database is created at <code>data/trade_research.db</code> and filled with default roles, data sources, skills and scanners
+  <p>The database is created at <code>data/trade_research.db</code> and filled with the default team, data sources, skills and scanners
     on first start. Defaults you delete are not recreated.</p>
   <div class="note warn"><b>Restart the backend after editing <code>.env</code>.</b> The <code>--reload</code> option only reacts to code
     changes, not to <code>.env</code>. Use <code>cp -n</code> (never plain <code>cp</code>) so an existing <code>.env</code> is never overwritten.</div>
@@ -180,7 +180,7 @@ cd frontend &amp;&amp; npm install &amp;&amp; npm run dev   # http://localhost:5
   </ul>
   <h3>Follow-up questions</h3>
   <p>The Lead keeps the whole session in context, including the specialists' earlier reports. A follow-up builds on what is already
-    known and consults only for what is missing. Follow-ups always use the Research default model (the Lead role's model, or the one
+    known and consults only for what is missing. Follow-ups always use the Research default model (the Lead Analyst's model, or the one
     you picked in the model picker) and the full team.</p>
   <h3>Run cards</h3>
   <p>Sessions started by a skill or scanner begin with a <b>run card</b> instead of a normal message:
@@ -285,11 +285,11 @@ cd frontend &amp;&amp; npm install &amp;&amp; npm run dev   # http://localhost:5
   </ul>
 </section>
 
-<section id="roles">
-  <h2>Roles (the team)</h2>
-  <p>Profile menu → <b>Roles</b>. Each role has a model, a system prompt (instructions), data sources, an iteration limit, and an enabled switch. One role is the Lead.</p>
+<section id="team">
+  <h2>Team (Lead &amp; specialists)</h2>
+  <p>Profile menu → <b>Team</b>. The list shows the <b>Lead Analyst</b> first, then the <b>Specialists</b>. Each member has a model, a system prompt (instructions), data sources, an iteration limit, and an enabled switch. Exactly one member is the Lead Analyst.</p>
   <div class="wrap"><table>
-    <tr><th>Role</th><th>Default model</th><th>Focus</th><th>Default sources</th></tr>
+    <tr><th>Member</th><th>Default model</th><th>Focus</th><th>Default sources</th></tr>
     <tr><td><b>Lead Analyst</b></td><td>Opus</td><td>Plans, consults specialists, weighs findings, writes the answer.</td><td>Consults the team</td></tr>
     <tr><td>Sector Mapper</td><td>Haiku</td><td>Sector, industry, peers, suppliers, customers, sector trends.</td><td>Yahoo fundamentals, DuckDuckGo</td></tr>
     <tr><td>Finance Analyst</td><td>Sonnet</td><td>Financial statements, valuation, growth, margins, balance sheet, earnings.</td><td>Yahoo fundamentals, web search</td></tr>
@@ -322,11 +322,11 @@ cd frontend &amp;&amp; npm install &amp;&amp; npm run dev   # http://localhost:5
   <h3>Which model runs when</h3>
   <table>
     <tr><th>Step</th><th>Model</th></tr>
-    <tr><td>A question in a session</td><td>Research default: the model picked in the session, else the Lead role's model.</td></tr>
+    <tr><td>A question in a session</td><td>Research default: the model picked in the session, else the Lead Analyst's model.</td></tr>
     <tr><td>A skill's run</td><td>The skill's model (or the one chosen in its run dialog).</td></tr>
     <tr><td>Follow-ups after a skill</td><td>Research default.</td></tr>
     <tr><td>A scanner run</td><td>None.</td></tr>
-    <tr><td>Each specialist</td><td>The model set on its role.</td></tr>
+    <tr><td>Each specialist</td><td>The model set on it under Team.</td></tr>
   </table>
 </section>
 
@@ -402,9 +402,9 @@ cd frontend &amp;&amp; npm install &amp;&amp; npm run dev   # http://localhost:5
 
 <section id="unavailable">
   <h2>Unavailable sources prompt</h2>
-  <p>Before a question runs, the app checks the data sources of the roles involved. If some are unavailable (e.g. a missing key, IB Gateway not running), it holds the question and asks in the chat:</p>
+  <p>Before a question runs, the app checks the data sources of the team members involved. If some are unavailable (e.g. a missing key, IB Gateway not running), it holds the question and asks in the chat:</p>
   <ul>
-    <li>Grouped by cause, with the impact: <b>high</b> when a role has no other working source for that kind of data, <b>low</b> when another covers it.</li>
+    <li>Grouped by cause, with the impact: <b>high</b> when a specialist has no other working source for that kind of data, <b>low</b> when another covers it.</li>
     <li><b>Continue</b>, <b>Continue and don't ask again in this session</b> (until the set of unavailable sources changes), or <b>Cancel</b>.</li>
     <li>The held question and your decision are saved in the session. Sources you disabled yourself aren't reported.</li>
   </ul>
@@ -412,7 +412,7 @@ cd frontend &amp;&amp; npm install &amp;&amp; npm run dev   # http://localhost:5
 
 <section id="settings">
   <h2>Profile &amp; settings</h2>
-  <p>Click your avatar (top right) for the menu: <b>Profile &amp; settings</b>, <b>Roles</b>, <b>Tools</b>, and light/dark mode. The <b>Support</b> link next to it opens this page.</p>
+  <p>Click your avatar (top right) for the menu: <b>Profile &amp; settings</b>, <b>Team</b>, <b>Tools</b>, and light/dark mode. The <b>Support</b> link next to it opens this page.</p>
   <ul>
     <li><b>Profile:</b> name, photo, email.</li>
     <li><b>Time zone</b> and <b>12/24-hour clock</b>: how times are shown (they are stored in UTC).</li>
@@ -434,7 +434,7 @@ cd frontend &amp;&amp; npm install &amp;&amp; npm run dev   # http://localhost:5
     <tr><td><code>BIGDATA_API_KEY</code>, <code>IBKR_MCP_TOKEN</code></td><td>MCP server keys.</td><td>empty</td></tr>
     <tr><td><code>OLLAMA_BASE_URL</code>, <code>LMSTUDIO_BASE_URL</code>, <code>MLX_BASE_URL</code></td><td>Local model servers.</td><td>:11434, :1234, :8080 (<code>/v1</code>)</td></tr>
     <tr><td><code>LOCAL_LLM_BASE_URL</code>, <code>LOCAL_LLM_API_KEY</code></td><td>Any other OpenAI-compatible server.</td><td>unset</td></tr>
-    <tr><td><code>MOCK_LLM</code></td><td><code>1</code> = every role uses the free mock.</td><td>off</td></tr>
+    <tr><td><code>MOCK_LLM</code></td><td><code>1</code> = every team member uses the free mock.</td><td>off</td></tr>
     <tr><td><code>DATABASE_URL</code></td><td>Database location.</td><td>data/trade_research.db</td></tr>
     <tr><td><code>CORS_ORIGINS</code></td><td>Allowed frontend origins.</td><td>http://localhost:5173</td></tr>
     <tr><td><code>MAX_LOOP_ITERATIONS</code></td><td>Hard cap on steps per agent run.</td><td>25</td></tr>
@@ -447,8 +447,8 @@ cd frontend &amp;&amp; npm install &amp;&amp; npm run dev   # http://localhost:5
   <h2>How a question runs</h2>
   <ol>
     <li><b>Checks:</b> the unavailable-sources check (held for your decision if needed).</li>
-    <li><b>Model:</b> a one-time model for this turn if set (a skill's run), otherwise the session's model, otherwise the Lead role's model. A chosen model without a key or server falls back to the Lead role's model.</li>
-    <li><b>Scope:</b> a skill that names data sources limits its own run to them; roles left without sources aren't offered to the Lead. Follow-ups use the full team.</li>
+    <li><b>Model:</b> a one-time model for this turn if set (a skill's run), otherwise the session's model, otherwise the Lead Analyst's model. A chosen model without a key or server falls back to the Lead Analyst's model.</li>
+    <li><b>Scope:</b> a skill that names data sources limits its own run to them; specialists left without sources aren't offered to the Lead. Follow-ups use the full team.</li>
     <li><b>Lead loop:</b> the Lead reads the whole session, then consults specialists (in parallel when it asks for several at once) within the <a href="#limits">team limits</a>.</li>
     <li><b>Specialist loops:</b> each specialist calls its data tools; results are compacted and paged (<a href="#tool-results">details</a>); it returns a report.</li>
     <li><b>Answer:</b> the Lead writes the answer, ending with suggested next steps. Everything is saved and traced.</li>
@@ -486,7 +486,7 @@ cd frontend &amp;&amp; npm install &amp;&amp; npm run dev   # http://localhost:5
 
 <section id="mock">
   <h2>Mock mode (no cost)</h2>
-  <p>Set <code>MOCK_LLM=1</code> in <code>.env</code> and restart: every role uses a free mock. The Lead consults the most relevant specialists, specialists really call a data tool, and answers are canned but stream and appear in the trace, footer and timeline with $0 cost. A <b>MOCK LLM</b> badge shows in the header. To mock just one session, pick <i>Mock LLM (no cost)</i> in the model picker.</p>
+  <p>Set <code>MOCK_LLM=1</code> in <code>.env</code> and restart: every team member uses a free mock. The Lead consults the most relevant specialists, specialists really call a data tool, and answers are canned but stream and appear in the trace, footer and timeline with $0 cost. A <b>MOCK LLM</b> badge shows in the header. To mock just one session, pick <i>Mock LLM (no cost)</i> in the model picker.</p>
 </section>
 
 <section id="logs">
@@ -531,7 +531,8 @@ cd frontend &amp;&amp; npm install &amp;&amp; npm run dev   # http://localhost:5
   <table>
     <tr><th>Term</th><th>Meaning</th></tr>
     <tr><td>Lead Analyst</td><td>The agent you talk to; plans, consults specialists, writes answers.</td></tr>
-    <tr><td>Specialist</td><td>An agent with a focus (news, technicals…), its own model and data sources.</td></tr>
+    <tr><td>Specialist</td><td>A team member with a focus (news, technicals…), its own model and data sources; consulted by the Lead.</td></tr>
+    <tr><td>Team</td><td>The Lead Analyst plus the specialists (Profile menu → Team). "Roles" is reserved for future app roles such as admin and user.</td></tr>
     <tr><td>Consult</td><td>The Lead asking a specialist a question.</td></tr>
     <tr><td>Tool call</td><td>An agent requesting data; the app runs it and returns the result.</td></tr>
     <tr><td>Data source</td><td>A tool that provides data (e.g. FINRA daily short volume).</td></tr>
@@ -540,7 +541,7 @@ cd frontend &amp;&amp; npm install &amp;&amp; npm run dev   # http://localhost:5
     <tr><td>Context window</td><td>How much text a model can consider at once, in tokens.</td></tr>
     <tr><td>Token</td><td>A unit of text for models (~4 characters of English).</td></tr>
     <tr><td>Run card</td><td>The coloured first message of a skill or scanner session.</td></tr>
-    <tr><td>Research default</td><td>The model used for questions: the session's pick, else the Lead role's model.</td></tr>
+    <tr><td>Research default</td><td>The model used for questions: the session's pick, else the Lead Analyst's model.</td></tr>
     <tr><td>Strict team mode</td><td>Tighter consult limits and short reports for a Lead model.</td></tr>
     <tr><td>Market session</td><td>Open, pre-market, after hours, closed or weekend (US, Eastern time).</td></tr>
   </table>

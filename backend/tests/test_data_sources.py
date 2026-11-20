@@ -260,7 +260,7 @@ def test_deleted_defaults_stay_deleted_and_disabled_stay_disabled():
         assert "bigdata" not in conns and "bigdata_research" not in tools and "deepseek" not in tools
         assert conns["duckduckgo"]["enabled"] is False
         assert "ibkr_iv_rich" not in {s["slug"] for s in c.get("/api/screeners").json()}
-        news = next(r for r in c.get("/api/roles").json() if r["slug"] == "news_analyst")
+        news = next(r for r in c.get("/api/team").json() if r["slug"] == "news_analyst")
         all_ids = {t["id"] for t in c.get("/api/tools").json()}
         assert all(i in all_ids for i in news["tool_ids"])  # no dangling references
         # Tidy up so other tests see the defaults: forget the deletions and re-run the startup upgrade.
