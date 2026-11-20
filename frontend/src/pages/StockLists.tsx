@@ -67,7 +67,22 @@ export default function StockLists({ header }: { header: React.ReactNode }) {
                         title="Find where to download the members, check it works, and save it">
                   {finding ? "Finding…" : "Find source"}
                 </button>
+                {sl.id && (
+                  <button className="act" disabled={busy || finding} onClick={() => refreshNow(sl)}
+                          title="Download the list now from its main source (or the backup if that fails)">
+                    {busy ? "Refreshing…" : "Refresh now"}
+                  </button>
+                )}
               </div>
+              {sl.id && (
+                <p className="small list-status">
+                  <strong>{sl.tickers?.length ?? 0} tickers</strong>
+                  {sl.refreshed_at ? <span className="muted"> · last refreshed {fmt(sl.refreshed_at)}</span> : <span className="muted"> · not downloaded yet</span>}
+                  {sl.last_source && <span className="muted"> · from the {sl.last_source === "main" ? "main source" : "backup"}</span>}
+                  {sl.last_error && <><br /><span className="error">{sl.last_source === "backup" ? "" : "Last refresh failed: "}{sl.last_error}</span></>}
+                  {msg && !finding && <><br /><span className="muted">{msg}</span></>}
+                </p>
+              )}
               {finding && <p className="muted small"><span className="spinner small" /> Searching for the ETF's holdings file and a
                 backup, and checking each one. This can take a minute or two.</p>}
               <p className="muted small">Find source looks for the ETF's official daily holdings file (main source) using the
@@ -101,14 +116,6 @@ export default function StockLists({ header }: { header: React.ReactNode }) {
           <label>Tickers ({sl.tickers?.length ?? 0}){sl.source !== "manual" ? " · filled in by refresh" : ""}</label>
           <textarea rows={6} value={(sl.tickers ?? []).join(", ")} readOnly={sl.source !== "manual"}
                     onChange={(e) => set({ tickers: e.target.value.split(/[\s,]+/).map((x) => x.trim().toUpperCase()).filter(Boolean) })} />
-          {sl.id && sl.source !== "manual" && (
-            <p className="small">
-              {sl.refreshed_at ? <span className="muted">Last refreshed {fmt(sl.refreshed_at)}. </span> : <span className="muted">Not downloaded yet. </span>}
-              {sl.last_error && <span className="error">{sl.last_source === "backup" ? "" : "Last refresh failed: "}{sl.last_error} </span>}
-              <button className="link" disabled={busy} onClick={() => refreshNow(sl)}>{busy ? "Refreshing…" : "Refresh now"}</button>
-              {msg && !finding && <span className="muted"> {msg}</span>}
-            </p>
-          )}
           <Toggle label="Enabled" value={sl.enabled} onChange={(enabled) => set({ enabled })} />
         </>
       )}

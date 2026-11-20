@@ -498,3 +498,4 @@ select.model-select { border-left-width: 4px; border-left-style: solid; }
 .find-source .act { margin-bottom: 1px; white-space: nowrap; height: 34px; }
 .src-block { border: 1px solid var(--border); border-radius: 8px; padding: 4px 12px 10px; margin: 10px 0; background: var(--raised); }
 .src-title { font-size: 13px; font-weight: 600; margin-top: 8px; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.list-status { margin: 6px 0 4px; padding: 6px 10px; border-radius: 6px; background: var(--raised); border: 1px solid var(--border); }
