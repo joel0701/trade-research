@@ -104,6 +104,7 @@
   <a href="#models">Models &amp; vendors</a>
   <a href="#local-models">Local models</a>
   <a href="#data-sources">Data sources &amp; connections</a>
+  <a href="#stock-lists">Stock lists</a>
   <a href="#ibkr">Interactive Brokers</a>
   <a href="#unavailable">Unavailable sources prompt</a>
   <a href="#settings">Profile &amp; settings</a>
@@ -246,8 +247,8 @@ cd frontend &amp;&amp; npm install &amp;&amp; npm run dev   # http://localhost:5
     <tr><td><b>Rule-based</b></td><td>Computes indicators from Yahoo daily bars for each stock and applies your rules.</td><td>Stocks to scan: an index (S&amp;P 500, Nasdaq-100, Dow 30) plus optional extra tickers, or a custom ticker list; rules, sort, max results.</td></tr>
     <tr><td><b>IBKR market scanner</b></td><td>IBKR scans the whole market through IB Gateway, ranked by IBKR. Results get indicator columns from Yahoo; optional rules filter them further.</td><td>Scan type, market, results requested (max 50), min price, min volume, min market cap ($M), extra rules, sort.</td></tr>
   </table>
-  <h3>Scanning an index</h3>
-  <p>Rule-based scanners can scan the <b>S&amp;P 500</b>, <b>Nasdaq-100</b> or <b>Dow 30</b>. The member list is downloaded from Wikipedia's index lists and kept for a week; if a refresh fails, the last saved list is used and the run says so. A large index takes about a minute the first time (free Yahoo data, fetched in batches of 100; no AI cost). Each stock's indicators are reused for 15 minutes, so re-running is quick. The run card shows the index and its size rather than every ticker.</p>
+  <h3>Scanning a stock list</h3>
+  <p>Rule-based scanners can scan a <b>stock list</b> (such as the S&amp;P 500) plus optional extra tickers. A large list takes about a minute the first time (free Yahoo data, fetched in batches of 100; no AI cost). Each stock's indicators are reused for 15 minutes, so re-running is quick. The run card shows the list, its size and date rather than every ticker.</p>
   <h3>Why not IBKR for indicator scans?</h3>
   <p>IBKR's scanner ranks the whole market by its own criteria and returns at most 50 stocks; it has no RSI or moving-average filters. For scans like "oversold in an uptrend", scan an index with the rule engine. Alternatively, use an IBKR scan such as <i>Near 52-week low</i> with extra rules on its top 50.</p>
   <h3>IBKR scan types</h3>
@@ -389,6 +390,19 @@ cd frontend &amp;&amp; npm install &amp;&amp; npm run dev   # http://localhost:5
   <p>Put its key in <code>.env</code>, add a connection naming that variable, then add data sources on it. MCP servers need no code; REST APIs need a small built-in Python tool.</p>
   <h3>DuckDuckGo limitations</h3>
   <p>Unofficial (no API key or guarantees), rate-limited by IP, snippets only, variable quality. The app runs one search at a time, at least a second apart, retries rate limits twice, and treats "no results" as a normal answer. It works with any model, including local ones.</p>
+</section>
+
+<section id="stock-lists">
+  <h2>Stock lists</h2>
+  <p>Profile menu → <b>Tools → Stock lists</b>. Named ticker lists, such as an index, used by rule-based scanners and by questions and skills.</p>
+  <ul>
+    <li><b>Built in:</b> S&amp;P 500 (refreshed weekly), Nasdaq-100 (weekly), Dow 30 (monthly). Add, edit or delete lists.</li>
+    <li><b>Source:</b> a <i>Wikipedia table</i> (the page address and the name of its ticker column) or <i>Manual</i> (tickers you maintain).</li>
+    <li><b>Refresh schedule:</b> daily, weekly, monthly or manual only. A list is refreshed only when something uses it and it's older than its schedule allows; otherwise the saved list is used. <b>Refresh now</b> downloads it immediately.</li>
+    <li><b>No AI model involved:</b> refreshing downloads the table and reads the ticker column, so it costs nothing.</li>
+    <li><b>If a refresh fails</b>, the last saved list is used and the run says so; the error is shown on the list.</li>
+    <li><b>In questions and skills:</b> the Lead has a <i>stock list</i> tool, so "scan the S&amp;P 500 for…" or "which Dow 30 stocks…" uses the real members instead of guessing.</li>
+  </ul>
 </section>
 
 <section id="ibkr">

@@ -152,6 +152,33 @@ async def ddg_search(query: str, max_results: int = 8, news: bool = False) -> st
     return await asyncio.to_thread(run)
 
 
+async def stock_list(name: str = "") -> str:
+    """Members of one of the user's stock lists (refreshed first if due), or the available lists."""
+    from sqlmodel import Session, select
+
+    from app.db import engine
+    from app.models import StockList
+    from app.screeners.universes import UniverseError, get_list
+
+    def run() -> str:
+        with Session(engine) as db:
+            if not name.strip():
+                lists = db.exec(select(StockList).where(StockList.enabled == True)).all()  # noqa: E712
+                return json.dumps({"lists": [{"name": sl.name, "id": sl.slug, "tickers": len(sl.tickers) or None,
+                                              "refresh": sl.refresh} for sl in lists]})
+            try:
+                sl, note = get_list(db, name)
+            except UniverseError as e:
+                return str(e)
+            out = {"name": sl.name, "count": len(sl.tickers), "tickers": sl.tickers,
+                   "as_of": sl.refreshed_at.date().isoformat() if sl.refreshed_at else None}
+            if note:
+                out["note"] = note
+            return json.dumps(out)
+
+    return await asyncio.to_thread(run)
+
+
 from app.tools import finra, ibkr_gateway, massive, sec_edgar  # noqa: E402
 
 PYTHON_TOOLS: dict[str, PythonTool] = {
@@ -281,6 +308,13 @@ PYTHON_TOOLS: dict[str, PythonTool] = {
             "strikes_around_spot": {"type": "integer", "description": "Strikes each side of spot (default 10)"},
         }),
         options_chain,
+    ),
+    "stock_list": PythonTool(
+        "Member tickers of a stock list such as an index (e.g. 'S&P 500', 'Nasdaq-100', 'Dow 30', or any list the "
+        "user added). Call with no name to see the available lists. Use it whenever a question or skill refers "
+        "to an index or named list, instead of guessing its members.",
+        {"type": "object", "properties": {"name": {"type": "string", "description": "List name or id, e.g. 'S&P 500'"}}},
+        stock_list,
     ),
     "ddg_search": PythonTool(
         "DuckDuckGo web or news search. Returns titles, URLs and snippets.",

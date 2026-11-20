@@ -101,7 +101,7 @@ async def run_skill(skill_id: int, body: SkillRun, db: Session = Depends(get_ses
 
     # Built on a scanner: the scan (no LLM), then the skill's prompt evaluates the results with the
     # skill's model. Follow-up questions use the Research default.
-    universe, lines, note = ([], [], None) if scr.source == "ibkr" else resolve_universe(scr)
+    universe, lines, note = ([], [], None) if scr.source == "ibkr" else resolve_universe(db, scr)
     settings, results, scan_label, rows = await scan(scr, dict(scr.params), universe, lines, note)
     chat = ChatSession(title=f"{skill.name}: {label}".strip(": ") + f" ({len(rows)} results)", origin=f"skill:{skill.id}",
                        next_turn_model_tool_id=model_id,
@@ -124,11 +124,11 @@ class ScannerRun(BaseModel):
     universe_index: str | None = None     # rule-based: "sp500", "nasdaq100", "dow30"; "" = custom list only
 
 
-def resolve_universe(scr: Screener, tickers: list[str] | None = None,
+def resolve_universe(db: Session, scr: Screener, tickers: list[str] | None = None,
                      index: str | None = None, index_set: bool = False) -> tuple[list[str], list[str], str | None]:
-    """(tickers to scan, settings lines describing them, note). The scanner's saved index and ticker
-    list, unless this run overrides them."""
-    from app.screeners.universes import INDEXES, UniverseError, get_index
+    """(tickers to scan, settings lines describing them, note). The scanner's saved stock list and
+    tickers, unless this run overrides them. A list due for refresh is refreshed first."""
+    from app.screeners.universes import UniverseError, get_list
 
     extra = [t.strip().upper() for t in (tickers if tickers is not None else scr.universe) if t and t.strip()]
     key = (index or None) if index_set else scr.universe_index
@@ -136,11 +136,13 @@ def resolve_universe(scr: Screener, tickers: list[str] | None = None,
         shown = ", ".join(extra) if len(extra) <= 30 else ", ".join(extra[:30]) + f", … (+{len(extra) - 30} more)"
         return extra, [f"Tickers ({len(extra)}): **{shown}**"], None
     try:
-        members, note = get_index(key)
+        sl, note = get_list(db, key)
     except UniverseError as e:
         raise HTTPException(503, str(e)) from e
+    members = list(sl.tickers)
     combined = list(dict.fromkeys(members + extra))
-    lines = [f"Universe: **{INDEXES[key][0]}** ({len(members)} tickers)"]
+    as_of = f", as of {sl.refreshed_at.date().isoformat()}" if sl.refreshed_at else ""
+    lines = [f"Universe: **{sl.name}** ({len(members)} tickers{as_of})"]
     added = [t for t in extra if t not in members]
     if added:
         lines.append(f"Extra tickers: **{', '.join(added[:30])}**" + (f" (+{len(added) - 30} more)" if len(added) > 30 else ""))
@@ -148,11 +150,11 @@ def resolve_universe(scr: Screener, tickers: list[str] | None = None,
 
 
 @router.get("/universes")
-def universes() -> list[dict[str, Any]]:
-    """Indexes a rule-based scanner can scan."""
-    from app.screeners.universes import index_info
+def universes(db: Session = Depends(get_session)) -> list[dict[str, Any]]:
+    """Stock lists a rule-based scanner can scan."""
+    from app.screeners.universes import list_info
 
-    return index_info()
+    return list_info(db)
 
 
 RUN_PARAM_KEYS = {"rows", "above_price", "above_volume", "market_cap_above", "average_option_volume_above"}
@@ -247,7 +249,7 @@ async def run_screen(screener_id: int, body: ScannerRun | None = None,
     body = body or ScannerRun()
     params = {**scr.params, **{k: v for k, v in body.params.items() if k in RUN_PARAM_KEYS and v not in ("", None)}}
     universe, lines, note = ([], [], None) if scr.source == "ibkr" else resolve_universe(
-        scr, body.universe, body.universe_index, "universe_index" in body.model_fields_set)
+        db, scr, body.universe, body.universe_index, "universe_index" in body.model_fields_set)
     if scr.source != "ibkr" and not universe:
         raise HTTPException(422, "Add at least one ticker to scan, or choose an index.")
     settings, results, label, rows = await scan(scr, params, universe, lines, note)

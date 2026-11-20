@@ -204,8 +204,8 @@ class Screener(SQLModel, table=True):
     universe: list[str] = Field(default_factory=list, sa_column=Column(JSON))
     rules: dict[str, Any] = Field(default_factory=dict, sa_column=Column(JSON))
     source: str = "rules"
-    # Rule-based: scan an index (sp500, nasdaq100, dow30; see screeners/universes.py) instead of, or in
-    # addition to, the tickers in `universe`. None = only `universe`.
+    # Rule-based: scan a stock list (its slug, e.g. sp500; see Tools → Stock lists) plus the tickers in
+    # `universe`. None = only `universe`.
     universe_index: str | None = None
     params: dict[str, Any] = Field(default_factory=dict, sa_column=Column(JSON))
     # A scanner only scans: a run shows the results (no LLM, no cost). You then ask about them like
@@ -244,6 +244,27 @@ class UserProfile(SQLModel, table=True):
     hour12: bool = False
     mock_llm: bool = False  # every team member uses the free mock (testing without LLM cost)
     updated_at: datetime = Field(default_factory=now, sa_type=UTCDateTime)
+
+
+class StockList(SQLModel, table=True):
+    """A named list of tickers, such as an index (S&P 500), for scanners, skills and questions.
+
+    source: "wikipedia" (the ticker column of a table on a Wikipedia page: url + column) or "manual"
+    (tickers you maintain). refresh: daily / weekly / monthly / manual. A list is refreshed only when
+    something uses it and it's older than its schedule allows (no AI model involved)."""
+
+    id: int | None = Field(default=None, primary_key=True)
+    slug: str = Field(unique=True, index=True)
+    name: str
+    description: str = ""
+    source: str = "manual"
+    url: str = ""
+    column: str = "Symbol"
+    refresh: str = "weekly"
+    tickers: list[str] = Field(default_factory=list, sa_column=Column(JSON))
+    refreshed_at: datetime | None = Field(default=None, sa_type=UTCDateTime)
+    last_error: str | None = None
+    enabled: bool = True
 
 
 class DismissedDefault(SQLModel, table=True):

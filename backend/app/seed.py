@@ -41,6 +41,8 @@ CONNECTIONS = [
     dict(slug="anthropic_tools", name="Anthropic server tools", kind="none", pricing="paid",
          description="Web search and fetch run by Anthropic; work with Claude models only."),
     dict(slug="duckduckgo", name="DuckDuckGo", kind="none", pricing="free", description="Free web and news search."),
+    dict(slug="stock_lists", name="Stock lists", kind="none", pricing="free",
+         description="Your stock lists (Tools → Stock lists), e.g. the S&P 500 members. Refreshed on use when due."),
     dict(slug="ib_gateway", name="Interactive Brokers (IB Gateway)", kind="tws", pricing="account",
          description="IB Gateway or TWS running on this computer, via the TWS API. No key: log in to IB Gateway and "
                      "enable API access. Read-only. Settings: IBKR_HOST, IBKR_PORT (4002 paper, 4001 live), IBKR_CLIENT_ID."),
@@ -93,6 +95,8 @@ DATA_SOURCES = [
                         "bigdata_simulate_monitor", "bigdata_create_watchlist", "bigdata_delete_watchlist",
                         "bigdata_edit_watchlist", "bigdata_upload_document"]},
      "News, filings, transcripts and tearsheets (read-only tools).", ["news_analyst"]),
+    ("stock_list", "Stock lists (index members)", "python", "stock_lists", ["screening"],
+     {"function": "stock_list"}, "", ["lead", "sector_mapper"]),
 ]
 
 RENAMES = {"price_history": ("Price history (Yahoo)", "Yahoo price history"), "technical_snapshot": ("Technical snapshot (Yahoo)", "Yahoo technical snapshot"), "fundamentals": ("Fundamentals (Yahoo)", "Yahoo fundamentals"), "options_chain": ("Options chain (Yahoo)", "Yahoo option chain"), "sec_filings": ("SEC filings (EDGAR)", "SEC EDGAR filings"), "sec_filing_text": ("Read SEC filing (EDGAR)", "SEC EDGAR read filing"), "insider_trades": ("Insider trades (EDGAR Form 4)", "SEC EDGAR insider trades (Form 4)")}
@@ -106,6 +110,8 @@ NOTES = {
     "fundamentals": "Current snapshot only (no history). Fields can be missing, especially for small caps.",
     "options_chain": "Yahoo, delayed. One expiry per call, strikes near the money. Implied volatility only, no Greeks.",
     "ddg_search": "Search result titles and snippets only, not full articles.",
+    "stock_list": ("Member tickers of the lists in Tools → Stock lists (e.g. S&P 500, Nasdaq-100, Dow 30). "
+                   "Each list is refreshed on use per its schedule (daily, weekly or monthly)."),
     "web_search": "Claude models only. Up to 6 searches per run.",
     "web_fetch": "Claude models only. Fetches pages whose URLs already appear in the conversation.",
     "sec_filings": "Up to the 50 most recent filings from EDGAR's recent-filings list.",
@@ -471,11 +477,18 @@ def ensure_scanners(db: Session) -> None:
     db.commit()
 
 
+def ensure_lists(db: Session) -> None:
+    from app.screeners.universes import ensure_stock_lists
+
+    ensure_stock_lists(db, dismissed(db, "stocklist"))
+
+
 def seed(db: Session) -> None:
     ensure_models(db)
     if db.exec(select(Tool).where(Tool.kind != "model")).first() is not None:
         ensure_data_sources(db)
         ensure_scanners(db)
+        ensure_lists(db)
         return
     db.add_all(TOOLS)
     db.commit()
@@ -489,3 +502,4 @@ def seed(db: Session) -> None:
     db.commit()
     ensure_data_sources(db)
     ensure_scanners(db)
+    ensure_lists(db)

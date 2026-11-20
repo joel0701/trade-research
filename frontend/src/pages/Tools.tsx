@@ -2,8 +2,9 @@ import { useEffect, useState } from "react";
 import { api, Json } from "../api";
 import { Field, JsonField, MasterDetail, Toggle, useCrud } from "../admin";
 import { PRICING, PricingIcon, PricingLegend } from "../Pricing";
+import StockLists from "./StockLists";
 
-type Tab = "sources" | "connections" | "models";
+type Tab = "sources" | "connections" | "models" | "lists";
 type Capability = { slug: string; label: string; hint: string };
 type Status = { id: number; available: boolean; reason: string | null; pricing?: string };
 
@@ -26,7 +27,7 @@ const MODEL_HELP = 'LLM. Config: {"provider": anthropic|openai|google|meta|xai|m
   + '"show_thinking". Other vendors: "params" (extra request fields). The vendor\'s API key goes in .env.';
 
 function Tabs({ tab, setTab }: { tab: Tab; setTab: (t: Tab) => void }) {
-  const tabs: [Tab, string][] = [["sources", "Data sources"], ["connections", "Connections"], ["models", "Models"]];
+  const tabs: [Tab, string][] = [["sources", "Data sources"], ["connections", "Connections"], ["models", "Models"], ["lists", "Stock lists"]];
   return (
     <div className="tabs" role="tablist">
       {tabs.map(([t, label]) => (
@@ -185,6 +186,8 @@ export default function Tools() {
       </MasterDetail>
     );
   }
+
+  if (tab === "lists") return <StockLists header={tabs} />;
 
   if (tab === "models") {
     return (

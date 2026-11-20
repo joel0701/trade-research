@@ -59,6 +59,10 @@ def crud_router(model: type[SQLModel], prefix: str) -> APIRouter:
                 if item.id in (owner.tool_ids or []):
                     owner.tool_ids = [i for i in owner.tool_ids if i != item.id]
                     db.add(owner)
+        if model.__tablename__ == "stocklist":  # scanners using this list go back to their own tickers
+            for sc in db.exec(select(Screener).where(Screener.universe_index == item.slug)).all():
+                sc.universe_index = None
+                db.add(sc)
         if model is Screener:  # skills built on this scanner go back to plain skills
             for sk in db.exec(select(Skill).where(Skill.screener_id == item.id)).all():
                 sk.screener_id = None

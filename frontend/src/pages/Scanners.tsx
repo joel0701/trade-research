@@ -70,8 +70,8 @@ function IndexSelect({ universes, value, onChange }: { universes: Universe[]; va
         <option value="">Custom ticker list</option>
         {universes.map((u) => <option key={u.key} value={u.key}>{u.label}{u.count ? ` (${u.count} stocks)` : ""}</option>)}
       </select>
-      {value && <p className="muted small">The current list is downloaded and kept for a week. A large index takes about
-        a minute to scan the first time (free Yahoo data, no AI cost); re-running within 15 minutes is quick.</p>}
+      {value && <p className="muted small">The list is refreshed on its own schedule (Tools → Stock lists). A large list
+        takes about a minute to scan the first time (free Yahoo data, no AI cost); re-running within 15 minutes is quick.</p>}
     </>
   );
 }

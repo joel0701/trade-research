@@ -13,7 +13,7 @@ from app.api.crud import crud_router
 from app.config import CORS_ORIGINS
 from app.db import engine, init_db
 from app.catalog import CAPABILITIES
-from app.models import Connection, Role, Screener, Skill, Tool
+from app.models import Connection, Role, Screener, Skill, StockList, Tool
 from app.tools.registry import availability
 from app.seed import seed
 from app.llm.providers import PROVIDERS, local_model_states, provider_of
@@ -42,7 +42,7 @@ app = FastAPI(title="Trade Research", lifespan=lifespan)
 app.add_middleware(CORSMiddleware, allow_origins=CORS_ORIGINS, allow_methods=["*"], allow_headers=["*"])
 
 for model, prefix in [(Tool, "/tools"), (Connection, "/connections"), (Role, "/team"), (Skill, "/skills"),
-                      (Screener, "/screeners")]:
+                      (Screener, "/screeners"), (StockList, "/stock-lists")]:
     app.include_router(crud_router(model, prefix), prefix="/api")
 app.include_router(sessions.router, prefix="/api")
 app.include_router(launch.router, prefix="/api")
@@ -68,6 +68,23 @@ def client_log(entry: ClientLog) -> None:
     if entry.detail:
         text += "\n" + entry.detail[:6000]
     _frontend_log.log(level, text)
+
+
+@app.post("/api/stock-lists/{list_id}/refresh")
+def refresh_stock_list(list_id: int) -> dict[str, Any]:
+    """Refresh a stock list now (the "Refresh now" button)."""
+    from fastapi import HTTPException
+
+    from app.screeners.universes import UniverseError, refresh
+
+    with Session(engine) as db:
+        sl = db.get(StockList, list_id)
+        if sl is None:
+            raise HTTPException(404)
+        try:
+            return refresh(db, sl).model_dump(mode="json")
+        except UniverseError as e:
+            raise HTTPException(502, str(e)) from e
 
 
 @app.get("/api/models")
