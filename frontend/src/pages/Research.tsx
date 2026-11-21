@@ -211,6 +211,8 @@ export default function Research() {
           setLiveText(false);
           loadRuns(target);  // the finished stage's footer (model, cost) can show
         } else if (e.type === "error") {
+          // Saved in the chat as a notice (shown when the session reloads below); the banner covers
+          // the moment until then.
           setError(e.message);
         } else if (e.type === "waiting") {
           setWaitNote({ message: e.message, until: Date.now() + e.seconds * 1000 });
@@ -327,7 +329,12 @@ export default function Research() {
             <div className="msg muted">Ask about the market, a sector or a stock. The Lead Analyst will consult the team as needed.</div>
           )}
           {messages.map((m, i) => m.role === "notice" ? (
-            <SourcesNotice key={m.id ?? `notice-${i}`} notice={m.notice ?? {}} />
+            m.notice?.kind === "error" ? (
+              <div key={m.id ?? `notice-${i}`} className="error-notice" role="alert">
+                <strong>This question failed{m.notice.model ? ` (${m.notice.model})` : ""}.</strong> {m.notice.message}
+                <div className="muted small">Ask again, or pick another model in the model picker.</div>
+              </div>
+            ) : <SourcesNotice key={m.id ?? `notice-${i}`} notice={m.notice ?? {}} />
           ) : (
             <div key={m.id ?? `live-${i}`} ref={i === lastAssistant ? answerRef : undefined}
                  className={`msg ${m.role}${i === runPromptIndex ? ` run-card run-${runKind} tone-${runKind === "scanner" ? "green" : "blue"}` : ""}`}

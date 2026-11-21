@@ -14,6 +14,8 @@ from typing import Any
 
 import anthropic
 
+from app.llm.convert import strip_vendor_extra
+
 from app.config import MAX_LOOP_ITERATIONS
 from app.llm.mock_loop import mock_mode, run_agent_mock
 from app.llm.openai_loop import run_agent_openai
@@ -114,7 +116,7 @@ async def run_agent(
         params["fallbacks"] = model.fallbacks
 
     for _ in range(min(max_iterations, MAX_LOOP_ITERATIONS)):
-        async with client().beta.messages.stream(messages=messages, **params) as stream:
+        async with client().beta.messages.stream(messages=strip_vendor_extra(messages), **params) as stream:
             async for event in stream:
                 if event.type == "content_block_delta":
                     if event.delta.type == "text_delta" and stream_text:

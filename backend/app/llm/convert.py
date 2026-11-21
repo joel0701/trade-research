@@ -75,9 +75,7 @@ def to_openai_messages(system: str, messages: list[dict[str, Any]]) -> list[dict
         elif m["role"] == "assistant":
             # Thinking, server-tool and fallback blocks are Claude-specific and dropped.
             text = "".join(b.get("text", "") for b in content if b.get("type") == "text")
-            calls = [{"id": b["id"], "type": "function",
-                      "function": {"name": b["name"], "arguments": json.dumps(b.get("input", {}))}}
-                     for b in content if b.get("type") == "tool_use"]
+            calls = [openai_call(b) for b in content if b.get("type") == "tool_use"]
             if not text and not calls:
                 continue
             msg: dict[str, Any] = {"role": "assistant", "content": text or None}
@@ -87,6 +85,41 @@ def to_openai_messages(system: str, messages: list[dict[str, Any]]) -> list[dict
         elif m["role"] == "system":
             out.append({"role": "system", "content": _tool_result_text(content)})
     return out
+
+
+# Extra fields a vendor attaches to a tool call that must be sent back with it, e.g. Gemini 3+
+# models' thought signature ({"google": {"thought_signature": ...}}); without it, the next request
+# after a tool call is rejected. Kept on the stored tool_use block under this key, and removed
+# before a conversation is sent to Claude (see strip_vendor_extra).
+VENDOR_EXTRA = "vendor_extra"
+
+
+def vendor_extra(tool_call_delta: Any) -> dict[str, Any] | None:
+    extra = getattr(tool_call_delta, "extra_content", None)
+    if extra is None:
+        extra = (getattr(tool_call_delta, "model_extra", None) or {}).get("extra_content")
+    if extra is not None and hasattr(extra, "model_dump"):
+        extra = extra.model_dump()
+    return extra if isinstance(extra, dict) and extra else None
+
+
+def openai_call(block: dict[str, Any]) -> dict[str, Any]:
+    """A stored tool_use block as a chat-completions tool call (with any vendor extras)."""
+    call: dict[str, Any] = {"id": block["id"], "type": "function",
+                            "function": {"name": block["name"], "arguments": json.dumps(block.get("input", {}))}}
+    if block.get(VENDOR_EXTRA):
+        call["extra_content"] = block[VENDOR_EXTRA]
+    return call
+
+
+def strip_vendor_extra(messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """The conversation without other vendors' tool-call extras (Claude rejects unknown fields)."""
+    if not any(isinstance(m.get("content"), list) and any(isinstance(b, dict) and VENDOR_EXTRA in b for b in m["content"])
+               for m in messages):
+        return messages
+    return [{**m, "content": [{k: v for k, v in b.items() if k != VENDOR_EXTRA} if isinstance(b, dict) else b
+                              for b in m["content"]]} if isinstance(m.get("content"), list) else m
+            for m in messages]
 
 
 def to_openai_tools(definitions: list[dict[str, Any]]) -> list[dict[str, Any]]:

@@ -9,7 +9,7 @@ import logging
 from typing import TYPE_CHECKING, Any
 
 from app.config import MAX_LOOP_ITERATIONS
-from app.llm.convert import safe_tool_id, to_openai_messages, to_openai_tools
+from app.llm.convert import VENDOR_EXTRA, openai_call, safe_tool_id, to_openai_messages, to_openai_tools, vendor_extra
 from app.llm.providers import Provider
 from app.llm.rate_limit import MAX_RETRIES, MAX_WAIT, RateLimited, explain, is_daily_or_billing, is_rate_limit, retry_after
 
@@ -105,9 +105,12 @@ async def run_agent_openai(*, provider: Provider, model: "ModelConfig", system: 
                     if stream_text:
                         await emit({"type": "text", "source": source, "text": d.content})
                 for tc in getattr(d, "tool_calls", None) or []:
-                    slot = calls.setdefault(tc.index, {"id": None, "name": "", "args": ""})
+                    slot = calls.setdefault(tc.index, {"id": None, "name": "", "args": "", "extra": None})
                     if tc.id:
                         slot["id"] = tc.id
+                    extra = vendor_extra(tc)
+                    if extra:  # e.g. Gemini's thought signature, which must be sent back with the call
+                        slot["extra"] = extra
                     if tc.function and tc.function.name:
                         slot["name"] += tc.function.name
                     if tc.function and tc.function.arguments:
@@ -124,7 +127,8 @@ async def run_agent_openai(*, provider: Provider, model: "ModelConfig", system: 
             except json.JSONDecodeError:
                 args = {"_invalid_json": slot["args"]}
             tool_uses.append({"type": "tool_use", "id": safe_tool_id(slot["id"], n), "name": slot["name"],
-                              "input": args if isinstance(args, dict) else {"value": args}})
+                              "input": args if isinstance(args, dict) else {"value": args},
+                              **({VENDOR_EXTRA: slot["extra"]} if slot["extra"] else {})})
 
         content = ([{"type": "text", "text": text}] if text else []) + tool_uses
         messages.append({"role": "assistant", "content": content})
@@ -132,9 +136,8 @@ async def run_agent_openai(*, provider: Provider, model: "ModelConfig", system: 
             on_message("assistant", content, bool(text.strip()), {
                 "input_tokens": getattr(usage, "prompt_tokens", 0) if usage else 0,
                 "output_tokens": getattr(usage, "completion_tokens", 0) if usage else 0})
-        chat.append({"role": "assistant", "content": text or None, **({"tool_calls": [
-            {"id": t["id"], "type": "function", "function": {"name": t["name"], "arguments": json.dumps(t["input"])}}
-            for t in tool_uses]} if tool_uses else {})})
+        chat.append({"role": "assistant", "content": text or None,
+                     **({"tool_calls": [openai_call(t) for t in tool_uses]} if tool_uses else {})})
         result.stop_reason = finish
         if text:
             result.text = text

@@ -122,6 +122,18 @@ def _finish_run(run_id: int, result: Any, error: str | None = None) -> None:
         db.commit()
 
 
+def _record_error(session_id: int, message: str, model_id: str | None) -> None:
+    """Keep a failed turn's error in the chat (a notice, never sent to the model), so it's still
+    there after leaving the session and coming back."""
+    try:
+        with Session(engine) as db:
+            db.add(Message(session_id=session_id, role="notice", visible=True, content=[{
+                "type": "notice", "kind": "error", "message": message[:2000], "model": model_id}]))
+            db.commit()
+    except Exception:
+        log.exception("Couldn't save the error notice for session %s", session_id)
+
+
 def repair_history(msgs: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """Drop an assistant tool_use turn left without results (e.g. after a crash),
     which the API would otherwise reject."""
@@ -373,6 +385,7 @@ async def _run_prepared(session_id: int, user_text: str, tools: dict[int, Tool],
             _finish_run(run_id, result)
             if result.error:
                 log.error("Session %s, %s on %s: %s", session_id, lead.slug, model.model_id, result.error)
+                _record_error(session_id, result.error, model.model_id)
                 await emit({"type": "error", "message": result.error})
             await emit({"type": "done", "usage": result.usage})
             return not result.error
@@ -380,7 +393,9 @@ async def _run_prepared(session_id: int, user_text: str, tools: dict[int, Tool],
             log.exception("Lead turn failed")
             _finish_run(run_id, result, error=str(e))
             from app.llm.rate_limit import RateLimited
-            await emit({"type": "error", "message": str(e) if isinstance(e, RateLimited) else f"{type(e).__name__}: {e}"})
+            message = str(e) if isinstance(e, RateLimited) else f"{type(e).__name__}: {e}"
+            _record_error(session_id, message, model.model_id)
+            await emit({"type": "error", "message": message})
             return False
 
     async def work() -> None:
