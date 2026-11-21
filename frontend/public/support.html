@@ -205,6 +205,7 @@ cd frontend &amp;&amp; npm install &amp;&amp; npm run dev   # http://localhost:5
     <li>Every answer ends with one to three follow-up questions that build on it. Scanner results end with ready-made questions about the top tickers.</li>
     <li>Click a suggestion to put it in the box, then edit or send.</li>
     <li>The latest answer's first suggestion appears as grey text in the empty box: press <kbd>Tab</kbd> to use it, or just type your own question.</li>
+    <li>Each suggestion on the latest answer shows a rough estimate, such as <i>~85k tokens · ~$0.32</i>, for the model that will answer it (the Research default). Hover for the input/output split and a likely range (half to double). No AI is used to estimate: it is the median of your recent questions with that model (Lead plus specialists), plus this chat's length (re-read on each Lead call), scaled up for questions that name several tickers or ask to compare, screen or rank (at most 3x). Local models show as free; a model with no price in Tools shows tokens only.</li>
   </ul>
 </section>
 

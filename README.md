@@ -127,7 +127,9 @@ set to a default follow it, so changing a default in Settings updates all of the
 **Suggested next steps:** every answer ends with one to three specific follow-up questions that build on
 it, naming the tickers; scanner results end with ready-made questions about the top tickers. They show
 as clickable suggestions (clicking one puts it in the box to edit or send), and the latest answer's first
-suggestion appears as grey text in the empty box: press Tab to use it.
+suggestion appears as grey text in the empty box: press Tab to use it. Each suggestion on the latest answer
+shows an estimated token count and cost (see app/estimate.py): the median of recent questions with the
+same Lead model, plus the chat's length per Lead call, scaled for broader questions; hover for the range.
 
 **A skill's model** (and its data sources) apply to the skill's own run only, so a
 cheaper model such as Sonnet can handle steps that need little reasoning. Follow-up questions in

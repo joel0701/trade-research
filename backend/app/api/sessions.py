@@ -327,6 +327,21 @@ def cancel_pending(session_id: int, db: Session = Depends(get_session)) -> dict[
     return {"text": "" if (pending or {}).get("hidden") else (pending or {}).get("text", "")}
 
 
+class EstimateRequest(BaseModel):
+    questions: list[str]
+
+
+@router.post("/{session_id}/estimate")
+def estimate_questions(session_id: int, body: EstimateRequest, db: Session = Depends(get_session)) -> dict[str, Any]:
+    """Rough token and cost estimate for each follow-up question (no model is called)."""
+    from app.estimate import estimate
+
+    try:
+        return estimate(db, session_id, body.questions[:10])
+    except ValueError as e:
+        raise HTTPException(404, str(e))
+
+
 @router.get("/{session_id}/runs")
 def runs(session_id: int, db: Session = Depends(get_session)) -> list[dict[str, Any]]:
     """Trace of every Lead and specialist run in this session."""

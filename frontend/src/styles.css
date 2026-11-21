@@ -499,3 +499,5 @@ select.model-select { border-left-width: 4px; border-left-style: solid; }
 .src-block { border: 1px solid var(--border); border-radius: 8px; padding: 4px 12px 10px; margin: 10px 0; background: var(--raised); }
 .src-title { font-size: 13px; font-weight: 600; margin-top: 8px; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 .list-status { margin: 6px 0 4px; padding: 6px 10px; border-radius: 6px; background: var(--raised); border: 1px solid var(--border); }
+.next-steps-head .next-steps-model { margin-left: 0; cursor: help; }
+.next-step-est { flex: none; font-size: 11.5px; color: var(--muted); white-space: nowrap; padding: 2px 8px; border-radius: 999px; background: color-mix(in srgb, var(--tone) 10%, transparent); font-variant-numeric: tabular-nums; }

@@ -353,7 +353,8 @@ export default function Research() {
                   <>
                     <Markdown text={body} />
                     {steps.length > 0 && !(busy && i === lastAssistant) && (
-                      <NextSteps steps={steps} onPick={(q) => setRestore({ text: q, nonce: Date.now() })} />
+                      <NextSteps steps={steps} onPick={(q) => setRestore({ text: q, nonce: Date.now() })}
+                                 sessionId={i === lastAssistant && sessionId != null ? sessionId : undefined} />
                     )}
                   </>
                 );
