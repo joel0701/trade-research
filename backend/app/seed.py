@@ -370,10 +370,14 @@ MODELS = [
          config={"provider": "openai", "model_id": "gpt-5", "max_tokens": 32000, "params": {}}),
     dict(slug="gpt_mini", name="OpenAI GPT-5 mini", description="Faster, cheaper OpenAI model.",
          config={"provider": "openai", "model_id": "gpt-5-mini", "max_tokens": 16000, "params": {}}),
-    dict(slug="gemini_pro", name="Gemini 2.5 Pro", description="Google's most capable Gemini model.",
-         config={"provider": "google", "model_id": "gemini-2.5-pro", "max_tokens": 32000, "params": {}}),
-    dict(slug="gemini_flash", name="Gemini 2.5 Flash", description="Fast, low-cost Gemini model.",
-         config={"provider": "google", "model_id": "gemini-2.5-flash", "max_tokens": 16000, "params": {}}),
+    # Gemini 2.5 was retired in October 2026. Argon's $4/$20 is the list price from December 1, 2026
+    # ($2/$10 before then); check Google's pricing page and edit in Tools if it changes.
+    dict(slug="gemini_pro", name="Gemini 4 Argon", description="Google's most capable Gemini model.",
+         config={"provider": "google", "model_id": "gemini-4-argon", "max_tokens": 32000, "params": {},
+                 "price_input": 4, "price_output": 20, "price_cache_read": 0.4}),
+    dict(slug="gemini_flash", name="Gemini 3.8 Flash", description="Fast, low-cost Gemini model.",
+         config={"provider": "google", "model_id": "gemini-3.8-flash", "max_tokens": 16000, "params": {},
+                 "price_input": 0.75, "price_output": 3.75, "price_cache_read": 0.075}),
     dict(slug="grok", name="Grok 4", description="xAI's flagship model.",
          config={"provider": "xai", "model_id": "grok-4", "max_tokens": 32000, "params": {}}),
     dict(slug="llama", name="Llama 4 Maverick", description="Meta's Llama via the Llama API.",
@@ -430,6 +434,11 @@ def ensure_tiers(db: Session) -> None:
     db.commit()
 
 
+# Built-in models whose vendor retired them: slug -> old model id. A database still on the old id
+# gets the current built-in (name, model id, prices); a model id you changed yourself is left alone.
+RETIRED_MODELS = {"gemini_pro": "gemini-2.5-pro", "gemini_flash": "gemini-2.5-flash"}
+
+
 def ensure_models(db: Session) -> None:
     """Add default models missing from the database, and fill in config keys that older
     databases lack (provider, prices). Never overwrites values you have edited."""
@@ -443,6 +452,11 @@ def ensure_models(db: Session) -> None:
             continue
         if m["slug"] == "mock" and tool.name == "Mock LLM (no cost)":  # renamed to "Test mode" (unless you renamed it)
             tool.name, tool.description = m["name"], m["description"]
+            db.add(tool)
+        retired = RETIRED_MODELS.get(m["slug"])
+        if retired and tool.config.get("model_id") == retired:  # still the old built-in model: replace it
+            tool.name, tool.description = m["name"], m["description"]
+            tool.config = {**tool.config, **m["config"]}
             db.add(tool)
         missing = {k: v for k, v in m["config"].items() if k not in tool.config}
         if missing:

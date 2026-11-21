@@ -56,3 +56,24 @@ def test_changing_a_default_in_settings_reroutes_everything(monkeypatch):
         with TestClient(app) as c:
             c.put("/api/profile", json={"model_low_id": None, "model_mid_id": None, "model_high_id": None})
         tiers.set_targets(None, None, None)
+
+
+def test_retired_gemini_models_are_replaced_but_custom_ids_kept():
+    from sqlmodel import Session, select
+
+    from app.db import engine
+    from app.models import Tool
+    from app.seed import ensure_models
+
+    with TestClient(app):
+        with Session(engine) as db:
+            pro = db.exec(select(Tool).where(Tool.slug == "gemini_pro")).one()
+            flash = db.exec(select(Tool).where(Tool.slug == "gemini_flash")).one()
+            pro.name, pro.config = "Gemini 2.5 Pro", {"provider": "google", "model_id": "gemini-2.5-pro", "max_tokens": 9000}
+            flash.config = {**flash.config, "model_id": "my-own-flash"}
+            db.add(pro); db.add(flash); db.commit()
+            ensure_models(db)
+            db.refresh(pro); db.refresh(flash)
+            assert pro.name == "Gemini 4 Argon" and pro.config["model_id"] == "gemini-4-argon"
+            assert pro.config["price_input"] == 4
+            assert flash.config["model_id"] == "my-own-flash"  # your own choice is left alone
