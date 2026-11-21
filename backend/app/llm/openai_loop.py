@@ -11,6 +11,7 @@ from typing import TYPE_CHECKING, Any
 from app.config import MAX_LOOP_ITERATIONS
 from app.llm.convert import safe_tool_id, to_openai_messages, to_openai_tools
 from app.llm.providers import Provider
+from app.llm.rate_limit import MAX_RETRIES, MAX_WAIT, RateLimited, explain, is_daily_or_billing, is_rate_limit, retry_after
 
 if TYPE_CHECKING:
     from app.agents.loop import Emit, LoopResult, ModelConfig, OnMessage
@@ -39,6 +40,27 @@ def _usage(total: dict[str, int], u: Any) -> None:
     total["output_tokens"] = total.get("output_tokens", 0) + (getattr(u, "completion_tokens", 0) or 0)
 
 
+async def _create(client: Any, chat: list, params: dict, provider: Provider, model: "ModelConfig",
+                  emit: "Emit", source: str) -> Any:
+    """Start a completion, waiting and retrying on per-minute rate limits (HTTP 429)."""
+    for attempt in range(MAX_RETRIES + 1):
+        try:
+            return await client.chat.completions.create(messages=chat, **params)
+        except Exception as e:
+            if not is_rate_limit(e):
+                raise
+            wait = retry_after(e)
+            wait = min(10 * 2 ** attempt, 60) if wait is None else wait + 1
+            if attempt == MAX_RETRIES or is_daily_or_billing(e) or wait > MAX_WAIT:
+                raise RateLimited(explain(e, provider.name, model.model_id)) from e
+            log.warning("%s: %s rate-limited %s; retrying in %.0fs (%d/%d)", source, provider.name, model.model_id,
+                        wait, attempt + 1, MAX_RETRIES)
+            await emit({"type": "waiting", "source": source, "seconds": round(wait),
+                        "message": f"{provider.name} rate limit on {model.model_id}: retrying in {wait:.0f}s"})
+            await asyncio.sleep(wait)
+    raise AssertionError("unreachable")
+
+
 async def run_agent_openai(*, provider: Provider, model: "ModelConfig", system: str,
                            messages: list[dict[str, Any]], toolbox: "Toolbox", emit: "Emit",
                            on_message: "OnMessage | None", stream_text: bool, max_iterations: int,
@@ -62,7 +84,7 @@ async def run_agent_openai(*, provider: Provider, model: "ModelConfig", system: 
         finish = None
         usage = None
         try:
-            stream = await client.chat.completions.create(messages=chat, **params)
+            stream = await _create(client, chat, params, provider, model, emit, source)
         except Exception as e:
             # Some local models can't call tools (Ollama: "does not support tools"). Answer without them.
             if "tools" in params and "support tools" in str(e).lower():

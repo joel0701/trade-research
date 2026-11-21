@@ -379,7 +379,8 @@ async def _run_prepared(session_id: int, user_text: str, tools: dict[int, Tool],
         except Exception as e:
             log.exception("Lead turn failed")
             _finish_run(run_id, result, error=str(e))
-            await emit({"type": "error", "message": f"{type(e).__name__}: {e}"})
+            from app.llm.rate_limit import RateLimited
+            await emit({"type": "error", "message": str(e) if isinstance(e, RateLimited) else f"{type(e).__name__}: {e}"})
             return False
 
     async def work() -> None:

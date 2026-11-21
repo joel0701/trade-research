@@ -46,6 +46,7 @@ export default function Research() {
   // or it was started earlier (e.g. before you switched to another screen).
   const [busy, setBusy] = useState(false);
   const [liveText, setLiveText] = useState(false); // the answer is streaming in right now
+  const [waitNote, setWaitNote] = useState<{ message: string; until: number } | null>(null); // rate-limit retry
   const [now, setNow] = useState(Date.now());
   const [error, setError] = useState("");
   const viewing = useRef<number | null>(sessionId);
@@ -211,6 +212,8 @@ export default function Research() {
           loadRuns(target);  // the finished stage's footer (model, cost) can show
         } else if (e.type === "error") {
           setError(e.message);
+        } else if (e.type === "waiting") {
+          setWaitNote({ message: e.message, until: Date.now() + e.seconds * 1000 });
         }
       }, attachments.map((a) => a.id), confirm);
       if (streaming.current === target) streaming.current = null;
@@ -374,6 +377,9 @@ export default function Research() {
                 {liveText ? "Writing the answer" : working.length ? `Consulting ${working.join(", ")}` : "Lead Analyst is planning"}
                 {" · "}{clock(elapsed)}
               </span>
+              {waitNote && now < waitNote.until && (
+                <span className="warn-note">{waitNote.message.replace(/retrying in \d+s/, `retrying in ${Math.ceil((waitNote.until - now) / 1000)}s`)}</span>
+              )}
             </div>
           )}
           {pendingConfirm && sessionId != null && (
